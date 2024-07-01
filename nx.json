@@ -110,7 +110,7 @@
       "cache": true,
       "dependsOn": ["^build"],
       "inputs": ["^default", "excludeTests"],
-      "outputs": ["{options.output-dir}"],
+      "outputs": ["{projectRoot}/{options.output-dir}"],
       "options": {
         "cwd": "{projectRoot}",
         "command": "storybook build",
@@ -118,7 +118,7 @@
         "config-dir": ".storybook"
       }
     },
-    "storybook:dev": {
+    "storybook:serve:dev": {
       "executor": "nx:run-commands",
       "cache": true,
       "dependsOn": ["^build"],
@@ -128,7 +128,7 @@
         "config-dir": ".storybook"
       }
     },
-    "storybook:static": {
+    "storybook:serve:static": {
       "executor": "nx:run-commands",
       "dependsOn": ["storybook:build"],
       "options": {
@@ -138,6 +138,33 @@
         "host": "localhost",
         "port": 6006,
         "silent": true
+      }
+    },
+    "storybook:test": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": ["^default", "excludeTests"],
+      "outputs": ["{projectRoot}/coverage/storybook"],
+      "options": {
+        "cwd": "{projectRoot}",
+        "commands": [
+          "test-storybook --url http://localhost:{args.port} --maxWorkers=3 --coverage --coverageDirectory={args.coverageDir}",
+          "nx storybook:coverage {projectName} --coverageDir={args.coverageDir}"
+        ],
+        "parallel": false,
+        "coverageDir": "coverage/storybook",
+        "port": 6006
+      }
+    },
+    "storybook:test:no-coverage": {
+      "executor": "nx:run-commands",
+      "inputs": ["^default", "excludeTests"],
+      "options": {
+        "cwd": "{projectRoot}",
+        "commands": [
+          "test-storybook --url http://localhost:{args.port} --maxWorkers=3"
+        ],
+        "port": 6006
       }
     },
     "storybook:coverage": {
@@ -161,27 +188,20 @@
         "text": { "reporter": "text" }
       }
     },
-    "storybook:test": {
+    "storybook:serve-and-test:static": {
       "executor": "nx:run-commands",
-      "cache": true,
-      "inputs": ["^default", "excludeTests"],
-      "outputs": ["{projectRoot}/coverage/storybook"],
       "options": {
-        "cwd": "{projectRoot}",
         "commands": [
-          "test-storybook --url http://localhost:{args.port} --maxWorkers=3 --coverage --coverageDirectory={args.coverageDir}",
-          "nx storybook:coverage {projectName} --coverageDir={args.coverageDir}"
+          "npx concurrently --kill-others --success=first -n SB,TEST 'nx storybook:serve:static {projectName} --port={args.port}' 'npx wait-on tcp:{args.port} && nx storybook:test {projectName} --port={args.port}'"
         ],
-        "parallel": false,
-        "coverageDir": "coverage/storybook",
         "port": 6006
       }
     },
-    "storybook:static:test": {
+    "storybook:serve-and-test:static:performance": {
       "executor": "nx:run-commands",
       "options": {
         "commands": [
-          "npx concurrently --kill-others --success=first -n SB,TEST 'nx storybook:static {projectName} --port={args.port}' 'npx wait-on tcp:{args.port} && nx storybook:test {projectName} --port={args.port}'"
+          "npx concurrently --kill-others --success=first -n SB,TEST 'nx storybook:serve:dev {projectName} --configuration=performance --port={args.port}' 'npx wait-on tcp:{args.port} && nx storybook:test:no-coverage {projectName} --port={args.port} --configuration=performance'"
         ],
         "port": 6006
       }
@@ -190,13 +210,18 @@
       "executor": "nx:run-commands",
       "options": {
         "cwd": "{projectRoot}",
-        "command": "cross-var chromatic --project-token=$CHROMATIC_PROJECT_TOKEN --build-script-name={args.targetPackageJsonScript} --exit-zero-on-changes={args.ci}",
-        "ci": false,
-        "targetPackageJsonScript": "storybook:build:chromatic"
+        "commands": [
+          {
+            "command": "nx storybook:build {projectName}",
+            "forwardAllArgs": false
+          },
+          "cross-var chromatic --project-token=$CHROMATIC_PROJECT_TOKEN --storybook-build-dir=storybook-static {args.ci}"
+        ],
+        "parallel": false
       },
       "configurations": {
         "ci": {
-          "ci": true
+          "ci": "--exit-zero-on-changes"
         }
       }
     },

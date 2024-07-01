@@ -147,6 +147,7 @@ export class TokenService {
 
   async generateTransientToken(
     workspaceMemberId: string,
+    userId: string,
     workspaceId: string,
   ): Promise<AuthToken> {
     const secret = this.environmentService.get('LOGIN_TOKEN_SECRET');
@@ -158,6 +159,7 @@ export class TokenService {
     const expiresAt = addMilliseconds(new Date().getTime(), ms(expiresIn));
     const jwtPayload = {
       sub: workspaceMemberId,
+      userId,
       workspaceId,
     };
 
@@ -234,6 +236,7 @@ export class TokenService {
 
   async verifyTransientToken(transientToken: string): Promise<{
     workspaceMemberId: string;
+    userId: string;
     workspaceId: string;
   }> {
     const transientTokenSecret =
@@ -243,6 +246,7 @@ export class TokenService {
 
     return {
       workspaceMemberId: payload.sub,
+      userId: payload.userId,
       workspaceId: payload.workspaceId,
     };
   }
@@ -422,8 +426,9 @@ export class TokenService {
 
     assert(token, "This refresh token doesn't exist", NotFoundException);
 
-    const user = await this.userRepository.findOneBy({
-      id: jwtPayload.sub,
+    const user = await this.userRepository.findOne({
+      where: { id: jwtPayload.sub },
+      relations: ['appTokens'],
     });
 
     assert(user, 'User not found', NotFoundException);

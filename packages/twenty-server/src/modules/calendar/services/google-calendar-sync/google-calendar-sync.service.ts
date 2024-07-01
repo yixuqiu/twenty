@@ -1,8 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
-import { Repository } from 'typeorm';
+import { Any, Repository } from 'typeorm';
 import { calendar_v3 as calendarV3 } from 'googleapis';
+import { GaxiosError } from 'gaxios';
 
 import { ConnectedAccountRepository } from 'src/modules/connected-account/repositories/connected-account.repository';
 import { BlocklistRepository } from 'src/modules/connected-account/repositories/blocklist.repository';
@@ -11,30 +13,33 @@ import {
   FeatureFlagKeys,
 } from 'src/engine/core-modules/feature-flag/feature-flag.entity';
 import { GoogleCalendarClientProvider } from 'src/modules/calendar/services/providers/google-calendar/google-calendar.provider';
-import { CalendarChannelEventAssociationRepository } from 'src/modules/calendar/repositories/calendar-channel-event-association.repository';
-import { CalendarChannelRepository } from 'src/modules/calendar/repositories/calendar-channel.repository';
-import { WorkspaceDataSourceService } from 'src/engine/workspace-datasource/workspace-datasource.service';
-import { CalendarEventRepository } from 'src/modules/calendar/repositories/calendar-event.repository';
 import { formatGoogleCalendarEvent } from 'src/modules/calendar/utils/format-google-calendar-event.util';
-import { CalendarEventParticipantRepository } from 'src/modules/calendar/repositories/calendar-event-participant.repository';
-import { ConnectedAccountObjectMetadata } from 'src/modules/connected-account/standard-objects/connected-account.object-metadata';
+import { ConnectedAccountWorkspaceEntity } from 'src/modules/connected-account/standard-objects/connected-account.workspace-entity';
 import { InjectObjectMetadataRepository } from 'src/engine/object-metadata-repository/object-metadata-repository.decorator';
-import { CalendarEventObjectMetadata } from 'src/modules/calendar/standard-objects/calendar-event.object-metadata';
-import { CalendarChannelObjectMetadata } from 'src/modules/calendar/standard-objects/calendar-channel.object-metadata';
-import { CalendarChannelEventAssociationObjectMetadata } from 'src/modules/calendar/standard-objects/calendar-channel-event-association.object-metadata';
-import { CalendarEventParticipantObjectMetadata } from 'src/modules/calendar/standard-objects/calendar-event-participant.object-metadata';
-import { BlocklistObjectMetadata } from 'src/modules/connected-account/standard-objects/blocklist.object-metadata';
+import { CalendarEventWorkspaceEntity } from 'src/modules/calendar/standard-objects/calendar-event.workspace-entity';
+import { CalendarChannelWorkspaceEntity } from 'src/modules/calendar/standard-objects/calendar-channel.workspace-entity';
+import { CalendarChannelEventAssociationWorkspaceEntity } from 'src/modules/calendar/standard-objects/calendar-channel-event-association.workspace-entity';
+import { CalendarEventParticipantWorkspaceEntity } from 'src/modules/calendar/standard-objects/calendar-event-participant.workspace-entity';
+import { BlocklistWorkspaceEntity } from 'src/modules/connected-account/standard-objects/blocklist.workspace-entity';
 import { CalendarEventCleanerService } from 'src/modules/calendar/services/calendar-event-cleaner/calendar-event-cleaner.service';
 import { CalendarEventParticipantService } from 'src/modules/calendar/services/calendar-event-participant/calendar-event-participant.service';
-import { CalendarEventWithParticipants } from 'src/modules/calendar/types/calendar-event';
+import {
+  CalendarEventParticipant,
+  CalendarEventWithParticipants,
+} from 'src/modules/calendar/types/calendar-event';
 import { filterOutBlocklistedEvents } from 'src/modules/calendar/utils/filter-out-blocklisted-events.util';
 import { InjectMessageQueue } from 'src/engine/integrations/message-queue/decorators/message-queue.decorator';
 import { MessageQueue } from 'src/engine/integrations/message-queue/message-queue.constants';
 import { MessageQueueService } from 'src/engine/integrations/message-queue/services/message-queue.service';
 import {
-  CreateCompanyAndContactJobData,
   CreateCompanyAndContactJob,
+  CreateCompanyAndContactJobData,
 } from 'src/modules/connected-account/auto-companies-and-contacts-creation/jobs/create-company-and-contact.job';
+import { InjectWorkspaceRepository } from 'src/engine/twenty-orm/decorators/inject-workspace-repository.decorator';
+import { WorkspaceRepository } from 'src/engine/twenty-orm/repository/workspace.repository';
+import { isDefined } from 'src/utils/is-defined';
+import { WorkspaceDataSource } from 'src/engine/twenty-orm/datasource/workspace.datasource';
+import { InjectWorkspaceDatasource } from 'src/engine/twenty-orm/decorators/inject-workspace-datasource.decorator';
 
 @Injectable()
 export class GoogleCalendarSyncService {
@@ -42,27 +47,27 @@ export class GoogleCalendarSyncService {
 
   constructor(
     private readonly googleCalendarClientProvider: GoogleCalendarClientProvider,
-    @InjectObjectMetadataRepository(ConnectedAccountObjectMetadata)
+    @InjectObjectMetadataRepository(ConnectedAccountWorkspaceEntity)
     private readonly connectedAccountRepository: ConnectedAccountRepository,
-    @InjectObjectMetadataRepository(CalendarEventObjectMetadata)
-    private readonly calendarEventRepository: CalendarEventRepository,
-    @InjectObjectMetadataRepository(CalendarChannelObjectMetadata)
-    private readonly calendarChannelRepository: CalendarChannelRepository,
-    @InjectObjectMetadataRepository(
-      CalendarChannelEventAssociationObjectMetadata,
-    )
-    private readonly calendarChannelEventAssociationRepository: CalendarChannelEventAssociationRepository,
-    @InjectObjectMetadataRepository(CalendarEventParticipantObjectMetadata)
-    private readonly calendarEventParticipantsRepository: CalendarEventParticipantRepository,
-    @InjectObjectMetadataRepository(BlocklistObjectMetadata)
+    @InjectWorkspaceRepository(CalendarEventWorkspaceEntity)
+    private readonly calendarEventRepository: WorkspaceRepository<CalendarEventWorkspaceEntity>,
+    @InjectWorkspaceRepository(CalendarChannelWorkspaceEntity)
+    private readonly calendarChannelRepository: WorkspaceRepository<CalendarChannelWorkspaceEntity>,
+    @InjectWorkspaceRepository(CalendarChannelEventAssociationWorkspaceEntity)
+    private readonly calendarChannelEventAssociationRepository: WorkspaceRepository<CalendarChannelEventAssociationWorkspaceEntity>,
+    @InjectWorkspaceRepository(CalendarEventParticipantWorkspaceEntity)
+    private readonly calendarEventParticipantsRepository: WorkspaceRepository<CalendarEventParticipantWorkspaceEntity>,
+    @InjectObjectMetadataRepository(BlocklistWorkspaceEntity)
     private readonly blocklistRepository: BlocklistRepository,
     @InjectRepository(FeatureFlagEntity, 'core')
     private readonly featureFlagRepository: Repository<FeatureFlagEntity>,
-    private readonly workspaceDataSourceService: WorkspaceDataSourceService,
+    @InjectWorkspaceDatasource()
+    private readonly workspaceDataSource: WorkspaceDataSource,
     private readonly calendarEventCleanerService: CalendarEventCleanerService,
     private readonly calendarEventParticipantsService: CalendarEventParticipantService,
-    @InjectMessageQueue(MessageQueue.emailQueue)
+    @InjectMessageQueue(MessageQueue.contactCreationQueue)
     private readonly messageQueueService: MessageQueueService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   public async startGoogleCalendarSync(
@@ -88,11 +93,11 @@ export class GoogleCalendarSyncService {
       );
     }
 
-    const calendarChannel =
-      await this.calendarChannelRepository.getFirstByConnectedAccountId(
-        connectedAccountId,
-        workspaceId,
-      );
+    const calendarChannel = await this.calendarChannelRepository.findOneBy({
+      connectedAccount: {
+        id: connectedAccountId,
+      },
+    });
 
     const syncToken = calendarChannel?.syncCursor || undefined;
 
@@ -103,9 +108,8 @@ export class GoogleCalendarSyncService {
     const calendarChannelId = calendarChannel.id;
 
     const { events, nextSyncToken } = await this.getEventsFromGoogleCalendar(
-      refreshToken,
+      connectedAccount,
       workspaceId,
-      connectedAccountId,
       emailOrDomainToReimport,
       syncToken,
     );
@@ -118,16 +122,21 @@ export class GoogleCalendarSyncService {
       return;
     }
 
+    if (!workspaceMemberId) {
+      throw new Error(
+        `Workspace member ID is undefined for connected account ${connectedAccountId} in workspace ${workspaceId}`,
+      );
+    }
+
     const blocklist = await this.getBlocklist(workspaceMemberId, workspaceId);
 
-    let filteredEvents = filterOutBlocklistedEvents(events, blocklist).filter(
-      (event) => event.status !== 'cancelled',
-    );
+    let filteredEvents = filterOutBlocklistedEvents(
+      calendarChannel.handle,
+      events,
+      blocklist,
+    ).filter((event) => event.status !== 'cancelled');
 
     if (emailOrDomainToReimport) {
-      // We still need to filter the events to only keep the ones that have the email or domain we want to reimport
-      // because the q parameter in the list method also filters the events that have the email or domain in their summary, description ...
-      // The q parameter allows us to narrow down the events
       filteredEvents = filteredEvents.filter(
         (event) =>
           event.attendees?.some(
@@ -140,11 +149,18 @@ export class GoogleCalendarSyncService {
       .filter((event) => event.status === 'cancelled')
       .map((event) => event.id as string);
 
-    const iCalUIDCalendarEventIdMap =
-      await this.calendarEventRepository.getICalUIDCalendarEventIdMap(
-        filteredEvents.map((calendarEvent) => calendarEvent.iCalUID as string),
-        workspaceId,
-      );
+    const existingCalendarEvents = await this.calendarEventRepository.find({
+      where: {
+        iCalUID: Any(filteredEvents.map((event) => event.iCalUID as string)),
+      },
+    });
+
+    const iCalUIDCalendarEventIdMap = new Map(
+      existingCalendarEvents.map((calendarEvent) => [
+        calendarEvent.iCalUID,
+        calendarEvent.id,
+      ]),
+    );
 
     const formattedEvents = filteredEvents.map((event) =>
       formatGoogleCalendarEvent(event, iCalUIDCalendarEventIdMap),
@@ -154,31 +170,34 @@ export class GoogleCalendarSyncService {
 
     let startTime = Date.now();
 
-    const existingEvents = await this.calendarEventRepository.getByICalUIDs(
-      formattedEvents.map((event) => event.iCalUID),
-      workspaceId,
+    const existingEventsICalUIDs = existingCalendarEvents.map(
+      (calendarEvent) => calendarEvent.iCalUID,
     );
-
-    const existingEventsICalUIDs = existingEvents.map((event) => event.iCalUID);
 
     let endTime = Date.now();
 
     const eventsToSave = formattedEvents.filter(
-      (event) => !existingEventsICalUIDs.includes(event.iCalUID),
+      (calendarEvent) =>
+        !existingEventsICalUIDs.includes(calendarEvent.iCalUID),
     );
 
-    const eventsToUpdate = formattedEvents.filter((event) =>
-      existingEventsICalUIDs.includes(event.iCalUID),
+    const eventsToUpdate = formattedEvents.filter((calendarEvent) =>
+      existingEventsICalUIDs.includes(calendarEvent.iCalUID),
     );
 
     startTime = Date.now();
 
     const existingCalendarChannelEventAssociations =
-      await this.calendarChannelEventAssociationRepository.getByEventExternalIdsAndCalendarChannelId(
-        formattedEvents.map((event) => event.externalId),
-        calendarChannelId,
-        workspaceId,
-      );
+      await this.calendarChannelEventAssociationRepository.find({
+        where: {
+          eventExternalId: Any(
+            formattedEvents.map((calendarEvent) => calendarEvent.id),
+          ),
+          calendarChannel: {
+            id: calendarChannelId,
+          },
+        },
+      });
 
     endTime = Date.now();
 
@@ -190,14 +209,14 @@ export class GoogleCalendarSyncService {
 
     const calendarChannelEventAssociationsToSave = formattedEvents
       .filter(
-        (event) =>
+        (calendarEvent) =>
           !existingCalendarChannelEventAssociations.some(
-            (association) => association.eventExternalId === event.id,
+            (association) => association.eventExternalId === calendarEvent.id,
           ),
       )
-      .map((event) => ({
-        calendarEventId: event.id,
-        eventExternalId: event.externalId,
+      .map((calendarEvent) => ({
+        calendarEventId: calendarEvent.id,
+        eventExternalId: calendarEvent.externalId,
         calendarChannelId,
       }));
 
@@ -213,11 +232,12 @@ export class GoogleCalendarSyncService {
 
       startTime = Date.now();
 
-      await this.calendarChannelEventAssociationRepository.deleteByEventExternalIdsAndCalendarChannelId(
-        cancelledEventExternalIds,
-        calendarChannelId,
-        workspaceId,
-      );
+      await this.calendarChannelEventAssociationRepository.delete({
+        eventExternalId: Any(cancelledEventExternalIds),
+        calendarChannel: {
+          id: calendarChannelId,
+        },
+      });
 
       endTime = Date.now();
 
@@ -254,10 +274,13 @@ export class GoogleCalendarSyncService {
 
     startTime = Date.now();
 
-    await this.calendarChannelRepository.updateSyncCursor(
-      nextSyncToken,
-      calendarChannel.id,
-      workspaceId,
+    await this.calendarChannelRepository.update(
+      {
+        id: calendarChannel.id,
+      },
+      {
+        syncCursor: nextSyncToken,
+      },
     );
 
     endTime = Date.now();
@@ -297,9 +320,8 @@ export class GoogleCalendarSyncService {
   }
 
   public async getEventsFromGoogleCalendar(
-    refreshToken: string,
+    connectedAccount: ConnectedAccountWorkspaceEntity,
     workspaceId: string,
-    connectedAccountId: string,
     emailOrDomainToReimport?: string,
     syncToken?: string,
   ): Promise<{
@@ -308,7 +330,7 @@ export class GoogleCalendarSyncService {
   }> {
     const googleCalendarClient =
       await this.googleCalendarClientProvider.getGoogleCalendarClient(
-        refreshToken,
+        connectedAccount,
       );
 
     const startTime = Date.now();
@@ -320,14 +342,41 @@ export class GoogleCalendarSyncService {
     let hasMoreEvents = true;
 
     while (hasMoreEvents) {
-      const googleCalendarEvents = await googleCalendarClient.events.list({
-        calendarId: 'primary',
-        maxResults: 500,
-        syncToken: emailOrDomainToReimport ? undefined : syncToken,
-        pageToken: nextPageToken,
-        q: emailOrDomainToReimport,
-        showDeleted: true,
-      });
+      const googleCalendarEvents = await googleCalendarClient.events
+        .list({
+          calendarId: 'primary',
+          maxResults: 500,
+          syncToken: emailOrDomainToReimport ? undefined : syncToken,
+          pageToken: nextPageToken,
+          q: emailOrDomainToReimport,
+          showDeleted: true,
+        })
+        .catch(async (error: GaxiosError) => {
+          if (error.response?.status !== 410) {
+            throw error;
+          }
+
+          await this.calendarChannelRepository.update(
+            {
+              id: connectedAccount.id,
+            },
+            {
+              syncCursor: '',
+            },
+          );
+
+          this.logger.log(
+            `Sync token is no longer valid for connected account ${connectedAccount.id} in workspace ${workspaceId}, resetting sync cursor.`,
+          );
+
+          return {
+            data: {
+              items: [],
+              nextSyncToken: undefined,
+              nextPageToken: undefined,
+            },
+          };
+        });
 
       nextSyncToken = googleCalendarEvents.data.nextSyncToken;
       nextPageToken = googleCalendarEvents.data.nextPageToken || undefined;
@@ -348,9 +397,9 @@ export class GoogleCalendarSyncService {
     const endTime = Date.now();
 
     this.logger.log(
-      `google calendar sync for workspace ${workspaceId} and account ${connectedAccountId} getting events list in ${
-        endTime - startTime
-      }ms.`,
+      `google calendar sync for workspace ${workspaceId} and account ${
+        connectedAccount.id
+      } getting events list in ${endTime - startTime}ms.`,
     );
 
     return { events, nextSyncToken };
@@ -364,15 +413,10 @@ export class GoogleCalendarSyncService {
       eventExternalId: string;
       calendarChannelId: string;
     }[],
-    connectedAccount: ConnectedAccountObjectMetadata,
-    calendarChannel: CalendarChannelObjectMetadata,
+    connectedAccount: ConnectedAccountWorkspaceEntity,
+    calendarChannel: CalendarChannelWorkspaceEntity,
     workspaceId: string,
   ): Promise<void> {
-    const dataSourceMetadata =
-      await this.workspaceDataSourceService.connectToWorkspaceDataSource(
-        workspaceId,
-      );
-
     const participantsToSave = eventsToSave.flatMap(
       (event) => event.participants,
     );
@@ -384,94 +428,157 @@ export class GoogleCalendarSyncService {
     let startTime: number;
     let endTime: number;
 
+    const savedCalendarEventParticipantsToEmit: CalendarEventParticipantWorkspaceEntity[] =
+      [];
+
     try {
-      dataSourceMetadata?.transaction(async (transactionManager) => {
-        startTime = Date.now();
+      await this.workspaceDataSource?.transaction(
+        async (transactionManager) => {
+          startTime = Date.now();
 
-        await this.calendarEventRepository.saveCalendarEvents(
-          eventsToSave,
-          workspaceId,
-          transactionManager,
-        );
-
-        endTime = Date.now();
-
-        this.logger.log(
-          `google calendar sync for workspace ${workspaceId} and account ${
-            connectedAccount.id
-          }: saving ${eventsToSave.length} events in ${endTime - startTime}ms.`,
-        );
-
-        startTime = Date.now();
-
-        await this.calendarEventRepository.updateCalendarEvents(
-          eventsToUpdate,
-          workspaceId,
-          transactionManager,
-        );
-
-        endTime = Date.now();
-
-        this.logger.log(
-          `google calendar sync for workspace ${workspaceId} and account ${
-            connectedAccount.id
-          }: updating ${eventsToUpdate.length} events in ${
-            endTime - startTime
-          }ms.`,
-        );
-
-        startTime = Date.now();
-
-        await this.calendarChannelEventAssociationRepository.saveCalendarChannelEventAssociations(
-          calendarChannelEventAssociationsToSave,
-          workspaceId,
-          transactionManager,
-        );
-
-        endTime = Date.now();
-
-        this.logger.log(
-          `google calendar sync for workspace ${workspaceId} and account ${
-            connectedAccount.id
-          }: saving calendar channel event associations in ${
-            endTime - startTime
-          }ms.`,
-        );
-
-        startTime = Date.now();
-
-        const newCalendarEventParticipants =
-          await this.calendarEventParticipantsRepository.updateCalendarEventParticipantsAndReturnNewOnes(
-            participantsToUpdate,
-            workspaceId,
+          await this.calendarEventRepository.save(
+            eventsToSave,
+            {},
             transactionManager,
           );
 
-        endTime = Date.now();
+          endTime = Date.now();
 
-        participantsToSave.push(...newCalendarEventParticipants);
+          this.logger.log(
+            `google calendar sync for workspace ${workspaceId} and account ${
+              connectedAccount.id
+            }: saving ${eventsToSave.length} events in ${
+              endTime - startTime
+            }ms.`,
+          );
 
-        this.logger.log(
-          `google calendar sync for workspace ${workspaceId} and account ${
-            connectedAccount.id
-          }: updating participants in ${endTime - startTime}ms.`,
-        );
+          startTime = Date.now();
 
-        startTime = Date.now();
+          await this.calendarChannelRepository.save(
+            eventsToUpdate,
+            {},
+            transactionManager,
+          );
 
-        await this.calendarEventParticipantsService.saveCalendarEventParticipants(
-          participantsToSave,
-          workspaceId,
-          transactionManager,
-        );
+          endTime = Date.now();
 
-        endTime = Date.now();
+          this.logger.log(
+            `google calendar sync for workspace ${workspaceId} and account ${
+              connectedAccount.id
+            }: updating ${eventsToUpdate.length} events in ${
+              endTime - startTime
+            }ms.`,
+          );
 
-        this.logger.log(
-          `google calendar sync for workspace ${workspaceId} and account ${
-            connectedAccount.id
-          }: saving participants in ${endTime - startTime}ms.`,
-        );
+          startTime = Date.now();
+
+          await this.calendarChannelEventAssociationRepository.save(
+            calendarChannelEventAssociationsToSave,
+            {},
+            transactionManager,
+          );
+
+          endTime = Date.now();
+
+          this.logger.log(
+            `google calendar sync for workspace ${workspaceId} and account ${
+              connectedAccount.id
+            }: saving calendar channel event associations in ${
+              endTime - startTime
+            }ms.`,
+          );
+
+          startTime = Date.now();
+
+          const existingCalendarEventParticipants =
+            await this.calendarEventParticipantsRepository.find({
+              where: {
+                calendarEventId: Any(
+                  participantsToUpdate
+                    .map((participant) => participant.calendarEventId)
+                    .filter(isDefined),
+                ),
+              },
+            });
+
+          const {
+            calendarEventParticipantsToDelete,
+            newCalendarEventParticipants,
+          } = participantsToUpdate.reduce(
+            (acc, calendarEventParticipant) => {
+              const existingCalendarEventParticipant =
+                existingCalendarEventParticipants.find(
+                  (existingCalendarEventParticipant) =>
+                    existingCalendarEventParticipant.handle ===
+                    calendarEventParticipant.handle,
+                );
+
+              if (existingCalendarEventParticipant) {
+                acc.calendarEventParticipantsToDelete.push(
+                  existingCalendarEventParticipant,
+                );
+              } else {
+                acc.newCalendarEventParticipants.push(calendarEventParticipant);
+              }
+
+              return acc;
+            },
+            {
+              calendarEventParticipantsToDelete:
+                [] as CalendarEventParticipantWorkspaceEntity[],
+              newCalendarEventParticipants: [] as CalendarEventParticipant[],
+            },
+          );
+
+          await this.calendarEventParticipantsRepository.delete({
+            id: Any(
+              calendarEventParticipantsToDelete.map(
+                (calendarEventParticipant) => calendarEventParticipant.id,
+              ),
+            ),
+          });
+
+          await this.calendarEventParticipantsRepository.save(
+            participantsToUpdate,
+          );
+
+          endTime = Date.now();
+
+          participantsToSave.push(...newCalendarEventParticipants);
+
+          this.logger.log(
+            `google calendar sync for workspace ${workspaceId} and account ${
+              connectedAccount.id
+            }: updating participants in ${endTime - startTime}ms.`,
+          );
+
+          startTime = Date.now();
+
+          const savedCalendarEventParticipants =
+            await this.calendarEventParticipantsService.saveCalendarEventParticipants(
+              participantsToSave,
+              workspaceId,
+              transactionManager,
+            );
+
+          savedCalendarEventParticipantsToEmit.push(
+            ...savedCalendarEventParticipants,
+          );
+
+          endTime = Date.now();
+
+          this.logger.log(
+            `google calendar sync for workspace ${workspaceId} and account ${
+              connectedAccount.id
+            }: saving participants in ${endTime - startTime}ms.`,
+          );
+        },
+      );
+
+      this.eventEmitter.emit(`calendarEventParticipant.matched`, {
+        workspaceId,
+        workspaceMemberId: connectedAccount.accountOwnerId,
+        calendarEventParticipants: savedCalendarEventParticipantsToEmit,
       });
 
       if (calendarChannel.isContactAutoCreationEnabled) {
@@ -479,7 +586,7 @@ export class GoogleCalendarSyncService {
           CreateCompanyAndContactJob.name,
           {
             workspaceId,
-            connectedAccountHandle: connectedAccount.handle,
+            connectedAccount,
             contactsToCreate: participantsToSave,
           },
         );

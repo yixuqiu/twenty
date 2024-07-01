@@ -4,10 +4,20 @@ import { ReactNode } from 'react';
 import styled from '@emotion/styled';
 
 import { Theme } from '@/app/_components/ui/theme/theme';
+import { wrapHeadingsWithAnchor } from '@/shared-utils/wrapHeadingsWithAnchor';
 
 const StyledContent = styled.div`
   flex: 1;
   max-width: 950px;
+
+  code {
+    overflow: auto;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    max-width: 100%;
+    line-height: 1.8;
+    color: black;
+  }
 
   p {
     color: ${Theme.text.color.secondary};
@@ -17,6 +27,9 @@ const StyledContent = styled.div`
     font-weight: ${Theme.font.weight.regular};
     margin: 32px 0px 0px;
     text-align: justify;
+    code {
+      font-size: 13px;
+    }
   }
 
   h1,
@@ -27,6 +40,14 @@ const StyledContent = styled.div`
     font-family: var(--font-gabarito);
     color: ${Theme.text.color.primary};
     font-weight: 700;
+    a {
+      text-decoration: none;
+      color: ${Theme.text.color.primary};
+    }
+
+    code {
+      font-size: 24px;
+    }
   }
 
   h1 {
@@ -89,5 +110,5 @@ const StyledContent = styled.div`
 `;
 
 export const ArticleContent = ({ children }: { children: ReactNode }) => {
-  return <StyledContent>{children}</StyledContent>;
+  return <StyledContent>{wrapHeadingsWithAnchor(children)}</StyledContent>;
 };

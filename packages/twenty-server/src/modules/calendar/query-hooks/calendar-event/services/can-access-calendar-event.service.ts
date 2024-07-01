@@ -1,42 +1,46 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 
 import groupBy from 'lodash.groupby';
+import { Any } from 'typeorm';
 
 import { InjectObjectMetadataRepository } from 'src/engine/object-metadata-repository/object-metadata-repository.decorator';
-import { ObjectRecord } from 'src/engine/workspace-manager/workspace-sync-metadata/types/object-record';
-import { CalendarChannelRepository } from 'src/modules/calendar/repositories/calendar-channel.repository';
-import { CalendarChannelEventAssociationObjectMetadata } from 'src/modules/calendar/standard-objects/calendar-channel-event-association.object-metadata';
+import { InjectWorkspaceRepository } from 'src/engine/twenty-orm/decorators/inject-workspace-repository.decorator';
+import { WorkspaceRepository } from 'src/engine/twenty-orm/repository/workspace.repository';
+import { CalendarChannelEventAssociationWorkspaceEntity } from 'src/modules/calendar/standard-objects/calendar-channel-event-association.workspace-entity';
 import {
-  CalendarChannelObjectMetadata,
+  CalendarChannelWorkspaceEntity,
   CalendarChannelVisibility,
-} from 'src/modules/calendar/standard-objects/calendar-channel.object-metadata';
+} from 'src/modules/calendar/standard-objects/calendar-channel.workspace-entity';
 import { ConnectedAccountRepository } from 'src/modules/connected-account/repositories/connected-account.repository';
-import { ConnectedAccountObjectMetadata } from 'src/modules/connected-account/standard-objects/connected-account.object-metadata';
+import { ConnectedAccountWorkspaceEntity } from 'src/modules/connected-account/standard-objects/connected-account.workspace-entity';
 import { WorkspaceMemberRepository } from 'src/modules/workspace-member/repositories/workspace-member.repository';
-import { WorkspaceMemberObjectMetadata } from 'src/modules/workspace-member/standard-objects/workspace-member.object-metadata';
+import { WorkspaceMemberWorkspaceEntity } from 'src/modules/workspace-member/standard-objects/workspace-member.workspace-entity';
 
 @Injectable()
 export class CanAccessCalendarEventService {
   constructor(
-    @InjectObjectMetadataRepository(CalendarChannelObjectMetadata)
-    private readonly calendarChannelRepository: CalendarChannelRepository,
-    @InjectObjectMetadataRepository(ConnectedAccountObjectMetadata)
+    @InjectWorkspaceRepository(CalendarChannelWorkspaceEntity)
+    private readonly calendarChannelRepository: WorkspaceRepository<CalendarChannelWorkspaceEntity>,
+    @InjectObjectMetadataRepository(ConnectedAccountWorkspaceEntity)
     private readonly connectedAccountRepository: ConnectedAccountRepository,
-    @InjectObjectMetadataRepository(WorkspaceMemberObjectMetadata)
+    @InjectObjectMetadataRepository(WorkspaceMemberWorkspaceEntity)
     private readonly workspaceMemberService: WorkspaceMemberRepository,
   ) {}
 
   public async canAccessCalendarEvent(
     userId: string,
     workspaceId: string,
-    calendarChannelCalendarEventAssociations: ObjectRecord<CalendarChannelEventAssociationObjectMetadata>[],
+    calendarChannelCalendarEventAssociations: CalendarChannelEventAssociationWorkspaceEntity[],
   ) {
-    const calendarChannels = await this.calendarChannelRepository.getByIds(
-      calendarChannelCalendarEventAssociations.map(
-        (association) => association.calendarChannelId,
-      ),
-      workspaceId,
-    );
+    const calendarChannels = await this.calendarChannelRepository.find({
+      where: {
+        id: Any(
+          calendarChannelCalendarEventAssociations.map(
+            (association) => association.calendarChannel.id,
+          ),
+        ),
+      },
+    });
 
     const calendarChannelsGroupByVisibility = groupBy(
       calendarChannels,

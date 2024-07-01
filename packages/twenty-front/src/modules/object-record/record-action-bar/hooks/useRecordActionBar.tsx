@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { isNonEmptyString } from '@sniptt/guards';
-import { useRecoilCallback, useSetRecoilState } from 'recoil';
+import { useRecoilCallback, useRecoilValue, useSetRecoilState } from 'recoil';
 import {
   IconClick,
   IconFileExport,
@@ -11,11 +11,15 @@ import {
   IconTrash,
 } from 'twenty-ui';
 
+import { apiConfigState } from '@/client-config/states/apiConfigState';
 import { useFavorites } from '@/favorites/hooks/useFavorites';
 import { ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
 import { useDeleteManyRecords } from '@/object-record/hooks/useDeleteManyRecords';
 import { useExecuteQuickActionOnOneRecord } from '@/object-record/hooks/useExecuteQuickActionOnOneRecord';
-import { useExportTableData } from '@/object-record/record-index/options/hooks/useExportTableData';
+import {
+  displayedExportProgress,
+  useExportTableData,
+} from '@/object-record/record-index/options/hooks/useExportTableData';
 import { recordStoreFamilyState } from '@/object-record/record-store/states/recordStoreFamilyState';
 import { ConfirmationModal } from '@/ui/layout/modal/components/ConfirmationModal';
 import { actionBarEntriesState } from '@/ui/navigation/action-bar/states/actionBarEntriesState';
@@ -49,6 +53,9 @@ export const useRecordActionBar = ({
   const { executeQuickActionOnOneRecord } = useExecuteQuickActionOnOneRecord({
     objectNameSingular: objectMetadataItem.nameSingular,
   });
+
+  const apiConfig = useRecoilValue(apiConfigState);
+  const maxRecords = apiConfig?.mutationMaximumAffectedRecords;
 
   const handleFavoriteButtonClick = useRecoilCallback(
     ({ snapshot }) =>
@@ -87,8 +94,22 @@ export const useRecordActionBar = ({
 
   const handleDeleteClick = useCallback(async () => {
     callback?.();
+    selectedRecordIds.forEach((recordId) => {
+      const foundFavorite = favorites?.find(
+        (favorite) => favorite.recordId === recordId,
+      );
+      if (foundFavorite !== undefined) {
+        deleteFavorite(foundFavorite.id);
+      }
+    });
     await deleteManyRecords(selectedRecordIds);
-  }, [callback, deleteManyRecords, selectedRecordIds]);
+  }, [
+    callback,
+    deleteManyRecords,
+    selectedRecordIds,
+    favorites,
+    deleteFavorite,
+  ]);
 
   const handleExecuteQuickActionOnClick = useCallback(async () => {
     callback?.();
@@ -111,7 +132,7 @@ export const useRecordActionBar = ({
   const baseActions: ContextMenuEntry[] = useMemo(
     () => [
       {
-        label: `${progress === undefined ? `Export` : `Export (${progress}%)`}`,
+        label: displayedExportProgress(progress),
         Icon: IconFileExport,
         accent: 'default',
         onClick: () => download(),
@@ -121,35 +142,41 @@ export const useRecordActionBar = ({
   );
 
   const deletionActions: ContextMenuEntry[] = useMemo(
-    () => [
-      {
-        label: 'Delete',
-        Icon: IconTrash,
-        accent: 'danger',
-        onClick: () => setIsDeleteRecordsModalOpen(true),
-        ConfirmationModal: (
-          <ConfirmationModal
-            isOpen={isDeleteRecordsModalOpen}
-            setIsOpen={setIsDeleteRecordsModalOpen}
-            title={`Delete ${selectedRecordIds.length} ${
-              selectedRecordIds.length === 1 ? `record` : 'records'
-            }`}
-            subtitle={`This action cannot be undone. This will permanently delete ${
-              selectedRecordIds.length === 1 ? 'this record' : 'these records'
-            }`}
-            onConfirmClick={() => handleDeleteClick()}
-            deleteButtonText={`Delete ${
-              selectedRecordIds.length > 1 ? 'Records' : 'Record'
-            }`}
-          />
-        ),
-      },
-    ],
+    () =>
+      maxRecords !== undefined && selectedRecordIds.length <= maxRecords
+        ? [
+            {
+              label: 'Delete',
+              Icon: IconTrash,
+              accent: 'danger',
+              onClick: () => setIsDeleteRecordsModalOpen(true),
+              ConfirmationModal: (
+                <ConfirmationModal
+                  isOpen={isDeleteRecordsModalOpen}
+                  setIsOpen={setIsDeleteRecordsModalOpen}
+                  title={`Delete ${selectedRecordIds.length} ${
+                    selectedRecordIds.length === 1 ? `record` : 'records'
+                  }`}
+                  subtitle={`This action cannot be undone. This will permanently delete ${
+                    selectedRecordIds.length === 1
+                      ? 'this record'
+                      : 'these records'
+                  }`}
+                  onConfirmClick={() => handleDeleteClick()}
+                  deleteButtonText={`Delete ${
+                    selectedRecordIds.length > 1 ? 'Records' : 'Record'
+                  }`}
+                />
+              ),
+            },
+          ]
+        : [],
     [
       handleDeleteClick,
       selectedRecordIds,
       isDeleteRecordsModalOpen,
       setIsDeleteRecordsModalOpen,
+      maxRecords,
     ],
   );
 

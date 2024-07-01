@@ -1,9 +1,10 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 
 import { ObjectRecordCreateEvent } from 'src/engine/integrations/event-emitter/types/object-record-create.event';
 import { ObjectRecordUpdateEvent } from 'src/engine/integrations/event-emitter/types/object-record-update.event';
 import { objectRecordChangedProperties as objectRecordUpdateEventChangedProperties } from 'src/engine/integrations/event-emitter/utils/object-record-changed-properties.util';
+import { InjectMessageQueue } from 'src/engine/integrations/message-queue/decorators/message-queue.decorator';
 import { MessageQueue } from 'src/engine/integrations/message-queue/message-queue.constants';
 import { MessageQueueService } from 'src/engine/integrations/message-queue/services/message-queue.service';
 import {
@@ -14,18 +15,18 @@ import {
   UnmatchParticipantJobData,
   UnmatchParticipantJob,
 } from 'src/modules/calendar-messaging-participant/jobs/unmatch-participant.job';
-import { WorkspaceMemberObjectMetadata } from 'src/modules/workspace-member/standard-objects/workspace-member.object-metadata';
+import { WorkspaceMemberWorkspaceEntity } from 'src/modules/workspace-member/standard-objects/workspace-member.workspace-entity';
 
 @Injectable()
 export class ParticipantWorkspaceMemberListener {
   constructor(
-    @Inject(MessageQueue.messagingQueue)
+    @InjectMessageQueue(MessageQueue.messagingQueue)
     private readonly messageQueueService: MessageQueueService,
   ) {}
 
   @OnEvent('workspaceMember.created')
   async handleCreatedEvent(
-    payload: ObjectRecordCreateEvent<WorkspaceMemberObjectMetadata>,
+    payload: ObjectRecordCreateEvent<WorkspaceMemberWorkspaceEntity>,
   ) {
     if (payload.properties.after.userEmail === null) {
       return;
@@ -43,10 +44,10 @@ export class ParticipantWorkspaceMemberListener {
 
   @OnEvent('workspaceMember.updated')
   async handleUpdatedEvent(
-    payload: ObjectRecordUpdateEvent<WorkspaceMemberObjectMetadata>,
+    payload: ObjectRecordUpdateEvent<WorkspaceMemberWorkspaceEntity>,
   ) {
     if (
-      objectRecordUpdateEventChangedProperties(
+      objectRecordUpdateEventChangedProperties<WorkspaceMemberWorkspaceEntity>(
         payload.properties.before,
         payload.properties.after,
       ).includes('userEmail')

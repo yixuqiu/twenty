@@ -6,13 +6,17 @@ import { FullNameFieldInput } from '@/object-record/record-field/meta-types/inpu
 import { LinksFieldInput } from '@/object-record/record-field/meta-types/input/components/LinksFieldInput';
 import { MultiSelectFieldInput } from '@/object-record/record-field/meta-types/input/components/MultiSelectFieldInput';
 import { RawJsonFieldInput } from '@/object-record/record-field/meta-types/input/components/RawJsonFieldInput';
+import { RelationFromManyFieldInput } from '@/object-record/record-field/meta-types/input/components/RelationFromManyFieldInput';
 import { SelectFieldInput } from '@/object-record/record-field/meta-types/input/components/SelectFieldInput';
 import { RecordFieldInputScope } from '@/object-record/record-field/scopes/RecordFieldInputScope';
 import { isFieldDate } from '@/object-record/record-field/types/guards/isFieldDate';
+import { isFieldDisplayedAsPhone } from '@/object-record/record-field/types/guards/isFieldDisplayedAsPhone';
 import { isFieldFullName } from '@/object-record/record-field/types/guards/isFieldFullName';
 import { isFieldLinks } from '@/object-record/record-field/types/guards/isFieldLinks';
 import { isFieldMultiSelect } from '@/object-record/record-field/types/guards/isFieldMultiSelect';
 import { isFieldRawJson } from '@/object-record/record-field/types/guards/isFieldRawJson';
+import { isFieldRelationFromManyObjects } from '@/object-record/record-field/types/guards/isFieldRelationFromManyObjects';
+import { isFieldRelationToOneObject } from '@/object-record/record-field/types/guards/isFieldRelationToOneObject';
 import { isFieldSelect } from '@/object-record/record-field/types/guards/isFieldSelect';
 import { getScopeIdFromComponentId } from '@/ui/utilities/recoil-scope/utils/getScopeIdFromComponentId';
 
@@ -25,7 +29,7 @@ import { LinkFieldInput } from '../meta-types/input/components/LinkFieldInput';
 import { NumberFieldInput } from '../meta-types/input/components/NumberFieldInput';
 import { PhoneFieldInput } from '../meta-types/input/components/PhoneFieldInput';
 import { RatingFieldInput } from '../meta-types/input/components/RatingFieldInput';
-import { RelationFieldInput } from '../meta-types/input/components/RelationFieldInput';
+import { RelationToOneFieldInput } from '../meta-types/input/components/RelationToOneFieldInput';
 import { TextFieldInput } from '../meta-types/input/components/TextFieldInput';
 import { FieldInputEvent } from '../types/FieldInputEvent';
 import { isFieldAddress } from '../types/guards/isFieldAddress';
@@ -37,7 +41,6 @@ import { isFieldLink } from '../types/guards/isFieldLink';
 import { isFieldNumber } from '../types/guards/isFieldNumber';
 import { isFieldPhone } from '../types/guards/isFieldPhone';
 import { isFieldRating } from '../types/guards/isFieldRating';
-import { isFieldRelation } from '../types/guards/isFieldRelation';
 import { isFieldText } from '../types/guards/isFieldText';
 
 type FieldInputProps = {
@@ -69,9 +72,12 @@ export const FieldInput = ({
     <RecordFieldInputScope
       recordFieldInputScopeId={getScopeIdFromComponentId(recordFieldInputdId)}
     >
-      {isFieldRelation(fieldDefinition) ? (
-        <RelationFieldInput onSubmit={onSubmit} onCancel={onCancel} />
-      ) : isFieldPhone(fieldDefinition) ? (
+      {isFieldRelationToOneObject(fieldDefinition) ? (
+        <RelationToOneFieldInput onSubmit={onSubmit} onCancel={onCancel} />
+      ) : isFieldRelationFromManyObjects(fieldDefinition) ? (
+        <RelationFromManyFieldInput onSubmit={onSubmit} />
+      ) : isFieldPhone(fieldDefinition) ||
+        isFieldDisplayedAsPhone(fieldDefinition) ? (
         <PhoneFieldInput
           onEnter={onEnter}
           onEscape={onEscape}
@@ -109,6 +115,7 @@ export const FieldInput = ({
           onEscape={onEscape}
           onClickOutside={onClickOutside}
           onClear={onSubmit}
+          onSubmit={onSubmit}
         />
       ) : isFieldDate(fieldDefinition) ? (
         <DateFieldInput
@@ -116,6 +123,7 @@ export const FieldInput = ({
           onEscape={onEscape}
           onClickOutside={onClickOutside}
           onClear={onSubmit}
+          onSubmit={onSubmit}
         />
       ) : isFieldNumber(fieldDefinition) ? (
         <NumberFieldInput
@@ -134,7 +142,7 @@ export const FieldInput = ({
           onShiftTab={onShiftTab}
         />
       ) : isFieldLinks(fieldDefinition) ? (
-        <LinksFieldInput onCancel={onCancel} onSubmit={onSubmit} />
+        <LinksFieldInput onCancel={onCancel} />
       ) : isFieldCurrency(fieldDefinition) ? (
         <CurrencyFieldInput
           onEnter={onEnter}

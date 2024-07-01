@@ -1,30 +1,40 @@
-import { useMultiSelectField } from '@/object-record/record-field/meta-types/hooks/useMultiSelectField';
-import { Tag } from '@/ui/display/tag/components/Tag';
-import {
-  ExpandableList,
-  ExpandableListProps,
-} from '@/ui/layout/expandable-list/components/ExpandableList';
+import { styled } from '@linaria/react';
+import { Tag, THEME_COMMON } from 'twenty-ui';
 
-type MultiSelectFieldDisplayProps = ExpandableListProps;
-export const MultiSelectFieldDisplay = ({
-  isHovered,
-  reference,
-  withDropDownBorder,
-}: MultiSelectFieldDisplayProps) => {
-  const { fieldValues, fieldDefinition } = useMultiSelectField();
+import { useFieldFocus } from '@/object-record/record-field/hooks/useFieldFocus';
+import { useMultiSelectFieldDisplay } from '@/object-record/record-field/meta-types/hooks/useMultiSelectFieldDisplay';
+import { ExpandableList } from '@/ui/layout/expandable-list/components/ExpandableList';
 
-  const selectedOptions = fieldValues
+const spacing1 = THEME_COMMON.spacing(1);
+
+const StyledContainer = styled.div`
+  align-items: center;
+  display: flex;
+  gap: ${spacing1};
+  justify-content: flex-start;
+
+  max-width: 100%;
+
+  overflow: hidden;
+
+  width: 100%;
+`;
+
+export const MultiSelectFieldDisplay = () => {
+  const { fieldValue, fieldDefinition } = useMultiSelectFieldDisplay();
+
+  const { isFocused } = useFieldFocus();
+
+  const selectedOptions = fieldValue
     ? fieldDefinition.metadata.options?.filter((option) =>
-        fieldValues.includes(option.value),
+        fieldValue.includes(option.value),
       )
     : [];
 
-  return selectedOptions ? (
-    <ExpandableList
-      isHovered={isHovered}
-      reference={reference}
-      withDropDownBorder={withDropDownBorder}
-    >
+  if (!selectedOptions) return null;
+
+  return isFocused ? (
+    <ExpandableList isChipCountDisplayed={isFocused}>
       {selectedOptions.map((selectedOption, index) => (
         <Tag
           key={index}
@@ -34,6 +44,15 @@ export const MultiSelectFieldDisplay = ({
       ))}
     </ExpandableList>
   ) : (
-    <></>
+    <StyledContainer>
+      {selectedOptions.map((selectedOption, index) => (
+        <Tag
+          preventShrink
+          key={index}
+          color={selectedOption.color}
+          text={selectedOption.label}
+        />
+      ))}
+    </StyledContainer>
   );
 };

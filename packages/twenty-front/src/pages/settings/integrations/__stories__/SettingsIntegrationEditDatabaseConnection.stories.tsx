@@ -7,7 +7,7 @@ import {
   PageDecoratorArgs,
 } from '~/testing/decorators/PageDecorator';
 import { graphqlMocks } from '~/testing/graphqlMocks';
-import { sleep } from '~/testing/sleep';
+import { sleep } from '~/utils/sleep';
 
 const meta: Meta<PageDecoratorArgs> = {
   title:
@@ -35,6 +35,6 @@ export const Default: Story = {
     const canvas = within(canvasElement);
     sleep(100);
 
-    await canvas.findByText('Edit PostgreSQL Connection');
+    await canvas.findByText('Edit Connection');
   },
 };

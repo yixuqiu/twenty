@@ -1,33 +1,30 @@
 import { Module } from '@nestjs/common';
 
 import { ObjectMetadataRepositoryModule } from 'src/engine/object-metadata-repository/object-metadata-repository.module';
-import { WorkspaceMemberObjectMetadata } from 'src/modules/workspace-member/standard-objects/workspace-member.object-metadata';
-import { ConnectedAccountObjectMetadata } from 'src/modules/connected-account/standard-objects/connected-account.object-metadata';
-import { CalendarChannelEventAssociationObjectMetadata } from 'src/modules/calendar/standard-objects/calendar-channel-event-association.object-metadata';
-import { CalendarChannelObjectMetadata } from 'src/modules/calendar/standard-objects/calendar-channel.object-metadata';
+import { WorkspaceMemberWorkspaceEntity } from 'src/modules/workspace-member/standard-objects/workspace-member.workspace-entity';
+import { ConnectedAccountWorkspaceEntity } from 'src/modules/connected-account/standard-objects/connected-account.workspace-entity';
+import { CalendarChannelEventAssociationWorkspaceEntity } from 'src/modules/calendar/standard-objects/calendar-channel-event-association.workspace-entity';
+import { CalendarChannelWorkspaceEntity } from 'src/modules/calendar/standard-objects/calendar-channel.workspace-entity';
 import { CalendarEventFindManyPreQueryHook } from 'src/modules/calendar/query-hooks/calendar-event/calendar-event-find-many.pre-query.hook';
 import { CalendarEventFindOnePreQueryHook } from 'src/modules/calendar/query-hooks/calendar-event/calendar-event-find-one.pre-query-hook';
 import { CanAccessCalendarEventService } from 'src/modules/calendar/query-hooks/calendar-event/services/can-access-calendar-event.service';
+import { TwentyORMModule } from 'src/engine/twenty-orm/twenty-orm.module';
 
 @Module({
   imports: [
+    TwentyORMModule.forFeature([
+      CalendarChannelEventAssociationWorkspaceEntity,
+      CalendarChannelWorkspaceEntity,
+    ]),
     ObjectMetadataRepositoryModule.forFeature([
-      CalendarChannelEventAssociationObjectMetadata,
-      CalendarChannelObjectMetadata,
-      ConnectedAccountObjectMetadata,
-      WorkspaceMemberObjectMetadata,
+      ConnectedAccountWorkspaceEntity,
+      WorkspaceMemberWorkspaceEntity,
     ]),
   ],
   providers: [
     CanAccessCalendarEventService,
-    {
-      provide: CalendarEventFindOnePreQueryHook.name,
-      useClass: CalendarEventFindOnePreQueryHook,
-    },
-    {
-      provide: CalendarEventFindManyPreQueryHook.name,
-      useClass: CalendarEventFindManyPreQueryHook,
-    },
+    CalendarEventFindOnePreQueryHook,
+    CalendarEventFindManyPreQueryHook,
   ],
 })
 export class CalendarQueryHookModule {}

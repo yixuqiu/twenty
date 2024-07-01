@@ -5,29 +5,31 @@ import { CreateCompanyAndContactService } from 'src/modules/connected-account/au
 import { CreateCompanyModule } from 'src/modules/connected-account/auto-companies-and-contacts-creation/create-company/create-company.module';
 import { CreateContactModule } from 'src/modules/connected-account/auto-companies-and-contacts-creation/create-contact/create-contact.module';
 import { ObjectMetadataRepositoryModule } from 'src/engine/object-metadata-repository/object-metadata-repository.module';
-import { PersonObjectMetadata } from 'src/modules/person/standard-objects/person.object-metadata';
-import { WorkspaceMemberObjectMetadata } from 'src/modules/workspace-member/standard-objects/workspace-member.object-metadata';
-import { MessageParticipantModule } from 'src/modules/messaging/services/message-participant/message-participant.module';
+import { PersonWorkspaceEntity } from 'src/modules/person/standard-objects/person.workspace-entity';
+import { WorkspaceMemberWorkspaceEntity } from 'src/modules/workspace-member/standard-objects/workspace-member.workspace-entity';
 import { WorkspaceDataSourceModule } from 'src/engine/workspace-datasource/workspace-datasource.module';
-import { CalendarEventParticipantObjectMetadata } from 'src/modules/calendar/standard-objects/calendar-event-participant.object-metadata';
 import { CalendarEventParticipantModule } from 'src/modules/calendar/services/calendar-event-participant/calendar-event-participant.module';
 import { FeatureFlagEntity } from 'src/engine/core-modules/feature-flag/feature-flag.entity';
+import { MessagingCommonModule } from 'src/modules/messaging/common/messaging-common.module';
+import { AutoCompaniesAndContactsCreationMessageChannelListener } from 'src/modules/connected-account/auto-companies-and-contacts-creation/listeners/auto-companies-and-contacts-creation-message-channel.listener';
 
 @Module({
   imports: [
     CreateContactModule,
     CreateCompanyModule,
     ObjectMetadataRepositoryModule.forFeature([
-      PersonObjectMetadata,
-      WorkspaceMemberObjectMetadata,
-      CalendarEventParticipantObjectMetadata,
+      PersonWorkspaceEntity,
+      WorkspaceMemberWorkspaceEntity,
     ]),
-    MessageParticipantModule,
+    MessagingCommonModule,
     WorkspaceDataSourceModule,
     CalendarEventParticipantModule,
     TypeOrmModule.forFeature([FeatureFlagEntity], 'core'),
   ],
-  providers: [CreateCompanyAndContactService],
+  providers: [
+    CreateCompanyAndContactService,
+    AutoCompaniesAndContactsCreationMessageChannelListener,
+  ],
   exports: [CreateCompanyAndContactService],
 })
 export class AutoCompaniesAndContactsCreationModule {}
