@@ -1,42 +1,45 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
+import { SpreadsheetImportSingleSelectTable } from '@/spreadsheet-import/components/SpreadsheetImportSingleSelectTable';
+import { type ImportedRow } from '@/spreadsheet-import/types';
+import { useLingui } from '@lingui/react/macro';
 
-import { Table } from '@/spreadsheet-import/components/Table';
-import { RawData } from '@/spreadsheet-import/types';
-
-import { generateSelectionColumns } from './SelectColumn';
-
-interface SelectHeaderTableProps {
-  data: RawData[];
-  selectedRows: ReadonlySet<number>;
-  setSelectedRows: (rows: ReadonlySet<number>) => void;
-}
+type SelectHeaderTableProps = {
+  importedRows: ImportedRow[];
+  selectedRowIndex: number;
+  onSelectedRowChange: (rowIndex: number) => void;
+};
 
 export const SelectHeaderTable = ({
-  data,
-  selectedRows,
-  setSelectedRows,
+  importedRows,
+  selectedRowIndex,
+  onSelectedRowChange,
 }: SelectHeaderTableProps) => {
-  const columns = useMemo(() => generateSelectionColumns(data), [data]);
+  const { t } = useLingui();
+  const rowKeyGetter = useCallback(
+    (row: ImportedRow) => importedRows.indexOf(row),
+    [importedRows],
+  );
+
+  const columns = useMemo(() => {
+    const longestRowLength = importedRows.reduce(
+      (length, row) => Math.max(length, row.length),
+      0,
+    );
+
+    return Array.from({ length: longestRowLength }, (_, index) => ({
+      key: index.toString(),
+      name: '',
+    }));
+  }, [importedRows]);
 
   return (
-    <Table
-      // Todo: remove usage of react-data-grid
-      rowKeyGetter={(row: any) => data.indexOf(row)}
-      rows={data}
+    <SpreadsheetImportSingleSelectTable
+      rowKeyGetter={rowKeyGetter}
+      rows={importedRows}
       columns={columns}
-      selectedRows={selectedRows}
-      onSelectedRowsChange={(newRows: any) => {
-        // allow selecting only one row
-        newRows.forEach((value: any) => {
-          if (!selectedRows.has(value as number)) {
-            setSelectedRows(new Set([value as number]));
-            return;
-          }
-        });
-      }}
-      onRowClick={(row: any) => {
-        setSelectedRows(new Set([data.indexOf(row)]));
-      }}
+      selectionLabel={t`Select header row`}
+      selectedRowKey={selectedRowIndex}
+      onSelectedRowChange={onSelectedRowChange}
       headerRowHeight={0}
     />
   );

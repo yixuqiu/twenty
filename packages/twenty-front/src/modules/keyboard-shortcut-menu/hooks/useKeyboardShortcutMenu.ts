@@ -1,43 +1,59 @@
-import { useRecoilState, useRecoilValue } from 'recoil';
+import { useCallback } from 'react';
 
-import { usePreviousHotkeyScope } from '@/ui/utilities/hotkey/hooks/usePreviousHotkeyScope';
-import { AppHotkeyScope } from '@/ui/utilities/hotkey/types/AppHotkeyScope';
+import { isKeyboardShortcutMenuOpenedState } from '@/keyboard-shortcut-menu/states/isKeyboardShortcutMenuOpenedState';
+import { usePushFocusItemToFocusStack } from '@/ui/utilities/focus/hooks/usePushFocusItemToFocusStack';
+import { useRemoveFocusItemFromFocusStackById } from '@/ui/utilities/focus/hooks/useRemoveFocusItemFromFocusStackById';
+import { FocusComponentType } from '@/ui/utilities/focus/types/FocusComponentType';
+import { useStore } from 'jotai';
 
-import { isKeyboardShortcutMenuOpenedState } from '../states/isKeyboardShortcutMenuOpenedState';
+export const KEYBOARD_SHORTCUT_MENU_INSTANCE_ID = 'keyboard-shortcut-menu';
 
 export const useKeyboardShortcutMenu = () => {
-  const [, setIsKeyboardShortcutMenuOpened] = useRecoilState(
-    isKeyboardShortcutMenuOpenedState,
-  );
-  const isKeyboardShortcutMenuOpened = useRecoilValue(
-    isKeyboardShortcutMenuOpenedState,
-  );
-  const {
-    setHotkeyScopeAndMemorizePreviousScope,
-    goBackToPreviousHotkeyScope,
-  } = usePreviousHotkeyScope();
+  const { pushFocusItemToFocusStack } = usePushFocusItemToFocusStack();
+  const { removeFocusItemFromFocusStackById } =
+    useRemoveFocusItemFromFocusStackById();
 
-  const toggleKeyboardShortcutMenu = () => {
-    if (isKeyboardShortcutMenuOpened === false) {
-      setIsKeyboardShortcutMenuOpened(true);
-      setHotkeyScopeAndMemorizePreviousScope(
-        AppHotkeyScope.KeyboardShortcutMenu,
-      );
-    } else {
-      setIsKeyboardShortcutMenuOpened(false);
-      goBackToPreviousHotkeyScope();
+  const store = useStore();
+
+  const openKeyboardShortcutMenu = useCallback(() => {
+    store.set(isKeyboardShortcutMenuOpenedState.atom, true);
+    pushFocusItemToFocusStack({
+      focusId: KEYBOARD_SHORTCUT_MENU_INSTANCE_ID,
+      component: {
+        type: FocusComponentType.KEYBOARD_SHORTCUT_MENU,
+        instanceId: KEYBOARD_SHORTCUT_MENU_INSTANCE_ID,
+      },
+      globalHotkeysConfig: {
+        enableGlobalHotkeysConflictingWithKeyboard: false,
+        enableGlobalHotkeysWithModifiers: false,
+      },
+    });
+  }, [pushFocusItemToFocusStack, store]);
+
+  const closeKeyboardShortcutMenu = useCallback(() => {
+    const isKeyboardShortcutMenuOpened = store.get(
+      isKeyboardShortcutMenuOpenedState.atom,
+    );
+
+    if (isKeyboardShortcutMenuOpened) {
+      store.set(isKeyboardShortcutMenuOpenedState.atom, false);
+      removeFocusItemFromFocusStackById({
+        focusId: KEYBOARD_SHORTCUT_MENU_INSTANCE_ID,
+      });
     }
-  };
+  }, [removeFocusItemFromFocusStackById, store]);
 
-  const openKeyboardShortcutMenu = () => {
-    setIsKeyboardShortcutMenuOpened(true);
-    setHotkeyScopeAndMemorizePreviousScope(AppHotkeyScope.KeyboardShortcutMenu);
-  };
+  const toggleKeyboardShortcutMenu = useCallback(() => {
+    const isKeyboardShortcutMenuOpened = store.get(
+      isKeyboardShortcutMenuOpenedState.atom,
+    );
 
-  const closeKeyboardShortcutMenu = () => {
-    setIsKeyboardShortcutMenuOpened(false);
-    goBackToPreviousHotkeyScope();
-  };
+    if (isKeyboardShortcutMenuOpened === false) {
+      openKeyboardShortcutMenu();
+    } else {
+      closeKeyboardShortcutMenu();
+    }
+  }, [store, closeKeyboardShortcutMenu, openKeyboardShortcutMenu]);
 
   return {
     toggleKeyboardShortcutMenu,

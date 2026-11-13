@@ -1,18 +1,99 @@
-import { Args, Query, Resolver, Int, ArgsType, Field } from '@nestjs/graphql';
-import { UseGuards } from '@nestjs/common';
+import { UseGuards, UseFilters } from '@nestjs/common';
+import { Args, ArgsType, Field, Int, Mutation, Query } from '@nestjs/graphql';
 
-import { Max } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsOptional, Max, MaxLength, ValidateNested } from 'class-validator';
+import { PermissionFlagType } from 'twenty-shared/constants';
+import { StandardObjectNameSingular } from 'twenty-shared/types';
 
-import { JwtAuthGuard } from 'src/engine/guards/jwt.auth.guard';
-import { Workspace } from 'src/engine/core-modules/workspace/workspace.entity';
-import { AuthWorkspace } from 'src/engine/decorators/auth/auth-workspace.decorator';
-import { TimelineMessagingService } from 'src/engine/core-modules/messaging/timeline-messaging.service';
-import { TIMELINE_THREADS_MAX_PAGE_SIZE } from 'src/engine/core-modules/messaging/constants/messaging.constants';
-import { TimelineThreadsWithTotal } from 'src/engine/core-modules/messaging/dtos/timeline-threads-with-total.dto';
-import { AuthUser } from 'src/engine/decorators/auth/auth-user.decorator';
-import { UserService } from 'src/engine/core-modules/user/services/user.service';
-import { User } from 'src/engine/core-modules/user/user.entity';
+import { CoreResolver } from 'src/engine/api/graphql/graphql-config/decorators/core-resolver.decorator';
 import { UUIDScalarType } from 'src/engine/api/graphql/workspace-schema-builder/graphql-types/scalars';
+import {
+  TIMELINE_THREADS_MAX_PAGE_SIZE,
+  TIMELINE_THREADS_SEARCH_INPUT_MAX_LENGTH,
+} from 'src/engine/core-modules/messaging/constants/messaging.constants';
+import { DismissReconnectAccountBannerInput } from 'src/engine/core-modules/messaging/dtos/dismiss-reconnect-account-banner.input';
+import { TimelineThreadChannelFilterInput } from 'src/engine/core-modules/messaging/dtos/timeline-thread-channel-filter.input';
+import { TimelineThreadChannelDTO } from 'src/engine/core-modules/messaging/dtos/timeline-thread-channel.dto';
+import { TimelineThreadSearchResultDTO } from 'src/engine/core-modules/messaging/dtos/timeline-thread-search-result.dto';
+import { TimelineThreadsWithTotalDTO } from 'src/engine/core-modules/messaging/dtos/timeline-threads-with-total.dto';
+import { GetMessagesService } from 'src/engine/core-modules/messaging/services/get-messages.service';
+import { TimelineMessagingService } from 'src/engine/core-modules/messaging/services/timeline-messaging.service';
+import { type AuthContextUser } from 'src/engine/core-modules/auth/types/auth-context.type';
+import { AuthGraphqlApiExceptionFilter } from 'src/engine/core-modules/auth/filters/auth-graphql-api-exception.filter';
+import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
+import { AuthUser } from 'src/engine/decorators/auth/auth-user.decorator';
+import { AuthUserWorkspaceId } from 'src/engine/decorators/auth/auth-user-workspace-id.decorator';
+import { AuthWorkspace } from 'src/engine/decorators/auth/auth-workspace.decorator';
+import { CustomPermissionGuard } from 'src/engine/guards/custom-permission.guard';
+import { AccountsToReconnectService } from 'src/modules/connected-account/services/accounts-to-reconnect.service';
+import { AccessPolicyGuard } from 'src/engine/guards/access-policy.guard';
+import { type AccessPolicy } from 'src/engine/guards/types/access-policy.type';
+
+const TIMELINE_MESSAGING_READ_ACCESS_POLICY: AccessPolicy = {
+  authPrincipals: {
+    userSession: {
+      standard: true,
+      impersonated: true,
+      playground: true,
+      workspaceAgnostic: false,
+    },
+    apiKey: false,
+    oauthClient: false,
+    application: false,
+  },
+  requiredPermissionFlags: [],
+};
+
+@ArgsType()
+class GetTimelineThreadsFromObjectRecordArgs {
+  @Field(() => String)
+  objectNameSingular: string;
+
+  @Field(() => UUIDScalarType)
+  recordId: string;
+
+  @Field(() => Int)
+  page: number;
+
+  @Field(() => Int)
+  @Max(TIMELINE_THREADS_MAX_PAGE_SIZE)
+  pageSize: number;
+
+  @Field(() => TimelineThreadChannelFilterInput, { nullable: true })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => TimelineThreadChannelFilterInput)
+  channel?: TimelineThreadChannelFilterInput;
+}
+
+@ArgsType()
+class GetTimelineThreadChannelsFromObjectRecordArgs {
+  @Field(() => String)
+  objectNameSingular: string;
+
+  @Field(() => UUIDScalarType)
+  recordId: string;
+}
+
+@ArgsType()
+class GetMessageThreadChannelArgs {
+  @Field(() => UUIDScalarType)
+  messageThreadId: string;
+}
+
+@ArgsType()
+class SearchTimelineThreadsArgs {
+  @Field(() => String)
+  objectNameSingular: string;
+
+  @Field(() => UUIDScalarType)
+  recordId: string;
+
+  @Field(() => String, { nullable: true })
+  @MaxLength(TIMELINE_THREADS_SEARCH_INPUT_MAX_LENGTH)
+  searchInput?: string;
+}
 
 @ArgsType()
 class GetTimelineThreadsFromPersonIdArgs {
@@ -40,59 +121,209 @@ class GetTimelineThreadsFromCompanyIdArgs {
   pageSize: number;
 }
 
-@UseGuards(JwtAuthGuard)
-@Resolver(() => TimelineThreadsWithTotal)
+@ArgsType()
+class GetTimelineThreadsFromOpportunityIdArgs {
+  @Field(() => UUIDScalarType)
+  opportunityId: string;
+
+  @Field(() => Int)
+  page: number;
+
+  @Field(() => Int)
+  @Max(TIMELINE_THREADS_MAX_PAGE_SIZE)
+  pageSize: number;
+}
+
+@CoreResolver(() => TimelineThreadsWithTotalDTO)
+@UseFilters(AuthGraphqlApiExceptionFilter)
 export class TimelineMessagingResolver {
   constructor(
+    private readonly getMessagesFromPersonIdsService: GetMessagesService,
     private readonly timelineMessagingService: TimelineMessagingService,
-    private readonly userService: UserService,
+    private readonly accountsToReconnectService: AccountsToReconnectService,
   ) {}
 
-  @Query(() => TimelineThreadsWithTotal)
-  async getTimelineThreadsFromPersonId(
-    @AuthWorkspace() { id: workspaceId }: Workspace,
-    @AuthUser() user: User,
-    @Args() { personId, page, pageSize }: GetTimelineThreadsFromPersonIdArgs,
+  @Query(() => TimelineThreadsWithTotalDTO)
+  @UseGuards(
+    AccessPolicyGuard(TIMELINE_MESSAGING_READ_ACCESS_POLICY),
+    CustomPermissionGuard,
+  )
+  async getTimelineThreadsFromObjectRecord(
+    @AuthUserWorkspaceId() userWorkspaceId: string,
+    @AuthWorkspace() workspace: WorkspaceEntity,
+    @Args()
+    {
+      objectNameSingular,
+      recordId,
+      page,
+      pageSize,
+      channel,
+    }: GetTimelineThreadsFromObjectRecordArgs,
   ) {
-    const workspaceMember = await this.userService.loadWorkspaceMember(user);
-
-    if (!workspaceMember) {
-      return;
-    }
-
-    const timelineThreads =
-      await this.timelineMessagingService.getMessagesFromPersonIds(
-        workspaceMember.id,
-        workspaceId,
-        [personId],
-        page,
-        pageSize,
-      );
-
-    return timelineThreads;
+    return this.getMessagesFromPersonIdsService.getMessagesFromObjectRecord({
+      userWorkspaceId,
+      objectNameSingular,
+      recordId,
+      workspaceId: workspace.id,
+      page,
+      pageSize,
+      channel,
+    });
   }
 
-  @Query(() => TimelineThreadsWithTotal)
+  @Query(() => [TimelineThreadChannelDTO])
+  @UseGuards(
+    AccessPolicyGuard(TIMELINE_MESSAGING_READ_ACCESS_POLICY),
+    CustomPermissionGuard,
+  )
+  async getTimelineThreadChannelsFromObjectRecord(
+    @AuthWorkspace() workspace: WorkspaceEntity,
+    @Args()
+    {
+      objectNameSingular,
+      recordId,
+    }: GetTimelineThreadChannelsFromObjectRecordArgs,
+  ): Promise<TimelineThreadChannelDTO[]> {
+    return this.getMessagesFromPersonIdsService.getChannelsFromObjectRecord({
+      objectNameSingular,
+      recordId,
+      workspaceId: workspace.id,
+    });
+  }
+
+  @Query(() => TimelineThreadChannelDTO, { nullable: true })
+  @UseGuards(
+    AccessPolicyGuard(TIMELINE_MESSAGING_READ_ACCESS_POLICY),
+    CustomPermissionGuard,
+  )
+  async getMessageThreadChannel(
+    @AuthUserWorkspaceId() userWorkspaceId: string,
+    @AuthWorkspace() workspace: WorkspaceEntity,
+    @Args() { messageThreadId }: GetMessageThreadChannelArgs,
+  ): Promise<TimelineThreadChannelDTO | null> {
+    return this.timelineMessagingService.getMessageThreadChannel({
+      messageThreadId,
+      userWorkspaceId,
+      workspaceId: workspace.id,
+    });
+  }
+
+  @Query(() => TimelineThreadSearchResultDTO)
+  @UseGuards(
+    AccessPolicyGuard(TIMELINE_MESSAGING_READ_ACCESS_POLICY),
+    CustomPermissionGuard,
+  )
+  async searchTimelineThreads(
+    @AuthUserWorkspaceId() userWorkspaceId: string,
+    @AuthWorkspace() workspace: WorkspaceEntity,
+    @Args()
+    { objectNameSingular, recordId, searchInput }: SearchTimelineThreadsArgs,
+  ) {
+    return this.getMessagesFromPersonIdsService.searchMessagesFromObjectRecord({
+      userWorkspaceId,
+      objectNameSingular,
+      recordId,
+      workspaceId: workspace.id,
+      searchInput,
+    });
+  }
+
+  @Query(() => TimelineThreadsWithTotalDTO, {
+    deprecationReason: 'Use getTimelineThreadsFromObjectRecord instead',
+  })
+  @UseGuards(
+    AccessPolicyGuard(TIMELINE_MESSAGING_READ_ACCESS_POLICY),
+    CustomPermissionGuard,
+  )
+  async getTimelineThreadsFromPersonId(
+    @AuthUserWorkspaceId() userWorkspaceId: string,
+    @AuthWorkspace() workspace: WorkspaceEntity,
+    @Args() { personId, page, pageSize }: GetTimelineThreadsFromPersonIdArgs,
+  ) {
+    return this.getMessagesFromPersonIdsService.getMessagesFromObjectRecord({
+      userWorkspaceId,
+      objectNameSingular: StandardObjectNameSingular.Person,
+      recordId: personId,
+      workspaceId: workspace.id,
+      page,
+      pageSize,
+    });
+  }
+
+  @Query(() => TimelineThreadsWithTotalDTO, {
+    deprecationReason: 'Use getTimelineThreadsFromObjectRecord instead',
+  })
+  @UseGuards(
+    AccessPolicyGuard(TIMELINE_MESSAGING_READ_ACCESS_POLICY),
+    CustomPermissionGuard,
+  )
   async getTimelineThreadsFromCompanyId(
-    @AuthWorkspace() { id: workspaceId }: Workspace,
-    @AuthUser() user: User,
+    @AuthUserWorkspaceId() userWorkspaceId: string,
+    @AuthWorkspace() workspace: WorkspaceEntity,
     @Args() { companyId, page, pageSize }: GetTimelineThreadsFromCompanyIdArgs,
   ) {
-    const workspaceMember = await this.userService.loadWorkspaceMember(user);
+    return this.getMessagesFromPersonIdsService.getMessagesFromObjectRecord({
+      userWorkspaceId,
+      objectNameSingular: StandardObjectNameSingular.Company,
+      recordId: companyId,
+      workspaceId: workspace.id,
+      page,
+      pageSize,
+    });
+  }
 
-    if (!workspaceMember) {
-      return;
-    }
+  @Query(() => TimelineThreadsWithTotalDTO, {
+    deprecationReason: 'Use getTimelineThreadsFromObjectRecord instead',
+  })
+  @UseGuards(
+    AccessPolicyGuard(TIMELINE_MESSAGING_READ_ACCESS_POLICY),
+    CustomPermissionGuard,
+  )
+  async getTimelineThreadsFromOpportunityId(
+    @AuthUserWorkspaceId() userWorkspaceId: string,
+    @AuthWorkspace() workspace: WorkspaceEntity,
+    @Args()
+    { opportunityId, page, pageSize }: GetTimelineThreadsFromOpportunityIdArgs,
+  ) {
+    return this.getMessagesFromPersonIdsService.getMessagesFromObjectRecord({
+      userWorkspaceId,
+      objectNameSingular: StandardObjectNameSingular.Opportunity,
+      recordId: opportunityId,
+      workspaceId: workspace.id,
+      page,
+      pageSize,
+    });
+  }
 
-    const timelineThreads =
-      await this.timelineMessagingService.getMessagesFromCompanyId(
-        workspaceMember.id,
-        workspaceId,
-        companyId,
-        page,
-        pageSize,
-      );
+  @UseGuards(
+    AccessPolicyGuard({
+      authPrincipals: {
+        userSession: {
+          standard: true,
+          impersonated: true,
+          playground: true,
+          workspaceAgnostic: false,
+        },
+        apiKey: false,
+        oauthClient: false,
+        application: false,
+      },
+      requiredPermissionFlags: [PermissionFlagType.CONNECTED_ACCOUNTS],
+    }),
+    CustomPermissionGuard,
+  )
+  @Mutation(() => Boolean)
+  async dismissReconnectAccountBanner(
+    @AuthUser() user: AuthContextUser,
+    @AuthWorkspace() workspace: WorkspaceEntity,
+    @Args() { connectedAccountId }: DismissReconnectAccountBannerInput,
+  ): Promise<boolean> {
+    await this.accountsToReconnectService.removeAccountToReconnect(
+      user.id,
+      workspace.id,
+      connectedAccountId,
+    );
 
-    return timelineThreads;
+    return true;
   }
 }

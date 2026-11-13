@@ -1,15 +1,12 @@
 import {
-  FieldMetadataDefaultSerializableValue,
-  FieldMetadataFunctionDefaultValue,
-} from 'src/engine/metadata-modules/field-metadata/interfaces/field-metadata-default-value.interface';
-
-import {
-  FieldMetadataDefaultValueFunctionNames,
+  type FieldMetadataDefaultValueForAnyType,
+  type FieldMetadataDefaultValueFunctionNames,
+  type FieldMetadataFunctionDefaultValue,
   fieldMetadataDefaultValueFunctionName,
-} from 'src/engine/metadata-modules/field-metadata/dtos/default-value.input';
+} from 'twenty-shared/types';
 
 export const isFunctionDefaultValue = (
-  defaultValue: FieldMetadataDefaultSerializableValue,
+  defaultValue: FieldMetadataDefaultValueForAnyType,
 ): defaultValue is FieldMetadataFunctionDefaultValue => {
   return (
     typeof defaultValue === 'string' &&

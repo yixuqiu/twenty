@@ -1,35 +1,52 @@
-import { ChangeEvent } from 'react';
-import { useRecoilValue } from 'recoil';
+import { type ChangeEvent, useCallback, useState } from 'react';
 
-import { useFilterDropdown } from '@/object-record/object-filter-dropdown/hooks/useFilterDropdown';
+import { fieldMetadataItemUsedInDropdownComponentSelector } from '@/object-record/object-filter-dropdown/states/fieldMetadataItemUsedInDropdownComponentSelector';
+import { objectFilterDropdownSearchInputComponentState } from '@/object-record/object-filter-dropdown/states/objectFilterDropdownSearchInputComponentState';
+import { selectedOperandInDropdownComponentState } from '@/object-record/object-filter-dropdown/states/selectedOperandInDropdownComponentState';
 import { DropdownMenuSearchInput } from '@/ui/layout/dropdown/components/DropdownMenuSearchInput';
+import { useAtomComponentSelectorValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentSelectorValue';
+import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
+import { useSetAtomComponentState } from '@/ui/utilities/state/jotai/hooks/useSetAtomComponentState';
+import { isDefined } from 'twenty-shared/utils';
 
 export const ObjectFilterDropdownSearchInput = () => {
-  const {
-    filterDefinitionUsedInDropdownState,
-    selectedOperandInDropdownState,
-    objectFilterDropdownSearchInputState,
-    setObjectFilterDropdownSearchInput,
-  } = useFilterDropdown();
-
-  const filterDefinitionUsedInDropdown = useRecoilValue(
-    filterDefinitionUsedInDropdownState,
-  );
-  const selectedOperandInDropdown = useRecoilValue(
-    selectedOperandInDropdownState,
-  );
-  const objectFilterDropdownSearchInput = useRecoilValue(
-    objectFilterDropdownSearchInputState,
+  const fieldMetadataItemUsedInDropdown = useAtomComponentSelectorValue(
+    fieldMetadataItemUsedInDropdownComponentSelector,
   );
 
+  const selectedOperandInDropdown = useAtomComponentStateValue(
+    selectedOperandInDropdownComponentState,
+  );
+
+  const objectFilterDropdownSearchInput = useAtomComponentStateValue(
+    objectFilterDropdownSearchInputComponentState,
+  );
+
+  const setObjectFilterDropdownSearchInput = useSetAtomComponentState(
+    objectFilterDropdownSearchInputComponentState,
+  );
+
+  const [hasFocused, setHasFocused] = useState(false);
+
+  const handleInputRef = useCallback(
+    (node: HTMLInputElement | null) => {
+      if (isDefined(node) && !hasFocused) {
+        node.focus();
+        node.select();
+        setHasFocused(true);
+      }
+    },
+    [hasFocused],
+  );
   return (
-    filterDefinitionUsedInDropdown &&
+    fieldMetadataItemUsedInDropdown &&
     selectedOperandInDropdown && (
       <DropdownMenuSearchInput
+        ref={handleInputRef}
         autoFocus
         type="text"
         value={objectFilterDropdownSearchInput}
-        placeholder={filterDefinitionUsedInDropdown.label}
+        placeholder={fieldMetadataItemUsedInDropdown.label}
         onChange={(event: ChangeEvent<HTMLInputElement>) => {
           setObjectFilterDropdownSearchInput(event.target.value);
         }}

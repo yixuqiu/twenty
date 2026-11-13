@@ -1,39 +1,27 @@
-import { useRecoilValue } from 'recoil';
-
-import { currentWorkspaceState } from '@/auth/states/currentWorkspaceState';
 import { ObjectMetadataItemNotFoundError } from '@/object-metadata/errors/ObjectMetadataNotFoundError';
 import { objectMetadataItemFamilySelector } from '@/object-metadata/states/objectMetadataItemFamilySelector';
-import { objectMetadataItemsState } from '@/object-metadata/states/objectMetadataItemsState';
-import { getObjectMetadataItemsMock } from '@/object-metadata/utils/getObjectMetadataItemsMock';
-import { isDefined } from '~/utils/isDefined';
+import { objectMetadataItemsWithFieldsSelector } from '@/object-metadata/states/objectMetadataItemsWithFieldsSelector';
+import { useAtomFamilySelectorValue } from '@/ui/utilities/state/jotai/hooks/useAtomFamilySelectorValue';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
 
-import { ObjectMetadataItemIdentifier } from '../types/ObjectMetadataItemIdentifier';
+import { isDefined } from 'twenty-shared/utils';
+import { type ObjectMetadataItemIdentifier } from '@/object-metadata/types/ObjectMetadataItemIdentifier';
 
 export const useObjectMetadataItem = ({
   objectNameSingular,
 }: ObjectMetadataItemIdentifier) => {
-  const currentWorkspace = useRecoilValue(currentWorkspaceState);
-
-  // Todo: deprecate this logic as mocked objectMetadataItems are laod in ObjectMetadataItemsLoadEffect anyway
-  const mockObjectMetadataItems = getObjectMetadataItemsMock();
-
-  let objectMetadataItem = useRecoilValue(
-    objectMetadataItemFamilySelector({
+  const objectMetadataItem = useAtomFamilySelectorValue(
+    objectMetadataItemFamilySelector,
+    {
       objectName: objectNameSingular,
       objectNameType: 'singular',
-    }),
+    },
   );
 
-  let objectMetadataItems = useRecoilValue(objectMetadataItemsState);
-
-  if (currentWorkspace?.activationStatus !== 'active') {
-    objectMetadataItem =
-      mockObjectMetadataItems.find(
-        (objectMetadataItem) =>
-          objectMetadataItem.nameSingular === objectNameSingular,
-      ) ?? null;
-    objectMetadataItems = mockObjectMetadataItems;
-  }
+  const objectMetadataItemsWithFields = useAtomStateValue(
+    objectMetadataItemsWithFieldsSelector,
+  );
+  const objectMetadataItems = objectMetadataItemsWithFields;
 
   if (!isDefined(objectMetadataItem)) {
     throw new ObjectMetadataItemNotFoundError(

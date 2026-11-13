@@ -1,10 +1,12 @@
-import { FieldMetadataInterface } from 'src/engine/metadata-modules/field-metadata/interfaces/field-metadata.interface';
-import { ObjectMetadataInterface } from 'src/engine/metadata-modules/field-metadata/interfaces/object-metadata.interface';
+import { type FlatEntityMaps } from 'src/engine/metadata-modules/flat-entity/types/flat-entity-maps.type';
+import { type OrmFlatFieldMetadata } from 'src/engine/metadata-modules/flat-field-metadata/types/orm-flat-field-metadata.type';
+import { type FlatIndexMetadata } from 'src/engine/metadata-modules/flat-index-metadata/types/flat-index-metadata.type';
+import { type FlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/types/flat-object-metadata.type';
 
 export interface WorkspaceSchemaBuilderContext {
-  workspaceId: string;
-  userId: string | undefined;
-  objectMetadataItem: ObjectMetadataInterface;
-  fieldMetadataCollection: FieldMetadataInterface[];
-  objectMetadataCollection: ObjectMetadataInterface[];
+  flatObjectMetadata: FlatObjectMetadata;
+  flatObjectMetadataMaps: FlatEntityMaps<FlatObjectMetadata>;
+  flatFieldMetadataMaps: FlatEntityMaps<OrmFlatFieldMetadata>;
+  flatIndexMaps: FlatEntityMaps<FlatIndexMetadata>;
+  objectIdByNameSingular: Record<string, string>;
 }

@@ -1,92 +1,69 @@
-import { useEffect } from 'react';
-import { useRecoilValue } from 'recoil';
+import { useCallback, useEffect } from 'react';
 
-import { useColumnDefinitionsFromFieldMetadata } from '@/object-metadata/hooks/useColumnDefinitionsFromFieldMetadata';
+import { useColumnDefinitionsFromObjectMetadata } from '@/object-metadata/hooks/useColumnDefinitionsFromObjectMetadata';
 import { useObjectMetadataItem } from '@/object-metadata/hooks/useObjectMetadataItem';
-import { useRecordActionBar } from '@/object-record/record-action-bar/hooks/useRecordActionBar';
-import { useHandleToggleColumnFilter } from '@/object-record/record-index/hooks/useHandleToggleColumnFilter';
-import { useHandleToggleColumnSort } from '@/object-record/record-index/hooks/useHandleToggleColumnSort';
-import { useRecordTable } from '@/object-record/record-table/hooks/useRecordTable';
-import { useSetRecordCountInCurrentView } from '@/views/hooks/useSetRecordCountInCurrentView';
+import { useRecordIndexContextOrThrow } from '@/object-record/record-index/contexts/RecordIndexContext';
+import { viewFieldAggregateOperationState } from '@/object-record/record-table/record-table-footer/states/viewFieldAggregateOperationState';
+import { convertAggregateOperationToExtendedAggregateOperation } from '@/object-record/utils/convertAggregateOperationToExtendedAggregateOperation';
+import { useGetCurrentViewOnly } from '@/views/hooks/useGetCurrentViewOnly';
+import { type ViewField } from '@/views/types/ViewField';
+import { isDefined } from 'twenty-shared/utils';
+import { useStore } from 'jotai';
 
-type RecordIndexTableContainerEffectProps = {
-  objectNameSingular: string;
-  recordTableId: string;
-  viewBarId: string;
-};
-
-export const RecordIndexTableContainerEffect = ({
-  objectNameSingular,
-  recordTableId,
-  viewBarId,
-}: RecordIndexTableContainerEffectProps) => {
-  const {
-    setAvailableTableColumns,
-    setOnEntityCountChange,
-    resetTableRowSelection,
-    selectedRowIdsSelector,
-    setOnToggleColumnFilter,
-    setOnToggleColumnSort,
-  } = useRecordTable({
-    recordTableId,
-  });
+export const RecordIndexTableContainerEffect = () => {
+  const store = useStore();
+  const { objectNameSingular } = useRecordIndexContextOrThrow();
 
   const { objectMetadataItem } = useObjectMetadataItem({
     objectNameSingular,
   });
 
   const { columnDefinitions } =
-    useColumnDefinitionsFromFieldMetadata(objectMetadataItem);
+    useColumnDefinitionsFromObjectMetadata(objectMetadataItem);
 
-  const { setRecordCountInCurrentView } =
-    useSetRecordCountInCurrentView(viewBarId);
+  const { currentView } = useGetCurrentViewOnly();
 
-  useEffect(() => {
-    setAvailableTableColumns(columnDefinitions);
-  }, [columnDefinitions, setAvailableTableColumns]);
+  const setViewFieldAggregateOperation = useCallback(
+    (viewField: ViewField) => {
+      const aggregateOperationForViewField = store.get(
+        viewFieldAggregateOperationState.atomFamily({
+          viewFieldId: viewField.id,
+        }),
+      );
 
-  const selectedRowIds = useRecoilValue(selectedRowIdsSelector());
+      const viewFieldMetadataType = columnDefinitions.find(
+        (columnDefinition) =>
+          columnDefinition.fieldMetadataId === viewField.fieldMetadataId,
+      )?.type;
 
-  const { setActionBarEntries, setContextMenuEntries } = useRecordActionBar({
-    objectMetadataItem,
-    selectedRecordIds: selectedRowIds,
-    callback: resetTableRowSelection,
-  });
+      const convertedViewFieldAggregateOperation = isDefined(
+        viewField.aggregateOperation,
+      )
+        ? convertAggregateOperationToExtendedAggregateOperation(
+            viewField.aggregateOperation,
+            viewFieldMetadataType,
+          )
+        : viewField.aggregateOperation;
 
-  const handleToggleColumnFilter = useHandleToggleColumnFilter({
-    objectNameSingular,
-    viewBarId,
-  });
-
-  const handleToggleColumnSort = useHandleToggleColumnSort({
-    objectNameSingular,
-    viewBarId,
-  });
-
-  useEffect(() => {
-    setOnToggleColumnFilter(
-      () => (fieldMetadataId: string) =>
-        handleToggleColumnFilter(fieldMetadataId),
-    );
-  }, [setOnToggleColumnFilter, handleToggleColumnFilter]);
-
-  useEffect(() => {
-    setOnToggleColumnSort(
-      () => (fieldMetadataId: string) =>
-        handleToggleColumnSort(fieldMetadataId),
-    );
-  }, [setOnToggleColumnSort, handleToggleColumnSort]);
-
-  useEffect(() => {
-    setActionBarEntries?.();
-    setContextMenuEntries?.();
-  }, [setActionBarEntries, setContextMenuEntries]);
+      if (
+        aggregateOperationForViewField !== convertedViewFieldAggregateOperation
+      ) {
+        store.set(
+          viewFieldAggregateOperationState.atomFamily({
+            viewFieldId: viewField.id,
+          }),
+          convertedViewFieldAggregateOperation,
+        );
+      }
+    },
+    [columnDefinitions, store],
+  );
 
   useEffect(() => {
-    setOnEntityCountChange(
-      () => (entityCount: number) => setRecordCountInCurrentView(entityCount),
-    );
-  }, [setRecordCountInCurrentView, setOnEntityCountChange]);
+    currentView?.viewFields.forEach((viewField) => {
+      setViewFieldAggregateOperation(viewField);
+    });
+  }, [currentView, setViewFieldAggregateOperation]);
 
   return <></>;
 };

@@ -1,6 +1,9 @@
-import { createState } from 'twenty-ui';
-
-import { Workspace } from '~/generated/graphql';
+import { createAtomState } from '@/ui/utilities/state/jotai/utils/createAtomState';
+import {
+  type Application,
+  type Role,
+  type Workspace,
+} from '~/generated-metadata/graphql';
 
 export type CurrentWorkspace = Pick<
   Workspace,
@@ -10,13 +13,61 @@ export type CurrentWorkspace = Pick<
   | 'displayName'
   | 'allowImpersonation'
   | 'featureFlags'
-  | 'subscriptionStatus'
   | 'activationStatus'
+  | 'billingSubscriptions'
+  | 'billingEntitlements'
+  | 'billingCustomer'
   | 'currentBillingSubscription'
-  | 'currentCacheVersion'
->;
+  | 'isTrialAvailable'
+  | 'workspaceMembersCount'
+  | 'isPublicInviteLinkEnabled'
+  | 'isCampaignClickTrackingEnabled'
+  | 'isCampaignOpenTrackingEnabled'
+  | 'workspaceDiscoverability'
+  | 'isGoogleAuthEnabled'
+  | 'isGoogleAuthBypassEnabled'
+  | 'isMicrosoftAuthEnabled'
+  | 'isMicrosoftAuthBypassEnabled'
+  | 'isPasswordAuthEnabled'
+  | 'isPasswordAuthBypassEnabled'
+  | 'isCustomDomainEnabled'
+  | 'iframeMediaPermissions'
+  | 'hasValidSignedEnterpriseKey'
+  | 'hasValidEnterpriseValidityToken'
+  | 'subdomain'
+  | 'customDomain'
+  | 'workspaceUrls'
+  | 'isTwoFactorAuthenticationEnforced'
+  | 'trashRetentionDays'
+  | 'eventLogRetentionDays'
+  | 'aiChatModelTier'
+  | 'aiChatAssistantProfile'
+  | 'aiChatDirectMessageAssistantMode'
+  | 'aiChatInboxAssistantMode'
+  | 'aiAgentModelTier'
+  | 'isAutoModelSelectionEnabled'
+  | 'aiModelIdByTier'
+  | 'aiAdditionalInstructions'
+  | 'aiDataPolicy'
+  | 'editableProfileFields'
+  | 'isInternalMessagesImportEnabled'
+> & {
+  defaultRole?: Omit<Role, 'workspaceMembers' | 'agents' | 'apiKeys'> | null;
+  workspaceCustomApplication: Pick<Application, 'id'> | null;
+  installedApplications: Pick<
+    Application,
+    | 'id'
+    | 'name'
+    | 'description'
+    | 'universalIdentifier'
+    | 'logoUrl'
+    | 'createdAt'
+  >[];
+};
 
-export const currentWorkspaceState = createState<CurrentWorkspace | null>({
+export const currentWorkspaceState = createAtomState<CurrentWorkspace | null>({
   key: 'currentWorkspaceState',
   defaultValue: null,
+  useLocalStorage: true,
+  localStorageOptions: { getOnInit: true },
 });

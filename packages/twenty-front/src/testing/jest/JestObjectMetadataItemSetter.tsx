@@ -1,20 +1,27 @@
-import { ReactNode, useEffect, useState } from 'react';
-import { useSetRecoilState } from 'recoil';
+import { type ReactNode, useEffect, useState } from 'react';
 
-import { objectMetadataItemsState } from '@/object-metadata/states/objectMetadataItemsState';
-import { getObjectMetadataItemsMock } from '@/object-metadata/utils/getObjectMetadataItemsMock';
+import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/EnrichedObjectMetadataItem';
+import { useStore } from 'jotai';
+import { getTestEnrichedObjectMetadataItemsMock } from '~/testing/utils/getTestEnrichedObjectMetadataItemsMock';
+import { setTestObjectMetadataItemsInMetadataStore } from '~/testing/utils/setTestObjectMetadataItemsInMetadataStore';
 
 export const JestObjectMetadataItemSetter = ({
   children,
+  objectMetadataItems,
 }: {
   children: ReactNode;
+  objectMetadataItems?: EnrichedObjectMetadataItem[];
 }) => {
-  const setObjectMetadataItems = useSetRecoilState(objectMetadataItemsState);
+  const store = useStore();
   const [isLoaded, setIsLoaded] = useState(false);
+
   useEffect(() => {
-    setObjectMetadataItems(getObjectMetadataItemsMock());
+    setTestObjectMetadataItemsInMetadataStore(
+      store,
+      objectMetadataItems ?? getTestEnrichedObjectMetadataItemsMock(),
+    );
     setIsLoaded(true);
-  }, [setObjectMetadataItems]);
+  }, [objectMetadataItems, store]);
 
   return isLoaded ? <>{children}</> : null;
 };

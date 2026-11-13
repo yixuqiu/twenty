@@ -1,43 +1,48 @@
-import { css, useTheme } from '@emotion/react';
-import styled from '@emotion/styled';
-import { IconComponent, IconTwentyStar } from 'twenty-ui';
+import { useLingui } from '@lingui/react/macro';
+import { isDefined } from 'twenty-shared/utils';
+import { styled } from '@linaria/react';
+import { Link } from 'react-router-dom';
 
-import { SettingsSupportedFieldType } from '@/settings/data-model/types/SettingsSupportedFieldType';
+import { type SettingsFieldType } from '@/settings/data-model/types/SettingsFieldType';
 import { getSettingsFieldTypeConfig } from '@/settings/data-model/utils/getSettingsFieldTypeConfig';
-import { FieldMetadataType } from '~/generated-metadata/graphql';
+import { type IconComponent, IconTwentyStar } from 'twenty-ui/icon';
+import { useTheme, themeCssVariables } from 'twenty-ui/theme';
 
 type SettingsObjectFieldDataTypeProps = {
-  onClick?: () => void;
+  to?: string;
   Icon?: IconComponent;
   label?: string;
-  value: SettingsSupportedFieldType;
+  labelDetail?: string;
+  value: SettingsFieldType;
+  onClick?: (event: React.MouseEvent) => void;
 };
 
-const StyledDataType = styled.div<{ value: SettingsSupportedFieldType }>`
+const StyledDataType = styled.div<{
+  value: SettingsFieldType;
+  to?: string;
+}>`
   align-items: center;
   border: 1px solid transparent;
-  border-radius: ${({ theme }) => theme.border.radius.sm};
+  border-radius: ${themeCssVariables.border.radius.sm};
+  color: ${({ to }) =>
+    to
+      ? themeCssVariables.font.color.secondary
+      : themeCssVariables.font.color.primary};
+  cursor: ${({ to }) => (to ? 'pointer' : 'default')};
   display: flex;
-  font-size: ${({ theme }) => theme.font.size.sm};
-  gap: ${({ theme }) => theme.spacing(1)};
+  font-size: ${themeCssVariables.font.size.sm};
+  gap: ${themeCssVariables.spacing[2]};
   height: 20px;
   overflow: hidden;
-  padding: 0 ${({ theme }) => theme.spacing(2)};
+  text-decoration: ${({ to }) => (to ? 'underline' : 'none')};
+  user-select: none;
 
-  ${({ onClick }) =>
-    onClick
-      ? css`
-          cursor: pointer;
-        `
-      : ''}
-
-  ${({ theme, value }) =>
-    value === FieldMetadataType.Relation
-      ? css`
-          border-color: ${theme.tag.background.purple};
-          color: ${theme.color.purple};
-        `
-      : ''}
+  &:hover {
+    color: ${({ to }) =>
+      to
+        ? themeCssVariables.font.color.primary
+        : themeCssVariables.font.color.primary};
+  }
 `;
 
 const StyledLabelContainer = styled.div`
@@ -46,27 +51,44 @@ const StyledLabelContainer = styled.div`
   white-space: nowrap;
 `;
 
+const StyledIconWrapper = styled.div`
+  display: flex;
+  flex: 1 0 auto;
+`;
+
+const StyledSpan = styled.span`
+  color: ${themeCssVariables.font.color.extraLight};
+`;
 export const SettingsObjectFieldDataType = ({
-  onClick,
+  to,
   value,
   Icon: IconFromProps,
   label: labelFromProps,
+  labelDetail,
+  onClick,
 }: SettingsObjectFieldDataTypeProps) => {
   const theme = useTheme();
-
+  const { i18n } = useLingui();
   const fieldTypeConfig = getSettingsFieldTypeConfig(value);
   const Icon: IconComponent =
     IconFromProps ?? fieldTypeConfig?.Icon ?? IconTwentyStar;
-  const label = labelFromProps ?? fieldTypeConfig?.label;
-
-  const StyledIcon = styled(Icon)`
-    flex: 1 0 auto;
-  `;
+  const label =
+    labelFromProps ??
+    (isDefined(fieldTypeConfig) ? i18n._(fieldTypeConfig.label) : undefined);
 
   return (
-    <StyledDataType onClick={onClick} value={value}>
-      <StyledIcon size={theme.icon.size.sm} />
-      <StyledLabelContainer>{label}</StyledLabelContainer>
+    <StyledDataType
+      as={to ? Link : 'div'}
+      to={to}
+      value={value}
+      onClick={onClick}
+    >
+      <StyledIconWrapper>
+        <Icon size={theme.icon.size.sm} />
+      </StyledIconWrapper>
+      <StyledLabelContainer>
+        {label} <StyledSpan>{labelDetail && `· ${labelDetail}`}</StyledSpan>
+      </StyledLabelContainer>
     </StyledDataType>
   );
 };

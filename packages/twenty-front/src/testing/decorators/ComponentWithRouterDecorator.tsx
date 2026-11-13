@@ -1,12 +1,73 @@
-import { MemoryRouter } from 'react-router-dom';
-import { Decorator } from '@storybook/react';
+import { AppNavigatorProvider } from '@/app/components/AppNavigatorProvider';
+import { type JSX } from 'react';
+import { type Decorator } from '@storybook/react-vite';
+import {
+  createMemoryRouter,
+  createRoutesFromElements,
+  Outlet,
+  Route,
+  RouterProvider,
+} from 'react-router-dom';
 
-import { ComponentStorybookLayout } from '../ComponentStorybookLayout';
+import {
+  computeLocation,
+  isRouteParams,
+} from '~/testing/decorators/PageDecorator';
 
-export const ComponentWithRouterDecorator: Decorator = (Story) => (
+import { ComponentStorybookLayout } from 'twenty-ui/testing';
+
+interface StrictArgs {
+  [name: string]: unknown;
+}
+
+const Providers = () => (
   <ComponentStorybookLayout>
-    <MemoryRouter>
-      <Story />
-    </MemoryRouter>
+    <Outlet />
   </ComponentStorybookLayout>
 );
+
+const createRouter = ({
+  Story,
+  args,
+  initialEntries,
+  initialIndex,
+}: {
+  Story: () => JSX.Element;
+  args: StrictArgs;
+  initialEntries?: {
+    pathname: string;
+  }[];
+  initialIndex?: number;
+}) =>
+  createMemoryRouter(
+    createRoutesFromElements(
+      <Route element={<Providers />}>
+        <Route path={(args.routePath as string) ?? '*'} element={<Story />} />
+      </Route>,
+    ),
+    { initialEntries, initialIndex },
+  );
+
+export const ComponentWithRouterDecorator: Decorator = (Story, { args }) => {
+  const router = createRouter({
+    Story,
+    args,
+    initialEntries:
+      args.routePath &&
+      typeof args.routePath === 'string' &&
+      (args.routeParams === undefined || isRouteParams(args.routeParams))
+        ? [
+            computeLocation({
+              routePath: args.routePath,
+              routeParams: args.routeParams,
+            }),
+          ]
+        : [{ pathname: '/' }],
+  });
+
+  return (
+    <AppNavigatorProvider router={router}>
+      <RouterProvider useTransitions={false} router={router} />
+    </AppNavigatorProvider>
+  );
+};

@@ -1,89 +1,145 @@
-import {
-  DynamicModule,
-  MiddlewareConsumer,
-  Module,
-  RequestMethod,
-} from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
-import { ServeStaticModule } from '@nestjs/serve-static';
+import { type MiddlewareConsumer, Module, RequestMethod } from '@nestjs/common';
+import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { GraphQLModule } from '@nestjs/graphql';
-import { DevtoolsModule } from '@nestjs/devtools-integration';
 
-import { existsSync } from 'fs';
-import { join } from 'path';
+import { YogaDriver, type YogaDriverConfig } from '@graphql-yoga/nestjs';
+import { SentryModule } from '@sentry/nestjs/setup';
+import { ApiPath } from 'twenty-shared/types';
 
-import { YogaDriverConfig, YogaDriver } from '@graphql-yoga/nestjs';
-
-import { ApiRestModule } from 'src/engine/api/rest/api-rest.module';
-import { ModulesModule } from 'src/modules/modules.module';
+import { AdminPanelGraphQLApiModule } from 'src/engine/api/graphql/admin-panel-graphql-api.module';
 import { CoreGraphQLApiModule } from 'src/engine/api/graphql/core-graphql-api.module';
-import { MetadataGraphQLApiModule } from 'src/engine/api/graphql/metadata-graphql-api.module';
 import { GraphQLConfigModule } from 'src/engine/api/graphql/graphql-config/graphql-config.module';
 import { GraphQLConfigService } from 'src/engine/api/graphql/graphql-config/graphql-config.service';
-import { EnvironmentService } from 'src/engine/integrations/environment/environment.service';
-import { WorkspaceCacheVersionModule } from 'src/engine/metadata-modules/workspace-cache-version/workspace-cache-version.module';
+import { MetadataGraphQLApiModule } from 'src/engine/api/graphql/metadata-graphql-api.module';
+import { McpMethodGuardMiddleware } from 'src/engine/api/mcp/middlewares/mcp-method-guard.middleware';
+import { McpModule } from 'src/engine/api/mcp/mcp.module';
+import { RestApiModule } from 'src/engine/api/rest/rest-api.module';
+import { WorkspaceAuthContextMiddleware } from 'src/engine/core-modules/auth/middlewares/workspace-auth-context.middleware';
+import { FrontendModule } from 'src/engine/core-modules/frontend/frontend.module';
+import { MetricsModule } from 'src/engine/core-modules/metrics/metrics.module';
+import { DataloaderModule } from 'src/engine/dataloaders/dataloader.module';
+import { WorkspaceMetadataVersionModule } from 'src/engine/metadata-modules/workspace-metadata-version/workspace-metadata-version.module';
+import { ApiRequestContextMiddleware } from 'src/engine/core-modules/usage/middlewares/api-request-context.middleware';
+import { ApiAccessLogMiddleware } from 'src/engine/middlewares/api-access-log.middleware';
+import { CookieSessionCsrfMiddleware } from 'src/engine/middlewares/cookie-session-csrf.middleware';
 import { GraphQLHydrateRequestFromTokenMiddleware } from 'src/engine/middlewares/graphql-hydrate-request-from-token.middleware';
+import { GraphQLRefuseSuspendedWorkspaceMiddleware } from 'src/engine/middlewares/graphql-refuse-suspended-workspace.middleware';
+import { MiddlewareModule } from 'src/engine/middlewares/middleware.module';
+import { JwtModule } from 'src/engine/core-modules/jwt/jwt.module';
+import { UserSessionModule } from 'src/engine/core-modules/user-session/user-session.module';
+import { RestCoreMiddleware } from 'src/engine/middlewares/rest-core.middleware';
+import { TwentyOrmModule } from 'src/engine/twenty-orm/twenty-orm.module';
+import { WorkspaceCacheStorageModule } from 'src/engine/workspace-cache-storage/workspace-cache-storage.module';
+import { WorkspaceNotSuspendedGuard } from 'src/engine/guards/workspace-not-suspended.guard';
+import { UnhandledExceptionFilter } from 'src/filters/unhandled-exception.filter';
+import { ModulesModule } from 'src/modules/modules.module';
 
+import { ClickHouseModule } from './database/clickhouse/clickhouse.module';
 import { CoreEngineModule } from './engine/core-modules/core-engine.module';
-import { IntegrationsModule } from './engine/integrations/integrations.module';
+
+// TODO: Remove this middleware when all the rest endpoints are migrated to TwentyORM
+const MIGRATED_REST_METHODS = [
+  RequestMethod.DELETE,
+  RequestMethod.POST,
+  RequestMethod.PATCH,
+  RequestMethod.PUT,
+  RequestMethod.GET,
+];
 
 @Module({
   imports: [
-    // Nest.js devtools, use devtools.nestjs.com to debug
-    DevtoolsModule.registerAsync({
-      useFactory: (environmentService: EnvironmentService) => ({
-        http: environmentService.get('DEBUG_MODE'),
-        port: environmentService.get('DEBUG_PORT'),
-      }),
-      inject: [EnvironmentService],
-    }),
-    ConfigModule.forRoot({
-      isGlobal: true,
-    }),
+    SentryModule.forRoot(),
     GraphQLModule.forRootAsync<YogaDriverConfig>({
       driver: YogaDriver,
-      imports: [CoreEngineModule, GraphQLConfigModule],
+      imports: [GraphQLConfigModule, MetricsModule, DataloaderModule],
       useClass: GraphQLConfigService,
     }),
-    // Integrations module, contains all the integrations with other services
-    IntegrationsModule,
-    // Core engine module, contains all the core modules
+    TwentyOrmModule,
+    ClickHouseModule,
     CoreEngineModule,
-    // Modules module, contains all business logic modules
     ModulesModule,
     // Needed for the user workspace middleware
-    WorkspaceCacheVersionModule,
-    // Api modules
+    WorkspaceCacheStorageModule,
     CoreGraphQLApiModule,
     MetadataGraphQLApiModule,
-    ApiRestModule,
-    // Conditional modules
-    ...AppModule.getConditionalModules(),
+    AdminPanelGraphQLApiModule,
+    RestApiModule,
+    McpModule,
+    MiddlewareModule,
+    JwtModule,
+    UserSessionModule,
+    WorkspaceMetadataVersionModule,
+    FrontendModule,
+  ],
+  providers: [
+    {
+      provide: APP_FILTER,
+      useClass: UnhandledExceptionFilter,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: WorkspaceNotSuspendedGuard,
+    },
   ],
 })
 export class AppModule {
-  private static getConditionalModules(): DynamicModule[] {
-    const modules: DynamicModule[] = [];
-    const frontPath = join(__dirname, '..', 'front');
-
-    if (existsSync(frontPath)) {
-      modules.push(
-        ServeStaticModule.forRoot({
-          rootPath: frontPath,
-        }),
-      );
-    }
-
-    return modules;
-  }
-
   configure(consumer: MiddlewareConsumer) {
+    const loggedApiPaths = Object.values(ApiPath).filter(
+      (apiPath) => apiPath !== ApiPath.Health,
+    );
+
+    consumer.apply(ApiAccessLogMiddleware).forRoutes(
+      ...loggedApiPaths.flatMap((apiPath) => [
+        { path: apiPath, method: RequestMethod.ALL },
+        { path: `${apiPath}/*path`, method: RequestMethod.ALL },
+      ]),
+    );
+
+    // Before any middleware that authenticates from the session cookie.
     consumer
-      .apply(GraphQLHydrateRequestFromTokenMiddleware)
-      .forRoutes({ path: 'graphql', method: RequestMethod.ALL });
+      .apply(CookieSessionCsrfMiddleware)
+      // A cross-origin form post from the identity provider, authenticated on the assertion, not the cookie
+      .exclude({
+        path: `${ApiPath.Auth}/saml/callback/:identityProviderId`,
+        method: RequestMethod.POST,
+      })
+      .forRoutes({ path: '*path', method: RequestMethod.ALL });
 
     consumer
-      .apply(GraphQLHydrateRequestFromTokenMiddleware)
-      .forRoutes({ path: 'metadata', method: RequestMethod.ALL });
+      .apply(
+        ApiRequestContextMiddleware,
+        GraphQLHydrateRequestFromTokenMiddleware,
+        GraphQLRefuseSuspendedWorkspaceMiddleware,
+        WorkspaceAuthContextMiddleware,
+      )
+      .forRoutes({ path: ApiPath.GraphQL, method: RequestMethod.ALL });
+
+    consumer
+      .apply(
+        GraphQLHydrateRequestFromTokenMiddleware,
+        WorkspaceAuthContextMiddleware,
+      )
+      .forRoutes({ path: ApiPath.Metadata, method: RequestMethod.ALL });
+
+    consumer
+      .apply(
+        GraphQLHydrateRequestFromTokenMiddleware,
+        WorkspaceAuthContextMiddleware,
+      )
+      .forRoutes({ path: ApiPath.AdminPanel, method: RequestMethod.ALL });
+
+    consumer
+      .apply(ApiRequestContextMiddleware, McpMethodGuardMiddleware)
+      .forRoutes({ path: ApiPath.Mcp, method: RequestMethod.ALL });
+
+    for (const method of MIGRATED_REST_METHODS) {
+      consumer
+        .apply(
+          ApiRequestContextMiddleware,
+          RestCoreMiddleware,
+          WorkspaceAuthContextMiddleware,
+        )
+        .forRoutes({ path: `${ApiPath.Rest}/*path`, method });
+    }
   }
 }

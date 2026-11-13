@@ -1,17 +1,23 @@
+import { type RecordGqlFields } from 'twenty-shared/types';
 import { isNull, isUndefined } from '@sniptt/guards';
 
-import { ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
-import { getNodeTypename } from '@/object-record/cache/utils/getNodeTypename';
+import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/EnrichedObjectMetadataItem';
+import { computePossibleMorphGqlFieldForFieldName } from '@/object-record/cache/utils/computePossibleMorphGqlFieldForFieldName';
+import { getFieldMetadataFromGqlField } from '@/object-record/cache/utils/getFieldMetadataFromGqlField';
+import { getMorphRelationFromFieldMetadataAndGqlField } from '@/object-record/cache/utils/getMorphRelationFromFieldMetadataAndGqlField';
 import { getObjectTypename } from '@/object-record/cache/utils/getObjectTypename';
 import { getRecordConnectionFromRecords } from '@/object-record/cache/utils/getRecordConnectionFromRecords';
-import { RecordGqlNode } from '@/object-record/graphql/types/RecordGqlNode';
-import { ObjectRecord } from '@/object-record/types/ObjectRecord';
+import { getRefName } from '@/object-record/cache/utils/getRefName';
+import { type RecordGqlNode } from '@/object-record/graphql/types/RecordGqlNode';
+import { type ObjectRecord } from '@/object-record/types/ObjectRecord';
 import {
-  FieldMetadataType,
-  RelationDefinitionType,
-} from '~/generated-metadata/graphql';
-import { isDefined } from '~/utils/isDefined';
-import { lowerAndCapitalize } from '~/utils/string/lowerAndCapitalize';
+  computeRelationGqlFieldJoinColumnName,
+  getNodeTypename,
+  isDefined,
+  pascalCase,
+} from 'twenty-shared/utils';
+import { doNotTranslate } from 'twenty-shared/i18n';
+import { FieldMetadataType, RelationType } from '~/generated-metadata/graphql';
 
 export const getRecordNodeFromRecord = <T extends ObjectRecord>({
   objectMetadataItems,
@@ -21,12 +27,12 @@ export const getRecordNodeFromRecord = <T extends ObjectRecord>({
   computeReferences = true,
   isRootLevel = true,
 }: {
-  objectMetadataItems: ObjectMetadataItem[];
+  objectMetadataItems: EnrichedObjectMetadataItem[];
   objectMetadataItem: Pick<
-    ObjectMetadataItem,
+    EnrichedObjectMetadataItem,
     'fields' | 'namePlural' | 'nameSingular'
   >;
-  recordGqlFields?: Record<string, any>;
+  recordGqlFields?: RecordGqlFields;
   computeReferences?: boolean;
   isRootLevel?: boolean;
   record: T | null;
@@ -39,32 +45,41 @@ export const getRecordNodeFromRecord = <T extends ObjectRecord>({
 
   if (!isRootLevel && computeReferences) {
     return {
-      __ref: `${nodeTypeName}:${record.id}`,
+      __ref: getRefName(objectMetadataItem.nameSingular, record.id),
     } as unknown as RecordGqlNode; // Fix typing: we want a Reference in computeReferences mode
   }
 
   const nestedRecord = Object.fromEntries(
     Object.entries(record)
-      .map(([fieldName, value]) => {
-        if (isDefined(recordGqlFields) && !recordGqlFields[fieldName]) {
+      .map(([gqlField, value]) => {
+        if (
+          isDefined(recordGqlFields) &&
+          !isDefined(recordGqlFields[gqlField])
+        ) {
           return undefined;
         }
 
-        const field = objectMetadataItem.fields.find(
-          (field) => field.name === fieldName,
-        );
+        const field = getFieldMetadataFromGqlField({
+          objectMetadataItem,
+          gqlField: gqlField,
+        });
 
         if (isUndefined(field)) {
           return undefined;
         }
 
         if (
-          field.type === FieldMetadataType.Relation &&
-          field.relationDefinition?.direction ===
-            RelationDefinitionType.OneToMany
+          field.type === FieldMetadataType.RELATION &&
+          field.relation?.type === RelationType.ONE_TO_MANY
         ) {
+          if (!Array.isArray(value)) {
+            return undefined;
+          }
+
           const oneToManyObjectMetadataItem = objectMetadataItems.find(
-            (item) => item.namePlural === fieldName,
+            (item) =>
+              item.namePlural ===
+              field.relation?.targetObjectMetadata.namePlural,
           );
 
           if (!oneToManyObjectMetadataItem) {
@@ -72,16 +87,60 @@ export const getRecordNodeFromRecord = <T extends ObjectRecord>({
           }
 
           return [
-            fieldName,
+            gqlField,
             getRecordConnectionFromRecords({
               objectMetadataItems,
               objectMetadataItem: oneToManyObjectMetadataItem,
               records: value as ObjectRecord[],
               recordGqlFields:
-                recordGqlFields?.[fieldName] === true ||
-                isUndefined(recordGqlFields?.[fieldName])
+                recordGqlFields?.[gqlField] === true ||
+                isUndefined(recordGqlFields?.[gqlField])
                   ? undefined
-                  : recordGqlFields?.[fieldName],
+                  : recordGqlFields?.[gqlField],
+              withPageInfo: false,
+              isRootLevel: false,
+              computeReferences,
+            }),
+          ];
+        }
+
+        if (
+          field.type === FieldMetadataType.MORPH_RELATION &&
+          field.settings?.relationType === RelationType.ONE_TO_MANY
+        ) {
+          if (!Array.isArray(value)) {
+            return undefined;
+          }
+
+          if (field.morphRelations?.length === 0) {
+            return undefined;
+          }
+
+          const morphRelation = getMorphRelationFromFieldMetadataAndGqlField({
+            objectMetadataItems,
+            fieldMetadata: { morphRelations: field.morphRelations ?? [] },
+            gqlField: gqlField,
+          });
+
+          if (isUndefined(morphRelation?.targetObjectMetadata?.nameSingular)) {
+            return undefined;
+          }
+
+          if (!morphRelation?.targetObjectMetadata?.nameSingular) {
+            return undefined;
+          }
+
+          return [
+            gqlField,
+            getRecordConnectionFromRecords({
+              objectMetadataItems,
+              objectMetadataItem: morphRelation?.targetObjectMetadata,
+              records: value as ObjectRecord[],
+              recordGqlFields:
+                recordGqlFields?.[gqlField] === true ||
+                isUndefined(recordGqlFields?.[gqlField])
+                  ? undefined
+                  : recordGqlFields?.[gqlField],
               withPageInfo: false,
               isRootLevel: false,
               computeReferences,
@@ -90,17 +149,22 @@ export const getRecordNodeFromRecord = <T extends ObjectRecord>({
         }
 
         switch (field.type) {
-          case FieldMetadataType.Relation: {
+          case FieldMetadataType.RELATION: {
+            const isJoinColumn =
+              computeRelationGqlFieldJoinColumnName({ name: field.name }) ===
+              gqlField;
+            if (isJoinColumn) {
+              return [gqlField, value];
+            }
+
             if (
-              isUndefined(
-                field.relationDefinition?.targetObjectMetadata.nameSingular,
-              )
+              isUndefined(field.relation?.targetObjectMetadata.nameSingular)
             ) {
               return undefined;
             }
 
             if (isNull(value)) {
-              return [fieldName, null];
+              return [gqlField, null];
             }
 
             if (isUndefined(value?.id)) {
@@ -108,12 +172,12 @@ export const getRecordNodeFromRecord = <T extends ObjectRecord>({
             }
 
             const typeName = getObjectTypename(
-              field.relationDefinition?.targetObjectMetadata.nameSingular,
+              field.relation?.targetObjectMetadata.nameSingular,
             );
 
             if (computeReferences) {
               return [
-                fieldName,
+                gqlField,
                 {
                   __ref: `${typeName}:${value.id}`,
                 },
@@ -121,27 +185,100 @@ export const getRecordNodeFromRecord = <T extends ObjectRecord>({
             }
 
             return [
-              fieldName,
+              gqlField,
               {
                 __typename: typeName,
                 ...value,
               },
             ];
           }
-          case FieldMetadataType.Link:
-          case FieldMetadataType.Address:
-          case FieldMetadataType.FullName:
-          case FieldMetadataType.Currency: {
+          case FieldMetadataType.MORPH_RELATION: {
+            const possibleMorphRelationsJoinColumnNames =
+              computePossibleMorphGqlFieldForFieldName({
+                fieldMetadata: {
+                  morphRelations: field.morphRelations ?? [],
+                  fieldName: field.name,
+                },
+              }).map((possibleMorphRelationName) =>
+                doNotTranslate(`${possibleMorphRelationName}Id`),
+              );
+
+            const isJoinColumn =
+              possibleMorphRelationsJoinColumnNames.includes(gqlField);
+            if (isJoinColumn) {
+              return [gqlField, value];
+            }
+
+            if (field.morphRelations?.length === 0) {
+              return undefined;
+            }
+
+            const morphRelation = getMorphRelationFromFieldMetadataAndGqlField({
+              objectMetadataItems,
+              fieldMetadata: { morphRelations: field.morphRelations ?? [] },
+              gqlField: gqlField,
+            });
+
+            if (
+              isUndefined(morphRelation?.targetObjectMetadata?.nameSingular)
+            ) {
+              return undefined;
+            }
+
+            const typeName = getNodeTypename(
+              morphRelation?.targetObjectMetadata?.nameSingular,
+            );
+
+            if (isNull(value)) {
+              return [gqlField, null];
+            }
+
+            if (isUndefined(value?.id)) {
+              return undefined;
+            }
+
+            if (computeReferences) {
+              return [gqlField, { __ref: `${typeName}:${value.id}` }];
+            }
+
             return [
-              fieldName,
+              gqlField,
+              {
+                __typename: typeName,
+                ...value,
+              },
+            ];
+          }
+          case FieldMetadataType.LINKS: {
+            return [
+              gqlField,
               {
                 ...value,
-                __typename: lowerAndCapitalize(field.type),
+                ...(Array.isArray(value?.secondaryLinks) && {
+                  secondaryLinks: value.secondaryLinks.map(
+                    (secondaryLink: object) => ({
+                      ...secondaryLink,
+                      __typename: 'SecondaryLink',
+                    }),
+                  ),
+                }),
+                __typename: pascalCase(field.type),
+              },
+            ];
+          }
+          case FieldMetadataType.ADDRESS:
+          case FieldMetadataType.FULL_NAME:
+          case FieldMetadataType.CURRENCY: {
+            return [
+              gqlField,
+              {
+                ...value,
+                __typename: pascalCase(field.type),
               },
             ];
           }
           default: {
-            return [fieldName, value];
+            return [gqlField, value];
           }
         }
       })

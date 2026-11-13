@@ -1,75 +1,182 @@
 import { Injectable } from '@nestjs/common';
 
-import { Request } from 'express';
-import { OpenAPIV3_1 } from 'openapi-types';
-
-import { TokenService } from 'src/engine/core-modules/auth/services/token.service';
-import { ObjectMetadataService } from 'src/engine/metadata-modules/object-metadata/object-metadata.service';
-import { baseSchema } from 'src/engine/core-modules/open-api/utils/base-schema.utils';
+import { type Request } from 'express';
+import { type OpenAPIV3_1 } from 'openapi-types';
 import {
-  computeManyResultPath,
-  computeSingleResultPath,
-} from 'src/engine/core-modules/open-api/utils/path.utils';
-import { getErrorResponses } from 'src/engine/core-modules/open-api/utils/get-error-responses.utils';
+  assertIsDefinedOrThrow,
+  capitalize,
+  isDefined,
+} from 'twenty-shared/utils';
+
+import { DatabaseEventAction } from 'src/engine/api/graphql/graphql-query-runner/enums/database-event-action';
+import { AccessTokenService } from 'src/engine/core-modules/auth/token/services/access-token.service';
+import { baseSchema } from 'src/engine/core-modules/open-api/utils/base-schema.util';
 import {
   computeMetadataSchemaComponents,
   computeParameterComponents,
   computeSchemaComponents,
-} from 'src/engine/core-modules/open-api/utils/components.utils';
-import { computeSchemaTags } from 'src/engine/core-modules/open-api/utils/compute-schema-tags.utils';
-import { computeWebhooks } from 'src/engine/core-modules/open-api/utils/computeWebhooks.utils';
-import { capitalize } from 'src/utils/capitalize';
+} from 'src/engine/core-modules/open-api/utils/components.util';
+import { computeSchemaTags } from 'src/engine/core-modules/open-api/utils/compute-schema-tags.util';
+import { computeWebhooks } from 'src/engine/core-modules/open-api/utils/computeWebhooks.util';
 import {
+  get400ErrorResponses,
+  get401ErrorResponses,
+} from 'src/engine/core-modules/open-api/utils/get-error-responses.util';
+import {
+  computeBatchPath,
+  computeDuplicatesResultPath,
+  computeGroupByResultPath,
+  computeManyResultPath,
+  computeMergeManyResultPath,
+  computeRestoreManyResultPath,
+  computeRestoreOneResultPath,
+  computeSingleResultPath,
+} from 'src/engine/core-modules/open-api/utils/path.util';
+import {
+  getRequestBody,
+  getUpdateRequestBody,
+} from 'src/engine/core-modules/open-api/utils/request-body.util';
+import {
+  getCreateOneResponse201,
   getDeleteResponse200,
-  getManyResultResponse200,
-  getSingleResultSuccessResponse,
-} from 'src/engine/core-modules/open-api/utils/responses.utils';
-import { getRequestBody } from 'src/engine/core-modules/open-api/utils/request-body.utils';
-import { EnvironmentService } from 'src/engine/integrations/environment/environment.service';
+  getFindManyResponse200,
+  getFindOneResponse200,
+  getUpdateOneResponse200,
+} from 'src/engine/core-modules/open-api/utils/responses.util';
+import { TwentyConfigService } from 'src/engine/core-modules/twenty-config/twenty-config.service';
+import { WorkspaceNotFoundDefaultError } from 'src/engine/core-modules/workspace/workspace.exception';
+import { WorkspaceManyOrAllFlatEntityMapsCacheService } from 'src/engine/metadata-modules/flat-entity/services/workspace-many-or-all-flat-entity-maps-cache.service';
+import { type FlatObjectMetadata } from 'src/engine/metadata-modules/flat-object-metadata/types/flat-object-metadata.type';
 import { getServerUrl } from 'src/utils/get-server-url';
 
 @Injectable()
 export class OpenApiService {
   constructor(
-    private readonly tokenService: TokenService,
-    private readonly environmentService: EnvironmentService,
-    private readonly objectMetadataService: ObjectMetadataService,
+    private readonly accessTokenService: AccessTokenService,
+    private readonly twentyConfigService: TwentyConfigService,
+    private readonly flatEntityMapsCacheService: WorkspaceManyOrAllFlatEntityMapsCacheService,
   ) {}
 
-  async generateCoreSchema(request: Request): Promise<OpenAPIV3_1.Document> {
-    const baseUrl = getServerUrl(
-      request,
-      this.environmentService.get('SERVER_URL'),
+  private async getWorkspaceFromRequest(request: Request) {
+    try {
+      const { workspace } =
+        await this.accessTokenService.validateTokenByRequest(request);
+
+      assertIsDefinedOrThrow(workspace, WorkspaceNotFoundDefaultError);
+
+      return workspace;
+    } catch {
+      return null;
+    }
+  }
+
+  private async getFlatObjectMetadataArray(workspaceId: string) {
+    const { flatObjectMetadataMaps, flatFieldMetadataMaps } =
+      await this.flatEntityMapsCacheService.getOrRecomputeManyOrAllFlatEntityMaps(
+        {
+          workspaceId,
+          flatMapsKeys: ['flatObjectMetadataMaps', 'flatFieldMetadataMaps'],
+        },
+      );
+
+    const flatObjectMetadataArray = Object.values(
+      flatObjectMetadataMaps.byUniversalIdentifier,
+    ).filter(isDefined);
+
+    flatObjectMetadataArray.sort((a, b) =>
+      a.namePlural.localeCompare(b.namePlural),
     );
+
+    return {
+      flatObjectMetadataArray,
+      flatObjectMetadataMaps,
+      flatFieldMetadataMaps,
+    };
+  }
+
+  async generateCoreSchema(request: Request): Promise<OpenAPIV3_1.Document> {
+    const baseUrl = getServerUrl({
+      serverUrlEnv: this.twentyConfigService.get('SERVER_URL'),
+      serverUrlFallback: `${request.protocol}://${request.get('host')}`,
+    });
 
     const schema = baseSchema('core', baseUrl);
 
-    let objectMetadataItems;
+    const workspace = await this.getWorkspaceFromRequest(request);
 
-    try {
-      const { workspace } = await this.tokenService.validateToken(request);
-
-      objectMetadataItems =
-        await this.objectMetadataService.findManyWithinWorkspace(workspace.id);
-    } catch (err) {
+    if (!isDefined(workspace)) {
       return schema;
     }
 
-    if (!objectMetadataItems.length) {
+    const {
+      flatObjectMetadataArray,
+      flatObjectMetadataMaps,
+      flatFieldMetadataMaps,
+    } = await this.getFlatObjectMetadataArray(workspace.id);
+
+    if (!flatObjectMetadataArray.length) {
       return schema;
     }
-    schema.paths = objectMetadataItems.reduce((paths, item) => {
+
+    schema.paths = flatObjectMetadataArray.reduce((paths, item) => {
       paths[`/${item.namePlural}`] = computeManyResultPath(item);
+      paths[`/batch/${item.namePlural}`] = computeBatchPath(item);
       paths[`/${item.namePlural}/{id}`] = computeSingleResultPath(item);
+      paths[`/${item.namePlural}/duplicates`] =
+        computeDuplicatesResultPath(item);
+      paths[`/${item.namePlural}/{id}/restore`] =
+        computeRestoreOneResultPath(item);
+      paths[`/${item.namePlural}/restore`] = computeRestoreManyResultPath(item);
+      paths[`/${item.namePlural}/merge`] = computeMergeManyResultPath(item);
+      paths[`/${item.namePlural}/groupBy`] = computeGroupByResultPath(item);
 
       return paths;
     }, schema.paths as OpenAPIV3_1.PathsObject);
 
-    schema.webhooks = objectMetadataItems.reduce(
+    schema.paths['/dashboards/{id}/duplicate'] = {
+      post: {
+        tags: ['dashboards'],
+        summary: 'Duplicate a dashboard',
+        description: 'Creates a duplicate of an existing dashboard',
+        operationId: 'duplicateDashboard',
+        parameters: [{ $ref: '#/components/parameters/idPath' }],
+        responses: {
+          '201': {
+            description: 'Dashboard duplicated successfully',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/DashboardForResponse',
+                },
+              },
+            },
+          },
+          '400': { $ref: '#/components/responses/400' },
+          '401': { $ref: '#/components/responses/401' },
+        },
+      },
+    } as OpenAPIV3_1.PathItemObject;
+
+    schema.webhooks = flatObjectMetadataArray.reduce(
       (paths, item) => {
-        paths[`Create ${item.nameSingular}`] = computeWebhooks('create', item);
-        paths[`Update ${item.nameSingular}`] = computeWebhooks('update', item);
-        paths[`Delete ${item.nameSingular}`] = computeWebhooks('delete', item);
+        paths[
+          this.createWebhookEventName(
+            DatabaseEventAction.CREATED,
+            item.nameSingular,
+          )
+        ] = computeWebhooks(DatabaseEventAction.CREATED, item);
+        paths[
+          this.createWebhookEventName(
+            DatabaseEventAction.UPDATED,
+            item.nameSingular,
+          )
+        ] = computeWebhooks(DatabaseEventAction.UPDATED, item);
+        paths[
+          this.createWebhookEventName(
+            DatabaseEventAction.DELETED,
+            item.nameSingular,
+          )
+        ] = computeWebhooks(DatabaseEventAction.DELETED, item);
 
         return paths;
       },
@@ -79,17 +186,21 @@ export class OpenApiService {
       >,
     );
 
-    schema.tags = computeSchemaTags(objectMetadataItems);
-
     schema.components = {
       ...schema.components, // components.securitySchemes is defined in base Schema
-      schemas: computeSchemaComponents(objectMetadataItems),
+      schemas: computeSchemaComponents(
+        flatObjectMetadataArray,
+        flatObjectMetadataMaps,
+        flatFieldMetadataMaps,
+      ),
       parameters: computeParameterComponents(),
       responses: {
-        '400': getErrorResponses('Invalid request'),
-        '401': getErrorResponses('Unauthorized'),
+        '400': get400ErrorResponses(),
+        '401': get401ErrorResponses(),
       },
     };
+
+    schema.tags = computeSchemaTags(flatObjectMetadataArray);
 
     return schema;
   }
@@ -97,14 +208,18 @@ export class OpenApiService {
   async generateMetaDataSchema(
     request: Request,
   ): Promise<OpenAPIV3_1.Document> {
-    const baseUrl = getServerUrl(
-      request,
-      this.environmentService.get('SERVER_URL'),
-    );
+    const baseUrl = getServerUrl({
+      serverUrlEnv: this.twentyConfigService.get('SERVER_URL'),
+      serverUrlFallback: `${request.protocol}://${request.get('host')}`,
+    });
 
     const schema = baseSchema('metadata', baseUrl);
 
-    schema.tags = [{ name: 'placeholder' }];
+    const workspace = await this.getWorkspaceFromRequest(request);
+
+    if (!isDefined(workspace)) {
+      return schema;
+    }
 
     const metadata = [
       {
@@ -116,8 +231,48 @@ export class OpenApiService {
         namePlural: 'fields',
       },
       {
-        nameSingular: 'relation',
-        namePlural: 'relations',
+        nameSingular: 'webhook',
+        namePlural: 'webhooks',
+      },
+      {
+        nameSingular: 'apiKey',
+        namePlural: 'apiKeys',
+      },
+      {
+        nameSingular: 'view',
+        namePlural: 'views',
+      },
+      {
+        nameSingular: 'viewField',
+        namePlural: 'viewFields',
+      },
+      {
+        nameSingular: 'viewFilter',
+        namePlural: 'viewFilters',
+      },
+      {
+        nameSingular: 'viewSort',
+        namePlural: 'viewSorts',
+      },
+      {
+        nameSingular: 'viewGroup',
+        namePlural: 'viewGroups',
+      },
+      {
+        nameSingular: 'viewFilterGroup',
+        namePlural: 'viewFilterGroups',
+      },
+      {
+        nameSingular: 'pageLayout',
+        namePlural: 'pageLayouts',
+      },
+      {
+        nameSingular: 'pageLayoutTab',
+        namePlural: 'pageLayoutTabs',
+      },
+      {
+        nameSingular: 'pageLayoutWidget',
+        namePlural: 'pageLayoutWidgets',
       },
     ];
 
@@ -126,9 +281,16 @@ export class OpenApiService {
         get: {
           tags: [item.namePlural],
           summary: `Find Many ${item.namePlural}`,
-          parameters: [{ $ref: '#/components/parameters/filter' }],
+          parameters: [
+            { $ref: '#/components/parameters/limit' },
+            { $ref: '#/components/parameters/startingAfter' },
+            { $ref: '#/components/parameters/endingBefore' },
+          ],
           responses: {
-            '200': getManyResultResponse200(item),
+            '200': getFindManyResponse200({
+              item,
+              isDirectDataFeatureFlagged: true,
+            }),
             '400': { $ref: '#/components/responses/400' },
             '401': { $ref: '#/components/responses/401' },
           },
@@ -137,44 +299,44 @@ export class OpenApiService {
           tags: [item.namePlural],
           summary: `Create One ${item.nameSingular}`,
           operationId: `createOne${capitalize(item.nameSingular)}`,
-          requestBody: getRequestBody(item),
+          requestBody: getRequestBody(capitalize(item.nameSingular)),
           responses: {
-            '200': getSingleResultSuccessResponse(item),
+            '201': getCreateOneResponse201(item, true),
             '400': { $ref: '#/components/responses/400' },
             '401': { $ref: '#/components/responses/401' },
           },
         },
       } as OpenAPIV3_1.PathItemObject;
       path[`/${item.namePlural}/{id}`] = {
-        get: {
-          tags: [item.namePlural],
-          summary: `Find One ${item.nameSingular}`,
-          parameters: [{ $ref: '#/components/parameters/idPath' }],
-          responses: {
-            '200': getSingleResultSuccessResponse(item),
-            '400': { $ref: '#/components/responses/400' },
-            '401': { $ref: '#/components/responses/401' },
-          },
-        },
         delete: {
           tags: [item.namePlural],
           summary: `Delete One ${item.nameSingular}`,
           operationId: `deleteOne${capitalize(item.nameSingular)}`,
           parameters: [{ $ref: '#/components/parameters/idPath' }],
           responses: {
-            '200': getDeleteResponse200(item),
+            '200': getDeleteResponse200(item, true),
             '400': { $ref: '#/components/responses/400' },
             '401': { $ref: '#/components/responses/401' },
           },
         },
-        put: {
+        get: {
           tags: [item.namePlural],
-          summary: `Update One ${item.namePlural}`,
+          summary: `Find One ${item.nameSingular}`,
+          parameters: [{ $ref: '#/components/parameters/idPath' }],
+          responses: {
+            '200': getFindOneResponse200(item),
+            '400': { $ref: '#/components/responses/400' },
+            '401': { $ref: '#/components/responses/401' },
+          },
+        },
+        patch: {
+          tags: [item.namePlural],
+          summary: `Update One ${item.nameSingular}`,
           operationId: `updateOne${capitalize(item.nameSingular)}`,
           parameters: [{ $ref: '#/components/parameters/idPath' }],
-          requestBody: getRequestBody(item),
+          requestBody: getUpdateRequestBody(capitalize(item.nameSingular)),
           responses: {
-            '200': getSingleResultSuccessResponse(item),
+            '200': getUpdateOneResponse200(item, true),
             '400': { $ref: '#/components/responses/400' },
             '401': { $ref: '#/components/responses/401' },
           },
@@ -189,11 +351,25 @@ export class OpenApiService {
       schemas: computeMetadataSchemaComponents(metadata),
       parameters: computeParameterComponents(),
       responses: {
-        '400': getErrorResponses('Invalid request'),
-        '401': getErrorResponses('Unauthorized'),
+        '400': get400ErrorResponses(),
+        '401': get401ErrorResponses(),
       },
     };
 
+    schema.tags = computeSchemaTags(
+      metadata.map((item) => ({
+        nameSingular: item.nameSingular,
+        namePlural: item.namePlural,
+      })) as FlatObjectMetadata[],
+    );
+
     return schema;
+  }
+
+  createWebhookEventName(
+    action: DatabaseEventAction,
+    objectName: string,
+  ): string {
+    return `${capitalize(objectName)} ${capitalize(action)}`;
   }
 }

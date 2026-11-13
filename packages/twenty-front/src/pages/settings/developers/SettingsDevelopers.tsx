@@ -1,71 +1,193 @@
-import { useNavigate } from 'react-router-dom';
-import styled from '@emotion/styled';
-import { IconPlus, IconSettings } from 'twenty-ui';
+import { NavigationButton } from '@/ui/input/components/NavigationButton';
 
-import { SettingsHeaderContainer } from '@/settings/components/SettingsHeaderContainer';
+import { SettingsPageLayout } from '@/settings/components/layout/SettingsPageLayout';
+import { SettingsTabBar } from '@/settings/components/layout/SettingsTabBar';
+import { useSettingsActiveTabId } from '@/settings/components/layout/useSettingsActiveTabId';
+import { SettingsDiscoveryHeroCard } from '@/settings/components/SettingsDiscoveryHeroCard';
 import { SettingsPageContainer } from '@/settings/components/SettingsPageContainer';
+import PlaygroundCoverDark from '@/settings/developers/assets/cover-dark.png';
+import PlaygroundCoverLight from '@/settings/developers/assets/cover-light.png';
+import { PlaygroundSetupForm } from '@/settings/developers/components/PlaygroundSetupForm';
 import { SettingsApiKeysTable } from '@/settings/developers/components/SettingsApiKeysTable';
-import { SettingsReadDocumentationButton } from '@/settings/developers/components/SettingsReadDocumentationButton';
 import { SettingsWebhooksTable } from '@/settings/developers/components/SettingsWebhooksTable';
-import { H2Title } from '@/ui/display/typography/components/H2Title';
-import { Button } from '@/ui/input/button/components/Button';
-import { SubMenuTopBarContainer } from '@/ui/layout/page/SubMenuTopBarContainer';
-import { Section } from '@/ui/layout/section/components/Section';
-import { Breadcrumb } from '@/ui/navigation/bread-crumb/components/Breadcrumb';
+import { SETTINGS_DEVELOPERS_TABS } from '@/settings/developers/constants/SettingsDevelopersTabs';
+import { TableFooter } from '@/ui/layout/table/components/TableFooter';
+import { styled } from '@linaria/react';
+import { useLingui } from '@lingui/react/macro';
+import { SettingsPath } from 'twenty-shared/types';
+import { getSettingsPath } from 'twenty-shared/utils';
+import { Section } from 'twenty-ui/components/layout';
+import {
+  IconApi,
+  IconApps,
+  IconPlus,
+  IconSparkle2,
+  IconTerminal2,
+  IconWebhook,
+} from 'twenty-ui/icon';
+import { themeCssVariables } from 'twenty-ui/theme';
+import { useIsMobile } from 'twenty-ui/utilities';
+import AppsCoverDark from '~/pages/settings/applications/assets/cover-dark.png';
+import AppsCoverLight from '~/pages/settings/applications/assets/cover-light.png';
+import { SettingsDevelopersClaimErrorTabEffect } from '~/pages/settings/developers/components/SettingsDevelopersClaimErrorTabEffect';
+import { SettingsDevelopersAppsTab } from '~/pages/settings/developers/tabs/SettingsDevelopersAppsTab';
+import { SettingsDevelopersCliTab } from '~/pages/settings/developers/tabs/SettingsDevelopersCliTab';
 
-const StyledButtonContainer = styled.div`
+type TabKey =
+  (typeof SETTINGS_DEVELOPERS_TABS.TABS_IDS)[keyof typeof SETTINGS_DEVELOPERS_TABS.TABS_IDS];
+
+const SETTINGS_DEVELOPERS_HERO_INSTANCE_ID_PREFIX = 'settings-developers-hero';
+
+const StyledTabContent = styled.div`
   display: flex;
-  justify-content: flex-end;
-  padding-top: ${({ theme }) => theme.spacing(2)};
+  flex-direction: column;
+  gap: ${themeCssVariables.spacing[10]};
+  padding-top: ${themeCssVariables.spacing[6]};
+`;
+
+const StyledTableContainer = styled.div<{ isMobile?: boolean }>`
+  display: flex;
+  flex-direction: column;
+  overflow: ${({ isMobile }) => (isMobile ? 'hidden' : 'visible')};
 `;
 
 export const SettingsDevelopers = () => {
-  const navigate = useNavigate();
+  const isMobile = useIsMobile();
+  const { t } = useLingui();
+
+  const tabs = [
+    {
+      id: SETTINGS_DEVELOPERS_TABS.TABS_IDS.API,
+      title: t`API`,
+      Icon: IconApi,
+    },
+    {
+      id: SETTINGS_DEVELOPERS_TABS.TABS_IDS.WEBHOOKS,
+      title: t`Webhooks`,
+      Icon: IconWebhook,
+    },
+    {
+      id: SETTINGS_DEVELOPERS_TABS.TABS_IDS.APPS,
+      title: t`Apps`,
+      Icon: IconApps,
+    },
+    {
+      id: SETTINGS_DEVELOPERS_TABS.TABS_IDS.CLI,
+      title: t`CLI`,
+      Icon: IconTerminal2,
+    },
+  ];
+
+  const activeTab: TabKey =
+    (useSettingsActiveTabId(
+      SETTINGS_DEVELOPERS_TABS.COMPONENT_INSTANCE_ID,
+      tabs.map((tab) => tab.id),
+    ) as TabKey) ?? SETTINGS_DEVELOPERS_TABS.TABS_IDS.API;
+
+  const isAppsTab = activeTab === SETTINGS_DEVELOPERS_TABS.TABS_IDS.APPS;
+  const isCliTab = activeTab === SETTINGS_DEVELOPERS_TABS.TABS_IDS.CLI;
 
   return (
-    <SubMenuTopBarContainer Icon={IconSettings} title="Settings">
+    <SettingsPageLayout
+      title={t`Developers`}
+      secondaryBar={
+        <SettingsTabBar
+          aria-label={t`Developers`}
+          tabs={tabs}
+          componentInstanceId={SETTINGS_DEVELOPERS_TABS.COMPONENT_INSTANCE_ID}
+        />
+      }
+      links={[
+        {
+          children: t`Workspace`,
+          href: getSettingsPath(SettingsPath.General),
+        },
+        { children: t`Developers` },
+      ]}
+    >
+      <SettingsDevelopersClaimErrorTabEffect
+        tabListId={SETTINGS_DEVELOPERS_TABS.COMPONENT_INSTANCE_ID}
+        appsTabId={SETTINGS_DEVELOPERS_TABS.TABS_IDS.APPS}
+      />
       <SettingsPageContainer>
-        <SettingsHeaderContainer>
-          <Breadcrumb links={[{ children: 'Developers' }]} />
-          <SettingsReadDocumentationButton />
-        </SettingsHeaderContainer>
-        <Section>
-          <H2Title
-            title="API keys"
-            description="Active APIs keys created by you or your team."
+        <Section.Root>
+          <SettingsDiscoveryHeroCard
+            lightSrc={isAppsTab ? AppsCoverLight : PlaygroundCoverLight}
+            darkSrc={isAppsTab ? AppsCoverDark : PlaygroundCoverDark}
+            instanceIdPrefix={SETTINGS_DEVELOPERS_HERO_INSTANCE_ID_PREFIX}
+            tabs={
+              isAppsTab || isCliTab
+                ? []
+                : [
+                    {
+                      id: 'api_webhook_walkthrough',
+                      title: t`Walkthrough`,
+                      Icon: IconSparkle2,
+                      vimeoId: '1217967646',
+                      hasSound: true,
+                    },
+                  ]
+            }
+            playButtonAriaLabel={t`Watch API demo`}
           />
-          <SettingsApiKeysTable />
-          <StyledButtonContainer>
-            <Button
-              Icon={IconPlus}
-              title="Create API key"
-              size="small"
-              variant="secondary"
-              onClick={() => {
-                navigate('/settings/developers/api-keys/new');
-              }}
-            />
-          </StyledButtonContainer>
-        </Section>
-        <Section>
-          <H2Title
-            title="Webhooks"
-            description="Establish Webhook endpoints for notifications on asynchronous events."
-          />
-          <SettingsWebhooksTable />
-          <StyledButtonContainer>
-            <Button
-              Icon={IconPlus}
-              title="Create Webhook"
-              size="small"
-              variant="secondary"
-              onClick={() => {
-                navigate('/settings/developers/webhooks/new');
-              }}
-            />
-          </StyledButtonContainer>
-        </Section>
+        </Section.Root>
+
+        {activeTab === SETTINGS_DEVELOPERS_TABS.TABS_IDS.API && (
+          <StyledTabContent>
+            <Section.Root>
+              <Section.Header
+                title={t`Documentation`}
+                description={t`Try our REST or GraphQL API playgrounds`}
+              />
+              <PlaygroundSetupForm />
+            </Section.Root>
+
+            <Section.Root>
+              <Section.Header
+                title={t`API Keys`}
+                description={t`Active API keys created by you or your team.`}
+              />
+              <StyledTableContainer isMobile={isMobile}>
+                <SettingsApiKeysTable />
+                <TableFooter>
+                  <NavigationButton
+                    startIcon={<IconPlus />}
+                    size="sm"
+                    to={getSettingsPath(SettingsPath.NewApiKey)}
+                    variant="outline"
+                  >{t`Create API key`}</NavigationButton>
+                </TableFooter>
+              </StyledTableContainer>
+            </Section.Root>
+          </StyledTabContent>
+        )}
+
+        {activeTab === SETTINGS_DEVELOPERS_TABS.TABS_IDS.WEBHOOKS && (
+          <StyledTabContent>
+            <Section.Root>
+              <Section.Header
+                title={t`Webhooks`}
+                description={t`Establish Webhook endpoints for notifications on asynchronous events.`}
+              />
+              <StyledTableContainer isMobile={isMobile}>
+                <SettingsWebhooksTable />
+                <TableFooter>
+                  <NavigationButton
+                    startIcon={<IconPlus />}
+                    size="sm"
+                    to={getSettingsPath(SettingsPath.NewWebhook)}
+                    variant="outline"
+                  >{t`Create webhook`}</NavigationButton>
+                </TableFooter>
+              </StyledTableContainer>
+            </Section.Root>
+          </StyledTabContent>
+        )}
+
+        {isAppsTab && <SettingsDevelopersAppsTab />}
+
+        {isCliTab && <SettingsDevelopersCliTab />}
       </SettingsPageContainer>
-    </SubMenuTopBarContainer>
+    </SettingsPageLayout>
   );
 };

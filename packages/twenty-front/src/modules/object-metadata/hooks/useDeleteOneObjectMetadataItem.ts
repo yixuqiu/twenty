@@ -1,36 +1,59 @@
-import { ApolloClient, useMutation } from '@apollo/client';
-import { getOperationName } from '@apollo/client/utilities';
+import { useMutation } from '@apollo/client/react';
+import { DeleteOneObjectMetadataItemDocument } from '~/generated-metadata/graphql';
 
-import {
-  DeleteOneObjectMetadataItemMutation,
-  DeleteOneObjectMetadataItemMutationVariables,
-} from '~/generated-metadata/graphql';
-
-import { DELETE_ONE_OBJECT_METADATA_ITEM } from '../graphql/mutations';
-import { FIND_MANY_OBJECT_METADATA_ITEMS } from '../graphql/queries';
-
-import { useApolloMetadataClient } from './useApolloMetadataClient';
+import { useMetadataErrorHandler } from '@/metadata-error-handler/hooks/useMetadataErrorHandler';
+import { useInvalidateMetadataStore } from '@/metadata-store/hooks/useInvalidateMetadataStore';
+import { type MetadataRequestResult } from '@/object-metadata/types/MetadataRequestResult';
+import { CombinedGraphQLErrors } from '@apollo/client/errors';
+import { CrudOperationType } from 'twenty-shared/types';
+import { useToast } from 'twenty-ui/components/feedback';
+import { useLingui } from '@lingui/react/macro';
 
 export const useDeleteOneObjectMetadataItem = () => {
-  const apolloMetadataClient = useApolloMetadataClient();
+  const { t } = useLingui();
+  const [deleteOneObjectMetadataItemMutation] = useMutation(
+    DeleteOneObjectMetadataItemDocument,
+  );
 
-  const [mutate] = useMutation<
-    DeleteOneObjectMetadataItemMutation,
-    DeleteOneObjectMetadataItemMutationVariables
-  >(DELETE_ONE_OBJECT_METADATA_ITEM, {
-    client: apolloMetadataClient ?? ({} as ApolloClient<any>),
-  });
+  const { handleMetadataError } = useMetadataErrorHandler();
+  const { enqueueToast } = useToast();
+  const { invalidateMetadataStore } = useInvalidateMetadataStore();
 
   const deleteOneObjectMetadataItem = async (
-    idToDelete: DeleteOneObjectMetadataItemMutationVariables['idToDelete'],
-  ) => {
-    return await mutate({
-      variables: {
-        idToDelete,
-      },
-      awaitRefetchQueries: true,
-      refetchQueries: [getOperationName(FIND_MANY_OBJECT_METADATA_ITEMS) ?? ''],
-    });
+    idToDelete: string,
+  ): Promise<
+    MetadataRequestResult<
+      Awaited<ReturnType<typeof deleteOneObjectMetadataItemMutation>>
+    >
+  > => {
+    try {
+      const response = await deleteOneObjectMetadataItemMutation({
+        variables: {
+          idToDelete,
+        },
+      });
+
+      invalidateMetadataStore();
+
+      return {
+        status: 'successful',
+        response,
+      };
+    } catch (error) {
+      if (CombinedGraphQLErrors.is(error)) {
+        handleMetadataError(error, {
+          primaryMetadataName: 'objectMetadata',
+          operationType: CrudOperationType.DELETE,
+        });
+      } else {
+        enqueueToast({ status: 'error', children: t`An error occurred.` });
+      }
+
+      return {
+        status: 'failed',
+        error,
+      };
+    }
   };
 
   return {

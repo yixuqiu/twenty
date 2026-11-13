@@ -1,57 +1,48 @@
-import { ReactNode } from 'react';
 import { renderHook } from '@testing-library/react';
-import { RecoilRoot } from 'recoil';
+import { type ReactNode } from 'react';
 
 import { useActivities } from '@/activities/hooks/useActivities';
 import { useTasks } from '@/activities/tasks/hooks/useTasks';
-import { ObjectFilterDropdownScope } from '@/object-record/object-filter-dropdown/scopes/ObjectFilterDropdownScope';
+import { ObjectFilterDropdownComponentInstanceContext } from '@/object-record/object-filter-dropdown/states/contexts/ObjectFilterDropdownComponentInstanceContext';
 
-const completedTasks = [
+const tasks = [
   {
     id: '1',
-    completedAt: '2024-03-15T07:33:14.212Z',
+    status: 'DONE',
+    __typename: 'Task',
   },
   {
     id: '2',
-    completedAt: '2024-03-15T07:33:14.212Z',
+    status: 'DONE',
+    __typename: 'Task',
   },
   {
     id: '3',
-    completedAt: '2024-03-15T07:33:14.212Z',
+    status: 'DONE',
+    __typename: 'Task',
   },
-];
-
-const unscheduledTasks = [
   {
     id: '4',
+    __typename: 'Task',
   },
-];
-
-const todayOrPreviousTasks = [
   {
     id: '5',
     dueAt: '2024-03-15T07:33:14.212Z',
+    __typename: 'Task',
   },
   {
     id: '6',
     dueAt: '2024-03-15T07:33:14.212Z',
+    __typename: 'Task',
   },
 ];
 
-const useActivitiesMock = jest.fn(
-  ({
-    activitiesFilters,
-  }: {
-    activitiesFilters: { completedAt: { is: 'NULL' | 'NOT_NULL' } };
-  }) => {
-    const isCompletedFilter = activitiesFilters.completedAt.is === 'NOT_NULL';
-    return {
-      activities: isCompletedFilter
-        ? completedTasks
-        : [...todayOrPreviousTasks, ...unscheduledTasks],
-    };
-  },
-);
+const useActivitiesMock = jest.fn(() => {
+  return {
+    activities: tasks,
+    fetchMoreActivities: jest.fn(),
+  };
+});
 
 jest.mock('@/activities/hooks/useActivities', () => ({
   useActivities: jest.fn(),
@@ -60,11 +51,11 @@ jest.mock('@/activities/hooks/useActivities', () => ({
 (useActivities as jest.Mock).mockImplementation(useActivitiesMock);
 
 const Wrapper = ({ children }: { children: ReactNode }) => (
-  <RecoilRoot>
-    <ObjectFilterDropdownScope filterScopeId="entity-tasks-filter-scope">
-      {children}
-    </ObjectFilterDropdownScope>
-  </RecoilRoot>
+  <ObjectFilterDropdownComponentInstanceContext.Provider
+    value={{ instanceId: 'entity-tasks-filter-instance' }}
+  >
+    {children}
+  </ObjectFilterDropdownComponentInstanceContext.Provider>
 );
 
 describe('useTasks', () => {
@@ -73,11 +64,6 @@ describe('useTasks', () => {
       wrapper: Wrapper,
     });
 
-    expect(result.current).toEqual({
-      todayOrPreviousTasks,
-      upcomingTasks: [],
-      unscheduledTasks,
-      completedTasks,
-    });
+    expect(result.current.tasks).toEqual(tasks);
   });
 });

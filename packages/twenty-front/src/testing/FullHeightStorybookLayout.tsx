@@ -1,4 +1,5 @@
-import styled from '@emotion/styled';
+import { type JSX } from 'react';
+import { styled } from '@linaria/react';
 
 const StyledLayout = styled.div`
   display: flex;

@@ -1,42 +1,75 @@
-import { CaptchaDriverType } from '~/generated/graphql';
-import { ClientConfig } from '~/generated-metadata/graphql';
+import { type ClientConfig } from '@/client-config/types/ClientConfig';
+import { CaptchaDriverType, SupportDriver } from '~/generated-metadata/graphql';
 
 export const mockedClientConfig: ClientConfig = {
+  aiModels: [],
+  aiEvaluationModels: [],
+  aiModelTiers: [],
   signInPrefilled: true,
-  signUpDisabled: false,
-  debugMode: false,
+  isMultiWorkspaceEnabled: false,
+  isEmailVerificationRequired: false,
   authProviders: {
     google: true,
-    password: true,
     magicLink: false,
+    password: true,
     microsoft: false,
-    __typename: 'AuthProviders',
+    sso: [],
   },
-  telemetry: {
-    enabled: false,
-    anonymizationEnabled: true,
-    __typename: 'Telemetry',
-  },
+  frontDomain: 'localhost',
+  serverUrl: 'http://localhost:3000',
+  defaultSubdomain: 'app',
+  analyticsEnabled: true,
   support: {
-    supportDriver: 'front',
+    supportDriver: SupportDriver.FRONT,
     supportFrontChatId: null,
-    __typename: 'Support',
   },
   sentry: {
     dsn: 'MOCKED_DSN',
     release: 'MOCKED_RELEASE',
     environment: 'MOCKED_ENVIRONMENT',
-    __typename: 'Sentry',
   },
   billing: {
     isBillingEnabled: true,
     billingUrl: '',
-    billingFreeTrialDurationInDays: 10,
-    __typename: 'Billing',
+    trialPeriods: [
+      {
+        duration: 30,
+        isCreditCardRequired: true,
+      },
+      {
+        duration: 7,
+        isCreditCardRequired: false,
+      },
+    ],
   },
   captcha: {
-    provider: CaptchaDriverType.GoogleRecatpcha,
+    provider: CaptchaDriverType.GOOGLE_RECAPTCHA,
     siteKey: 'MOCKED_SITE_KEY',
-    __typename: 'Captcha',
   },
+  api: { mutationMaximumAffectedRecords: 100 },
+  onboarding: {
+    importContactsCreditsReward: 2,
+    inviteTeamCreditsRewardPerUser: 3,
+    createProfileCreditsReward: 0.5,
+    upgradeCreditsReward: 2,
+    inviteTeamMaxInvites: 10,
+  },
+  canManageFeatureFlags: true,
+  publicFeatureFlags: [],
+  isMicrosoftMessagingEnabled: true,
+  isMicrosoftCalendarEnabled: true,
+  isGoogleMessagingEnabled: true,
+  isGoogleCalendarEnabled: true,
+  isAttachmentPreviewEnabled: true,
+  isConfigVariablesInDbEnabled: false,
+  isImapSmtpCaldavEnabled: false,
+  isTwoFactorAuthenticationEnabled: false,
+  isEmailingDomainInDemoMode: false,
+  allowRequestsToTwentyIcons: true,
+  isCloudflareIntegrationEnabled: false,
+  isClickHouseConfigured: false,
+  isWorkspaceSchemaDDLLocked: false,
+  isOnboardingAiChatEnabled: false,
+  isBookCallOnboardingStepEnabled: false,
+  isCompanyEnrichmentEnabled: false,
 };

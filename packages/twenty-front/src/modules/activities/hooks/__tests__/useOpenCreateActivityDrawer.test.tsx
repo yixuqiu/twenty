@@ -1,63 +1,152 @@
-import { ReactNode } from 'react';
-import { MockedProvider } from '@apollo/client/testing';
 import { act, renderHook } from '@testing-library/react';
-import { RecoilRoot, useRecoilValue, useSetRecoilState } from 'recoil';
 
 import { useOpenCreateActivityDrawer } from '@/activities/hooks/useOpenCreateActivityDrawer';
-import { activityIdInDrawerState } from '@/activities/states/activityIdInDrawerState';
-import { viewableActivityIdState } from '@/activities/states/viewableActivityIdState';
-import { objectMetadataItemsState } from '@/object-metadata/states/objectMetadataItemsState';
-import { getObjectMetadataItemsMock } from '@/object-metadata/utils/getObjectMetadataItemsMock';
+import { activityTargetableEntityArrayState } from '@/activities/states/activityTargetableEntityArrayState';
+import { isUpsertingActivityInDBState } from '@/activities/states/isCreatingActivityInDBState';
+import { StandardObjectNameSingular } from 'twenty-shared/types';
+import { jotaiStore } from '@/ui/utilities/state/jotai/jotaiStore';
+import { getJestMetadataAndApolloMocksWrapper } from '~/testing/jest/getJestMetadataAndApolloMocksWrapper';
 
-const mockUUID = '37873e04-2f83-4468-9ab7-3f87da6cafad';
+const mockCreateOneNote = jest.fn();
+const mockCreateManyNoteTargets = jest.fn();
 
-jest.mock('uuid', () => ({
-  v4: () => mockUUID,
+jest.mock('@/object-record/hooks/useCreateOneRecord', () => ({
+  useCreateOneRecord: () => ({ createOneRecord: mockCreateOneNote }),
 }));
 
-const Wrapper = ({ children }: { children: ReactNode }) => (
-  <RecoilRoot>
-    <MockedProvider addTypename={false}>{children}</MockedProvider>
-  </RecoilRoot>
-);
+jest.mock('@/object-record/hooks/useCreateManyRecords', () => ({
+  useCreateManyRecords: () => ({
+    createManyRecords: mockCreateManyNoteTargets,
+  }),
+}));
 
-const mockObjectMetadataItems = getObjectMetadataItemsMock();
+const mockOpenRecordInSidePanel = jest.fn();
+
+jest.mock('@/side-panel/hooks/useOpenRecordInSidePanel', () => ({
+  useOpenRecordInSidePanel: () => ({
+    openRecordInSidePanel: mockOpenRecordInSidePanel,
+  }),
+}));
+
+const Wrapper = getJestMetadataAndApolloMocksWrapper({
+  apolloMocks: [],
+});
+
+const fakeNoteId = 'fake-note-id';
 
 describe('useOpenCreateActivityDrawer', () => {
-  it('works as expected', async () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockCreateOneNote.mockResolvedValue({ id: fakeNoteId });
+    mockCreateManyNoteTargets.mockResolvedValue([]);
+  });
+
+  it('should create a note without an empty junction record then open the side panel', async () => {
     const { result } = renderHook(
-      () => {
-        const openActivityRightDrawer = useOpenCreateActivityDrawer();
-        const viewableActivityId = useRecoilValue(viewableActivityIdState);
-        const activityIdInDrawer = useRecoilValue(activityIdInDrawerState);
-        const setObjectMetadataItems = useSetRecoilState(
-          objectMetadataItemsState,
-        );
-        return {
-          openActivityRightDrawer,
-          activityIdInDrawer,
-          viewableActivityId,
-          setObjectMetadataItems,
-        };
-      },
-      {
-        wrapper: Wrapper,
-      },
+      () =>
+        useOpenCreateActivityDrawer({
+          activityObjectNameSingular: StandardObjectNameSingular.Note,
+        }),
+      { wrapper: Wrapper },
     );
 
-    act(() => {
-      result.current.setObjectMetadataItems(mockObjectMetadataItems);
-    });
-
-    expect(result.current.activityIdInDrawer).toBeNull();
-    expect(result.current.viewableActivityId).toBeNull();
     await act(async () => {
-      result.current.openActivityRightDrawer({
-        type: 'Note',
+      await result.current({
         targetableObjects: [],
       });
     });
-    expect(result.current.activityIdInDrawer).toBe(mockUUID);
-    expect(result.current.viewableActivityId).toBe(mockUUID);
+
+    expect(mockCreateOneNote).toHaveBeenCalledWith({
+      position: 'last',
+    });
+
+    expect(mockCreateManyNoteTargets).not.toHaveBeenCalled();
+
+    expect(mockOpenRecordInSidePanel).toHaveBeenCalledWith({
+      recordId: fakeNoteId,
+      objectNameSingular: StandardObjectNameSingular.Note,
+      isNewRecord: true,
+    });
+
+    expect(jotaiStore.get(activityTargetableEntityArrayState.atom)).toEqual([]);
+    expect(jotaiStore.get(isUpsertingActivityInDBState.atom)).toBe(false);
+  });
+
+  it('should create every requested target through junction metadata', async () => {
+    const targetableObjects = [
+      {
+        id: 'company-id',
+        targetObjectNameSingular: StandardObjectNameSingular.Company,
+      },
+      {
+        id: 'person-id',
+        targetObjectNameSingular: StandardObjectNameSingular.Person,
+      },
+    ];
+
+    const { result } = renderHook(
+      () =>
+        useOpenCreateActivityDrawer({
+          activityObjectNameSingular: StandardObjectNameSingular.Note,
+        }),
+      { wrapper: Wrapper },
+    );
+
+    await act(async () => {
+      await result.current({
+        targetableObjects,
+      });
+    });
+
+    expect(mockCreateOneNote).toHaveBeenCalledWith({
+      position: 'last',
+    });
+
+    expect(mockCreateManyNoteTargets).toHaveBeenCalledWith({
+      recordsToCreate: [
+        expect.objectContaining({
+          noteId: fakeNoteId,
+          targetCompanyId: 'company-id',
+        }),
+        expect.objectContaining({
+          noteId: fakeNoteId,
+          targetPersonId: 'person-id',
+        }),
+      ],
+      upsert: true,
+    });
+
+    expect(jotaiStore.get(activityTargetableEntityArrayState.atom)).toEqual(
+      targetableObjects,
+    );
+  });
+
+  it('should ignore targets not supported by the junction metadata', async () => {
+    const unsupportedTarget = {
+      id: 'unsupported-id',
+      targetObjectNameSingular: 'unsupportedObject',
+    };
+
+    const { result } = renderHook(
+      () =>
+        useOpenCreateActivityDrawer({
+          activityObjectNameSingular: StandardObjectNameSingular.Note,
+        }),
+      { wrapper: Wrapper },
+    );
+
+    await act(async () => {
+      await result.current({
+        targetableObjects: [unsupportedTarget],
+      });
+    });
+
+    expect(mockCreateManyNoteTargets).not.toHaveBeenCalled();
+    expect(mockOpenRecordInSidePanel).toHaveBeenCalledWith({
+      recordId: fakeNoteId,
+      objectNameSingular: StandardObjectNameSingular.Note,
+      isNewRecord: true,
+    });
+    expect(jotaiStore.get(activityTargetableEntityArrayState.atom)).toEqual([]);
   });
 });

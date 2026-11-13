@@ -1,53 +1,62 @@
-import { useState } from 'react';
-import { useRecoilValue } from 'recoil';
+import { Trans, useLingui } from '@lingui/react/macro';
 
-import { useSignOutAndRedirect } from '@/auth/hooks/useSignOutAndRedirect';
+import { useAuth } from '@/auth/hooks/useAuth';
 import { currentUserState } from '@/auth/states/currentUserState';
-import { H2Title } from '@/ui/display/typography/components/H2Title';
-import {
-  ConfirmationModal,
-  StyledConfirmationButton,
-} from '@/ui/layout/modal/components/ConfirmationModal';
-import { useDeleteCurrentWorkspaceMutation } from '~/generated/graphql';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import { useRedirectToDefaultDomain } from '@/domain-manager/hooks/useRedirectToDefaultDomain';
+import { ConfirmationDialog } from '@/ui/layout/dialog/components/ConfirmationDialog';
+import { useDialog } from '@/ui/layout/dialog/hooks/useDialog';
+import { Section } from 'twenty-ui/components/layout';
+import { IconTrash } from 'twenty-ui/icon';
+import { Button } from 'twenty-ui/primitives/input';
+import { useMutation } from '@apollo/client/react';
+import { AppPath } from 'twenty-shared/types';
+import { DeleteCurrentWorkspaceDocument } from '~/generated-metadata/graphql';
+
+const DELETE_WORKSPACE_MODAL_ID = 'delete-workspace-modal';
 
 export const DeleteWorkspace = () => {
-  const [isDeleteWorkSpaceModalOpen, setIsDeleteWorkSpaceModalOpen] =
-    useState(false);
-
-  const [deleteCurrentWorkspace] = useDeleteCurrentWorkspaceMutation();
-  const currentUser = useRecoilValue(currentUserState);
+  const [deleteCurrentWorkspace] = useMutation(DeleteCurrentWorkspaceDocument);
+  const currentUser = useAtomStateValue(currentUserState);
   const userEmail = currentUser?.email;
+  const { t } = useLingui();
+  const { openDialog } = useDialog();
 
-  const handleLogout = useSignOutAndRedirect();
+  const { signOut } = useAuth();
+  const { redirectToDefaultDomain } = useRedirectToDefaultDomain();
 
   const deleteWorkspace = async () => {
     await deleteCurrentWorkspace();
-    handleLogout();
+    await signOut();
+    redirectToDefaultDomain({ pathname: AppPath.SignInUp });
   };
 
   return (
     <>
-      <H2Title title="Danger zone" description="Delete your whole workspace" />
-      <StyledConfirmationButton
-        onClick={() => setIsDeleteWorkSpaceModalOpen(true)}
-        variant="secondary"
-        title="Delete workspace"
+      <Section.Header
+        title={t`Danger zone`}
+        description={t`Delete your whole workspace`}
       />
+      <Button
+        startIcon={<IconTrash />}
+        onClick={() => openDialog(DELETE_WORKSPACE_MODAL_ID)}
+        variant="outline"
+        color="danger"
+      >{t`Delete workspace`}</Button>
 
-      <ConfirmationModal
+      <ConfirmationDialog
+        dialogId={DELETE_WORKSPACE_MODAL_ID}
         confirmationPlaceholder={userEmail}
         confirmationValue={userEmail}
-        isOpen={isDeleteWorkSpaceModalOpen}
-        setIsOpen={setIsDeleteWorkSpaceModalOpen}
-        title="Workspace Deletion"
+        title={t`Workspace Deletion`}
         subtitle={
-          <>
+          <Trans>
             This action cannot be undone. This will permanently delete your
             entire workspace. <br /> Please type in your email to confirm.
-          </>
+          </Trans>
         }
         onConfirmClick={deleteWorkspace}
-        deleteButtonText="Delete workspace"
+        confirmButtonText={t`Delete workspace`}
       />
     </>
   );

@@ -1,25 +1,33 @@
-import { act } from 'react-dom/test-utils';
-import { renderHook } from '@testing-library/react';
-import { RecoilRoot } from 'recoil';
+import { act, renderHook } from '@testing-library/react';
+import { Provider as JotaiProvider } from 'jotai';
 import { v4 as uuidv4 } from 'uuid';
 
-import { useDialogManagerScopedStates } from '@/ui/feedback/dialog-manager/hooks/internal/useDialogManagerScopedStates';
+import { DialogComponentInstanceContext } from '@/ui/feedback/dialog-manager/contexts/DialogComponentInstanceContext';
 import { useDialogManager } from '@/ui/feedback/dialog-manager/hooks/useDialogManager';
-import { DialogManagerScope } from '@/ui/feedback/dialog-manager/scopes/DialogManagerScope';
-import { DialogOptions } from '@/ui/feedback/dialog-manager/types/DialogOptions';
+import { dialogInternalComponentState } from '@/ui/feedback/dialog-manager/states/dialogInternalComponentState';
+import { type DialogOptions } from '@/ui/feedback/dialog-manager/types/DialogOptions';
+import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
+import {
+  jotaiStore,
+  resetJotaiStore,
+} from '@/ui/utilities/state/jotai/jotaiStore';
 
 const mockedUuid = 'mocked-uuid';
-jest.mock('uuid');
+jest.mock('uuid', () => ({
+  ...jest.requireActual('uuid'),
+  v4: jest.fn(),
+}));
 
 (uuidv4 as jest.Mock).mockReturnValue(mockedUuid);
 
-const dialogManagerScopeId = 'dialog-manager';
 const Wrapper = ({ children }: { children: React.ReactNode }) => (
-  <RecoilRoot>
-    <DialogManagerScope dialogManagerScopeId={dialogManagerScopeId}>
+  <JotaiProvider store={jotaiStore}>
+    <DialogComponentInstanceContext.Provider
+      value={{ instanceId: 'dialog-manager' }}
+    >
       {children}
-    </DialogManagerScope>
-  </RecoilRoot>
+    </DialogComponentInstanceContext.Provider>
+  </JotaiProvider>
 );
 
 const renderHookConfig = {
@@ -39,7 +47,7 @@ const dialogOptionsArray: DialogOptionsArray = [
       {
         title: 'Are you sure?',
         onClick: mockOnclick,
-        variant: 'primary',
+        variant: 'outline',
         role: 'confirm',
       },
     ],
@@ -52,7 +60,7 @@ const dialogOptionsArray: DialogOptionsArray = [
       {
         title: 'Are you sure?',
         onClick: mockOnclick,
-        variant: 'primary',
+        variant: 'outline',
         role: 'confirm',
       },
     ],
@@ -65,7 +73,7 @@ const dialogOptionsArray: DialogOptionsArray = [
       {
         title: 'Are you sure?',
         onClick: mockOnclick,
-        variant: 'primary',
+        variant: 'outline',
         role: 'confirm',
       },
     ],
@@ -75,12 +83,8 @@ const dialogOptionsArray: DialogOptionsArray = [
 const renderHooks = () => {
   const { result } = renderHook(
     () => ({
-      dialogManager: useDialogManager({
-        dialogManagerScopeId: dialogManagerScopeId,
-      }),
-      internalState: useDialogManagerScopedStates({
-        dialogManagerScopeId,
-      }),
+      dialogManager: useDialogManager(),
+      dialogInternal: useAtomComponentStateValue(dialogInternalComponentState),
     }),
     renderHookConfig,
   );
@@ -98,6 +102,10 @@ const expectedReturnFromEnqueue = (
 };
 
 describe('useDialogManager', () => {
+  beforeEach(() => {
+    resetJotaiStore();
+  });
+
   describe('tests for useDialogManager - enqueueDialog', () => {
     it('Should enqueueDialog', () => {
       const result = renderHooks();
@@ -108,7 +116,7 @@ describe('useDialogManager', () => {
         result.current.dialogManager.enqueueDialog(dialogOptionsArray[0]);
       });
 
-      const { dialogInternal } = result.current.internalState;
+      const { dialogInternal } = result.current;
 
       expect(dialogInternal.maxQueue).toEqual(2);
       expect(dialogInternal.queue).toHaveLength(1);
@@ -128,7 +136,7 @@ describe('useDialogManager', () => {
         result.current.dialogManager.enqueueDialog(dialogOptionsArray[1]);
       });
 
-      const { dialogInternal } = result.current.internalState;
+      const { dialogInternal } = result.current;
 
       expect(dialogInternal.maxQueue).toEqual(2);
       expect(dialogInternal.queue).toHaveLength(2);
@@ -149,7 +157,7 @@ describe('useDialogManager', () => {
         result.current.dialogManager.enqueueDialog(dialogOptionsArray[2]);
       });
 
-      const { dialogInternal } = result.current.internalState;
+      const { dialogInternal } = result.current;
 
       expect(dialogInternal.maxQueue).toEqual(2);
       expect(dialogInternal.queue).toHaveLength(2);
@@ -171,8 +179,7 @@ describe('useDialogManager', () => {
         dialogOptionsArray[1],
       ]);
 
-      const { dialogInternal: stateAfterEnqueue } =
-        result.current.internalState;
+      const { dialogInternal: stateAfterEnqueue } = result.current;
 
       expect(stateAfterEnqueue.maxQueue).toEqual(2);
       expect(stateAfterEnqueue.queue).toHaveLength(2);
@@ -187,7 +194,7 @@ describe('useDialogManager', () => {
         queue: [],
       };
 
-      const { dialogInternal: stateAfterClose } = result.current.internalState;
+      const { dialogInternal: stateAfterClose } = result.current;
 
       expect(stateAfterClose).toEqual(expectReturnWhenClose);
       expect(stateAfterClose.maxQueue).toEqual(2);

@@ -1,9 +1,8 @@
-import { Meta, StoryObj } from '@storybook/react';
-import { ComponentDecorator } from 'twenty-ui';
+import { Breadcrumb } from '@/ui/navigation/bread-crumb/components/Breadcrumb';
+import { type Meta, type StoryObj } from '@storybook/react-vite';
 
+import { ComponentDecorator } from 'twenty-ui/testing';
 import { ComponentWithRouterDecorator } from '~/testing/decorators/ComponentWithRouterDecorator';
-
-import { Breadcrumb } from '../Breadcrumb';
 
 const meta: Meta<typeof Breadcrumb> = {
   title: 'UI/Navigation/Breadcrumb/Breadcrumb',
@@ -15,6 +14,9 @@ const meta: Meta<typeof Breadcrumb> = {
       { children: 'Companies', href: '/link-2' },
       { children: 'New' },
     ],
+  },
+  parameters: {
+    container: { width: 350 },
   },
 };
 

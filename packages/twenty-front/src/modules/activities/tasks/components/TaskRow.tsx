@@ -1,137 +1,184 @@
-import { useTheme } from '@emotion/react';
-import styled from '@emotion/styled';
-import {
-  IconCalendar,
-  IconComment,
-  OverflowingTextWithTooltip,
-} from 'twenty-ui';
+import { styled } from '@linaria/react';
+import { isNonEmptyString } from '@sniptt/guards';
 
-import { useOpenActivityRightDrawer } from '@/activities/hooks/useOpenActivityRightDrawer';
-import { ActivityTargetsInlineCell } from '@/activities/inline-cell/components/ActivityTargetsInlineCell';
-import { Activity } from '@/activities/types/Activity';
-import { getActivitySummary } from '@/activities/utils/getActivitySummary';
-import { Checkbox, CheckboxShape } from '@/ui/input/components/Checkbox';
+import { LinkifiedText } from '@/ui/field/display/components/LinkifiedText/LinkifiedText';
 import { beautifyExactDate, hasDatePassed } from '~/utils/date-utils';
 
-import { useCompleteTask } from '../hooks/useCompleteTask';
-
-const StyledContainer = styled.div`
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid ${({ theme }) => theme.border.color.light};
-  cursor: pointer;
-  display: inline-flex;
-  height: ${({ theme }) => theme.spacing(12)};
-  min-width: calc(100% - ${({ theme }) => theme.spacing(8)});
-  padding: 0 ${({ theme }) => theme.spacing(4)};
-
-  &:last-child {
-    border-bottom: 0;
-  }
-`;
+import { ActivityRow } from '@/activities/components/ActivityRow';
+import { useActivityFieldComponentInstanceId } from '@/activities/hooks/useActivityFieldComponentInstanceId';
+import { useCompleteTask } from '@/activities/tasks/hooks/useCompleteTask';
+import { type Task } from '@/activities/types/Task';
+import { StopPropagationContainer } from '@/object-record/record-board/record-board-card/components/StopPropagationContainer';
+import { FieldContextProvider } from '@/object-record/record-field/ui/components/FieldContextProvider';
+import { useObjectMorphJunctionConfigOrThrow } from '@/object-record/record-field/ui/hooks/useObjectMorphJunctionConfigOrThrow';
+import { RecordFieldComponentInstanceContext } from '@/object-record/record-field/ui/states/contexts/RecordFieldComponentInstanceContext';
+import { RecordInlineCell } from '@/object-record/record-inline-cell/components/RecordInlineCell';
+import { getRecordFieldInputInstanceId } from '@/object-record/utils/getRecordFieldInputId';
+import { useOpenRecordInSidePanel } from '@/side-panel/hooks/useOpenRecordInSidePanel';
+import { getRichTextFieldTextLines } from '@/object-record/record-field/ui/utils/getRichTextFieldTextLines';
+import { StandardObjectNameSingular } from 'twenty-shared/types';
+import { OverflowingTextWithTooltip } from 'twenty-ui/primitives/typography';
+import { IconCalendar } from 'twenty-ui/icon';
+import { Checkbox } from 'twenty-ui/primitives/input';
+import { Card } from 'twenty-ui/primitives/surfaces';
+import { useTheme, themeCssVariables } from 'twenty-ui/theme';
+import { useLingui } from '@lingui/react/macro';
 
 const StyledTaskBody = styled.div`
-  color: ${({ theme }) => theme.font.color.tertiary};
+  color: ${themeCssVariables.font.color.tertiary};
   display: flex;
+  max-width: calc(80% - ${themeCssVariables.spacing[2]});
+  overflow: hidden;
+  padding-bottom: 1px;
+  text-overflow: ellipsis;
 `;
 
 const StyledTaskTitle = styled.div<{
   completed: boolean;
 }>`
-  color: ${({ theme }) => theme.font.color.primary};
-  font-weight: ${({ theme }) => theme.font.weight.medium};
-  padding: 0 ${({ theme }) => theme.spacing(2)};
-  text-decoration: ${({ completed }) => (completed ? 'line-through' : 'none')};
-`;
-
-const StyledCommentIcon = styled.div`
   align-items: center;
-  color: ${({ theme }) => theme.font.color.light};
-  display: flex;
-  margin-left: ${({ theme }) => theme.spacing(2)};
+  color: ${themeCssVariables.font.color.primary};
+  font-weight: ${themeCssVariables.font.weight.medium};
+  overflow: hidden;
+  padding: 0 ${themeCssVariables.spacing[2]};
+  padding-bottom: 1px;
+  text-decoration: ${({ completed }) => (completed ? 'line-through' : 'none')};
+  text-overflow: ellipsis;
+
+  white-space: nowrap;
 `;
 
 const StyledDueDate = styled.div<{
   isPast: boolean;
 }>`
   align-items: center;
-  color: ${({ theme, isPast }) =>
-    isPast ? theme.font.color.danger : theme.font.color.secondary};
+  color: ${({ isPast }) =>
+    isPast
+      ? themeCssVariables.font.color.danger
+      : themeCssVariables.font.color.secondary};
   display: flex;
-  gap: ${({ theme }) => theme.spacing(1)};
-  padding-left: ${({ theme }) => theme.spacing(2)};
+  gap: ${themeCssVariables.spacing[1]};
+  padding-left: ${themeCssVariables.spacing[1]};
   white-space: nowrap;
 `;
 
 const StyledRightSideContainer = styled.div`
-  display: flex;
+  align-items: center;
+  display: inline-flex;
+  max-width: 50%;
+`;
+
+const StyledActivityTargetsContainer = styled.div`
+  overflow: clip;
+  width: 100%;
 `;
 
 const StyledPlaceholder = styled.div`
-  color: ${({ theme }) => theme.font.color.light};
+  color: ${themeCssVariables.font.color.light};
 `;
 
 const StyledLeftSideContainer = styled.div`
+  align-items: center;
+  display: inline-flex;
   display: flex;
+  flex: 1;
+  overflow: hidden;
 `;
 
 const StyledCheckboxContainer = styled.div`
   display: flex;
 `;
 
-export const TaskRow = ({ task }: { task: Activity }) => {
+export const TaskRow = ({
+  task,
+  divider = false,
+}: {
+  task: Task;
+  divider?: boolean;
+}) => {
+  const { t } = useLingui();
   const theme = useTheme();
-  const openActivityRightDrawer = useOpenActivityRightDrawer();
+  const { openRecordInSidePanel } = useOpenRecordInSidePanel();
 
-  const body = getActivitySummary(task.body);
+  const body = getRichTextFieldTextLines(task?.bodyV2)[0] ?? '';
+
   const { completeTask } = useCompleteTask(task);
 
+  const junctionFieldName = useObjectMorphJunctionConfigOrThrow({
+    objectNameSingular: StandardObjectNameSingular.Task,
+  }).junctionField.name;
+
+  const instanceIdPrefix =
+    useActivityFieldComponentInstanceId('task-row-targets');
+  const componentInstanceId = getRecordFieldInputInstanceId({
+    recordId: task.id,
+    fieldName: junctionFieldName,
+    prefix: instanceIdPrefix,
+  });
+
   return (
-    <StyledContainer
+    <ActivityRow
+      divider={divider}
+      label={isNonEmptyString(task.title) ? task.title : t`Task title`}
       onClick={() => {
-        openActivityRightDrawer(task.id);
+        openRecordInSidePanel({
+          recordId: task.id,
+          objectNameSingular: StandardObjectNameSingular.Task,
+        });
       }}
     >
       <StyledLeftSideContainer>
-        <StyledCheckboxContainer
-          onClick={(e) => {
-            e.stopPropagation();
-          }}
+        <Card.Control
+          render={<StyledCheckboxContainer />}
+          onClick={(event) => event.stopPropagation()}
         >
           <Checkbox
-            checked={!!task.completedAt}
-            shape={CheckboxShape.Rounded}
+            checked={task.status === 'DONE'}
+            shape={'round'}
             onCheckedChange={completeTask}
           />
-        </StyledCheckboxContainer>
-        <StyledTaskTitle completed={task.completedAt !== null}>
-          {task.title || <StyledPlaceholder>Task title</StyledPlaceholder>}
+        </Card.Control>
+        <StyledTaskTitle completed={task.status === 'DONE'}>
+          {task.title || <StyledPlaceholder>{t`Task title`}</StyledPlaceholder>}
         </StyledTaskTitle>
-        <StyledTaskBody>
-          <OverflowingTextWithTooltip text={body} />
-          {task.comments && task.comments.length > 0 && (
-            <StyledCommentIcon>
-              <IconComment size={theme.icon.size.md} />
-            </StyledCommentIcon>
-          )}
-        </StyledTaskBody>
+        <Card.Control render={<StyledTaskBody />}>
+          <OverflowingTextWithTooltip
+            text={<LinkifiedText text={body} />}
+            tooltipContent={body}
+          />
+        </Card.Control>
       </StyledLeftSideContainer>
       <StyledRightSideContainer>
-        <ActivityTargetsInlineCell
-          activity={task}
-          showLabel={false}
-          maxWidth={200}
-          readonly
-        />
-        <StyledDueDate
-          isPast={
-            !!task.dueAt && hasDatePassed(task.dueAt) && !task.completedAt
-          }
-        >
-          <IconCalendar size={theme.icon.size.md} />
-          {task.dueAt && beautifyExactDate(task.dueAt)}
-        </StyledDueDate>
+        {task.dueAt && (
+          <StyledDueDate
+            isPast={hasDatePassed(task.dueAt) && task.status === 'TODO'}
+          >
+            <IconCalendar size={theme.icon.size.md} />
+            {beautifyExactDate(task.dueAt)}
+          </StyledDueDate>
+        )}
+        {
+          <Card.Control render={<StyledActivityTargetsContainer />}>
+            <FieldContextProvider
+              objectNameSingular={StandardObjectNameSingular.Task}
+              objectRecordId={task.id}
+              fieldMetadataName={junctionFieldName}
+              fieldPosition={0}
+              showLabel={false}
+              maxWidth={200}
+              isDisplayModeFixHeight
+            >
+              <StopPropagationContainer>
+                <RecordFieldComponentInstanceContext.Provider
+                  value={{ instanceId: componentInstanceId }}
+                >
+                  <RecordInlineCell instanceIdPrefix={instanceIdPrefix} />
+                </RecordFieldComponentInstanceContext.Provider>
+              </StopPropagationContainer>
+            </FieldContextProvider>
+          </Card.Control>
+        }
       </StyledRightSideContainer>
-    </StyledContainer>
+    </ActivityRow>
   );
 };

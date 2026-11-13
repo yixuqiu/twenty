@@ -1,11 +1,9 @@
-import { getObjectMetadataItemsMock } from '@/object-metadata/utils/getObjectMetadataItemsMock';
 import { isObjectMetadataAvailableForRelation } from '@/object-metadata/utils/isObjectMetadataAvailableForRelation';
-
-const mockObjectMetadataItems = getObjectMetadataItemsMock();
+import { getTestEnrichedObjectMetadataItemsMock } from '~/testing/utils/getTestEnrichedObjectMetadataItemsMock';
 
 describe('isObjectMetadataAvailableForRelation', () => {
   it('should work as expected', () => {
-    const objectMetadataItem = mockObjectMetadataItems.find(
+    const objectMetadataItem = getTestEnrichedObjectMetadataItemsMock().find(
       (item) => item.nameSingular === 'person',
     )!;
 

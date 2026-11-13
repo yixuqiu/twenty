@@ -1,37 +1,26 @@
-import {
-  IconComponent,
-  IconLayersLinked,
-  IconRelationOneToOne,
-} from 'twenty-ui';
-
-import { RelationMetadataType } from '~/generated-metadata/graphql';
-
-import OneToManySvg from '../assets/OneToMany.svg';
-import OneToOneSvg from '../assets/OneToOne.svg';
-import { RelationType } from '../types/RelationType';
+import { type MessageDescriptor } from '@lingui/core';
+import { msg } from '@lingui/core/macro';
+import { type IconComponent, IllustrationIconOneToMany } from 'twenty-ui/icon';
+import { RelationType } from '~/generated-metadata/graphql';
+import OneToManySvg from '@/settings/data-model/assets/OneToMany.svg';
 
 export const RELATION_TYPES: Record<
   RelationType,
   {
-    label: string;
+    label: MessageDescriptor;
     Icon: IconComponent;
     imageSrc: string;
     isImageFlipped?: boolean;
   }
 > = {
-  [RelationMetadataType.OneToMany]: {
-    label: 'Has many',
-    Icon: IconLayersLinked,
+  [RelationType.ONE_TO_MANY]: {
+    label: msg`Has many`,
+    Icon: IllustrationIconOneToMany,
     imageSrc: OneToManySvg,
   },
-  [RelationMetadataType.OneToOne]: {
-    label: 'Has one',
-    Icon: IconRelationOneToOne,
-    imageSrc: OneToOneSvg,
-  },
-  MANY_TO_ONE: {
-    label: 'Belongs to one',
-    Icon: IconLayersLinked,
+  [RelationType.MANY_TO_ONE]: {
+    label: msg`Belongs to one`,
+    Icon: IllustrationIconOneToMany,
     imageSrc: OneToManySvg,
     isImageFlipped: true,
   },

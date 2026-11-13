@@ -1,23 +1,24 @@
-import { ReactNode } from 'react';
-import { Button } from '@react-email/button';
+import { type JSX } from 'react';
+import { Button } from 'react-email';
 
-import { emailTheme } from 'src/common-style';
+import { canvasTheme } from 'src/common-style';
 
 const callToActionStyle = {
-  display: 'flex',
+  display: 'inline-flex',
   padding: '8px 32px',
-  borderRadius: '8px',
-  border: `1px solid ${emailTheme.background.transparent.light}`,
-  background: emailTheme.background.radialGradient,
-  boxShadow: `0px 2px 4px 0px ${emailTheme.background.transparent.light}, 0px 0px 4px 0px ${emailTheme.background.transparent.medium}`,
-  color: emailTheme.font.colors.inverted,
-  fontSize: emailTheme.font.size.md,
-  fontWeight: emailTheme.font.weight.bold,
+  borderRadius: canvasTheme.border.radius.md,
+  border: `1px solid ${canvasTheme.background.transparent.light}`,
+  background: canvasTheme.background.button,
+  boxShadow: `0px 2px 4px 0px ${canvasTheme.background.transparent.light}, 0px 0px 4px 0px ${canvasTheme.background.transparent.medium}`,
+  color: canvasTheme.font.colors.inverted,
+  fontSize: canvasTheme.font.size.md,
+  fontWeight: canvasTheme.font.weight.bold,
+  width: 'auto',
 };
 
 type CallToActionProps = {
   href: string;
-  value: ReactNode;
+  value: JSX.Element | JSX.Element[] | string;
 };
 
 export const CallToAction = ({ value, href }: CallToActionProps) => {

@@ -1,10 +1,9 @@
-import { useTheme } from '@emotion/react';
-import styled from '@emotion/styled';
+import { styled } from '@linaria/react';
 import { motion } from 'framer-motion';
-import { AnimatedCheckmark } from 'twenty-ui';
 
-import { MOBILE_VIEWPORT } from '@/ui/theme/constants/MobileViewport';
-import { useIsMobile } from '@/ui/utilities/responsive/hooks/useIsMobile';
+import { AnimatedCheckmark } from '@/ui/navigation/step-bar/components/internal/AnimatedCheckmark/AnimatedCheckmark';
+import { useIsMobile } from 'twenty-ui/utilities';
+import { MOBILE_VIEWPORT, useTheme, themeCssVariables } from 'twenty-ui/theme';
 
 const StyledContainer = styled.div<{ isLast: boolean }>`
   align-items: center;
@@ -15,11 +14,16 @@ const StyledContainer = styled.div<{ isLast: boolean }>`
   }
 `;
 
-const StyledStepCircle = styled(motion.div)`
+const StyledStepCircleBase = styled.div<{ isInNextSteps: boolean }>`
   align-items: center;
+  border-color: ${({ isInNextSteps }) =>
+    isInNextSteps
+      ? themeCssVariables.border.color.medium
+      : themeCssVariables.border.color.inverted} !important;
   border-radius: 50%;
   border-style: solid;
   border-width: 1px;
+  corner-shape: round;
   display: flex;
   flex-basis: auto;
   flex-shrink: 0;
@@ -30,93 +34,115 @@ const StyledStepCircle = styled(motion.div)`
   width: 20px;
 `;
 
-const StyledStepIndex = styled.span`
-  color: ${({ theme }) => theme.font.color.tertiary};
-  font-size: ${({ theme }) => theme.font.size.md};
-  font-weight: ${({ theme }) => theme.font.weight.medium};
+const StyledStepCircle = motion.create(StyledStepCircleBase);
+
+const StyledStepIndex = styled.span<{ isCurrentStep: boolean }>`
+  color: ${({ isCurrentStep }) =>
+    isCurrentStep
+      ? themeCssVariables.font.color.inverted
+      : themeCssVariables.font.color.tertiary};
+  font-size: ${themeCssVariables.font.size.md};
+  font-weight: ${themeCssVariables.font.weight.medium};
 `;
 
-const StyledStepLabel = styled.span<{ isActive: boolean }>`
-  color: ${({ theme, isActive }) =>
-    isActive ? theme.font.color.primary : theme.font.color.tertiary};
-  font-size: ${({ theme }) => theme.font.size.md};
-  font-weight: ${({ theme }) => theme.font.weight.medium};
-  margin-left: ${({ theme }) => theme.spacing(2)};
+const StyledStepLabel = styled.span<{ isInNextSteps: boolean }>`
+  color: ${({ isInNextSteps }) =>
+    isInNextSteps
+      ? themeCssVariables.font.color.tertiary
+      : themeCssVariables.font.color.primary};
+  font-size: ${themeCssVariables.font.size.md};
+  font-weight: ${themeCssVariables.font.weight.semiBold};
+  margin-left: ${themeCssVariables.spacing[2]};
   white-space: nowrap;
 `;
 
-const StyledStepLine = styled(motion.div)`
+const StyledStepLineBase = styled.div`
   height: 2px;
-  margin-left: ${({ theme }) => theme.spacing(2)};
-  margin-right: ${({ theme }) => theme.spacing(2)};
+  margin-left: ${themeCssVariables.spacing[2]};
+  margin-right: ${themeCssVariables.spacing[2]};
   overflow: hidden;
   width: 100%;
 `;
 
+const StyledStepLine = motion.create(StyledStepLineBase);
+
 export type StepProps = React.PropsWithChildren &
   React.ComponentProps<'div'> & {
-    isActive?: boolean;
     isLast?: boolean;
     index?: number;
     label: string;
+    activeStep?: number;
   };
 
 export const Step = ({
-  isActive = false,
   isLast = false,
   index = 0,
   label,
   children,
+  activeStep = 0,
 }: StepProps) => {
-  const theme = useTheme();
   const isMobile = useIsMobile();
-
-  const variantsCircle = {
-    active: {
-      backgroundColor: theme.font.color.primary,
-      borderColor: theme.font.color.primary,
-      transition: { duration: 0.5 },
-    },
-    inactive: {
-      backgroundColor: theme.background.transparent.lighter,
-      borderColor: theme.border.color.medium,
-      transition: { duration: 0.5 },
-    },
-  };
+  const theme = useTheme();
 
   const variantsLine = {
-    active: {
+    previous: {
       backgroundColor: theme.font.color.primary,
       transition: { duration: 0.5 },
     },
-    inactive: {
+    next: {
       backgroundColor: theme.border.color.medium,
       transition: { duration: 0.5 },
     },
   };
 
+  const variantsCircle = {
+    current: {
+      backgroundColor: theme.background.invertedPrimary,
+      transition: { duration: 0.5 },
+    },
+    previous: {
+      backgroundColor: theme.background.secondary,
+      transition: { duration: 0.5 },
+    },
+    next: {
+      backgroundColor: theme.background.tertiary,
+      transition: { duration: 0.5 },
+    },
+  };
+
+  const isInPreviousSteps = activeStep > index;
+  const isCurrentStep = activeStep === index;
+  const isInNextSteps = activeStep < index;
+
   return (
     <StyledContainer isLast={isLast}>
       <StyledStepCircle
         variants={variantsCircle}
-        animate={isActive ? 'active' : 'inactive'}
+        animate={
+          isCurrentStep ? 'current' : isInPreviousSteps ? 'previous' : 'next'
+        }
+        isInNextSteps={isInNextSteps}
       >
-        {isActive && (
+        {isInPreviousSteps && (
           <AnimatedCheckmark
-            isAnimating={isActive}
-            color={theme.grayScale.gray0}
+            isAnimating={isInPreviousSteps}
+            color={theme.grayScale.gray12}
           />
         )}
-        {!isActive && <StyledStepIndex>{index + 1}</StyledStepIndex>}
+        {!isInPreviousSteps && (
+          <StyledStepIndex isCurrentStep={isCurrentStep}>
+            {index + 1}
+          </StyledStepIndex>
+        )}
       </StyledStepCircle>
-      <StyledStepLabel isActive={isActive}>{label}</StyledStepLabel>
+      <StyledStepLabel isInNextSteps={isInNextSteps}>{label}</StyledStepLabel>
       {!isLast && !isMobile && (
         <StyledStepLine
           variants={variantsLine}
-          animate={isActive ? 'active' : 'inactive'}
+          animate={isInPreviousSteps ? 'previous' : 'next'}
         />
       )}
-      {isActive && children}
+      {(isInPreviousSteps || isCurrentStep) && children}
     </StyledContainer>
   );
 };

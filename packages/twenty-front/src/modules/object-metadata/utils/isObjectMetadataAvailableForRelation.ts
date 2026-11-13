@@ -1,16 +1,16 @@
-import { CoreObjectNameSingular } from '@/object-metadata/types/CoreObjectNameSingular';
-import { ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
+import { StandardObjectNameSingular } from 'twenty-shared/types';
+import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/EnrichedObjectMetadataItem';
 
 export const isObjectMetadataAvailableForRelation = (
   objectMetadataItem: Pick<
-    ObjectMetadataItem,
+    EnrichedObjectMetadataItem,
     'isSystem' | 'nameSingular' | 'isRemote'
   >,
 ) => {
   return (
     (!objectMetadataItem.isSystem ||
       objectMetadataItem.nameSingular ===
-        CoreObjectNameSingular.WorkspaceMember) &&
+        StandardObjectNameSingular.WorkspaceMember) &&
     !objectMetadataItem.isRemote
   );
 };

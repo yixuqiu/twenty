@@ -1,31 +1,25 @@
 import { renderHook } from '@testing-library/react';
 
 import { useNotes } from '@/activities/notes/hooks/useNotes';
-import { ActivityTargetableObject } from '@/activities/types/ActivityTargetableEntity';
+import { type ActivityTargetableObject } from '@/activities/types/ActivityTargetableEntity';
 
 jest.mock('@/activities/hooks/useActivities', () => ({
   useActivities: jest.fn(() => ({
-    activities: [{ id: '1', content: 'Example Note' }],
+    activities: [{ id: '1', content: 'Example Note', __typename: 'Note' }],
     loading: false,
+    fetchMoreActivities: jest.fn(),
   })),
 }));
 
-jest.mock('recoil', () => {
-  const actualRecoil = jest.requireActual('recoil');
-  return {
-    ...actualRecoil,
-    useRecoilState: jest.fn(() => {
-      const mockCurrentNotesQueryVariables = {
-        filter: {
-          type: { eq: 'Note' },
-        },
-        orderBy: 'mockOrderBy',
-      };
-      return [mockCurrentNotesQueryVariables, jest.fn()];
-    }),
-    atom: jest.fn(),
-  };
-});
+jest.mock('@/ui/utilities/state/jotai/hooks/useAtomState', () => ({
+  useAtomState: jest.fn(() => {
+    const mockCurrentNotesQueryVariables = {
+      filter: {},
+      orderBy: 'mockOrderBy',
+    };
+    return [mockCurrentNotesQueryVariables, jest.fn()];
+  }),
+}));
 
 describe('useNotes', () => {
   it('should return notes, and loading as expected', () => {
@@ -36,7 +30,7 @@ describe('useNotes', () => {
     const { result } = renderHook(() => useNotes(mockTargetableObject));
 
     expect(result.current.notes).toEqual([
-      { id: '1', content: 'Example Note' },
+      { id: '1', content: 'Example Note', __typename: 'Note' },
     ]);
     expect(result.current.loading).toBe(false);
   });

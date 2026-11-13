@@ -2,15 +2,38 @@ export type Company = {
   __typename: 'Company';
   id: string;
   createdAt: string;
-  updatedAt: string;
-  deletedAt: string | null;
+  updatedAt?: string;
+  deletedAt?: string | null;
   name: string;
-  domainName: string;
-  address: string;
-  accountOwnerId: string | null;
-  linkedinLink: { url: string; label: string };
-  xLink: { url: string; label: string };
-  annualRecurringRevenue: { amountMicros: number | null; currencyCode: string };
-  employees: number | null;
-  idealCustomerProfile: boolean;
+  domainName:
+    | string
+    | {
+        __typename?: 'Links';
+        primaryLinkUrl: string;
+        primaryLinkLabel: string;
+        secondaryLinks: never[] | [];
+      };
+  address: {
+    __typename?: 'Address';
+    addressStreet1: string;
+    addressStreet2: string;
+    addressCity: string;
+    addressState: string;
+    addressPostcode: string;
+    addressCountry: string;
+    addressLat: number | null;
+    addressLng: number | null;
+  };
+  accountOwnerId?: string | null;
+  position?: number;
+  linkedinLink: {
+    __typename?: 'Links';
+    primaryLinkUrl: string;
+    primaryLinkLabel: string;
+  };
+  annualRevenue?: {
+    __typename?: 'Currency';
+    amountMicros: number | null;
+    currencyCode: string;
+  } | null;
 };

@@ -1,55 +1,129 @@
-import { useState } from 'react';
-import { useRecoilValue } from 'recoil';
-
-import { useSignOutAndRedirect } from '@/auth/hooks/useSignOutAndRedirect';
+import { useAuth } from '@/auth/hooks/useAuth';
+import { availableWorkspacesState } from '@/auth/states/availableWorkspacesState';
 import { currentUserState } from '@/auth/states/currentUserState';
-import { H2Title } from '@/ui/display/typography/components/H2Title';
-import { Button } from '@/ui/input/button/components/Button';
-import { ConfirmationModal } from '@/ui/layout/modal/components/ConfirmationModal';
-import { useDeleteUserAccountMutation } from '~/generated/graphql';
+import { currentWorkspaceMemberState } from '@/auth/states/currentWorkspaceMemberState';
+import { countAvailableWorkspaces } from '@/auth/utils/availableWorkspacesUtils';
+import { ConfirmationDialog } from '@/ui/layout/dialog/components/ConfirmationDialog';
+import { useDialog } from '@/ui/layout/dialog/hooks/useDialog';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import { useMutation } from '@apollo/client/react';
+import { styled } from '@linaria/react';
+import { useLingui } from '@lingui/react/macro';
+import { isDefined } from 'twenty-shared/utils';
+import { useToast } from 'twenty-ui/components/feedback';
+import { Section } from 'twenty-ui/components/layout';
+import { Button } from 'twenty-ui/primitives/input';
+import { themeCssVariables } from 'twenty-ui/theme';
+import {
+  DeleteUserAccountDocument,
+  DeleteUserWorkspaceDocument,
+} from '~/generated-metadata/graphql';
+
+const DELETE_ACCOUNT_MODAL_ID = 'delete-account-modal';
+const LEAVE_WORKSPACE_MODAL_ID = 'leave-workspace-modal';
+
+const StyledDangerActions = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: ${themeCssVariables.spacing[2]};
+`;
 
 export const DeleteAccount = () => {
-  const [isDeleteAccountModalOpen, setIsDeleteAccountModalOpen] =
-    useState(false);
+  const { t } = useLingui();
+  const { openDialog } = useDialog();
+  const { enqueueToast } = useToast();
 
-  const [deleteUserAccount] = useDeleteUserAccountMutation();
-  const currentUser = useRecoilValue(currentUserState);
+  const [deleteUserAccount] = useMutation(DeleteUserAccountDocument);
+  const [deleteUserFromWorkspace] = useMutation(DeleteUserWorkspaceDocument);
+  const currentUser = useAtomStateValue(currentUserState);
   const userEmail = currentUser?.email;
-  const handleLogout = useSignOutAndRedirect();
+  const currentWorkspaceMember = useAtomStateValue(currentWorkspaceMemberState);
+  const currentWorkspaceMemberId = currentWorkspaceMember?.id;
+  const { signOut } = useAuth();
+  const availableWorkspaces = useAtomStateValue(availableWorkspacesState);
+  const availableWorkspacesCount =
+    countAvailableWorkspaces(availableWorkspaces);
+
+  const userHasMultipleWorkspaces = availableWorkspacesCount > 1;
 
   const deleteAccount = async () => {
     await deleteUserAccount();
-    handleLogout();
+    await signOut();
+  };
+
+  const leaveWorkspace = async () => {
+    if (!isDefined(currentWorkspaceMemberId)) {
+      enqueueToast({
+        status: 'error',
+        children: t`Current workspace member not found.`,
+      });
+      return;
+    }
+
+    await deleteUserFromWorkspace?.({
+      variables: {
+        workspaceMemberIdToDelete: currentWorkspaceMemberId,
+      },
+    });
+    await signOut();
   };
 
   return (
     <>
-      <H2Title
-        title="Danger zone"
-        description="Delete account and all the associated data"
+      <Section.Header
+        title={t`Danger zone`}
+        description={
+          userHasMultipleWorkspaces
+            ? t`Delete account and all the associated data or leave workspace`
+            : t`Delete account and all the associated data`
+        }
       />
-
-      <Button
-        accent="danger"
-        onClick={() => setIsDeleteAccountModalOpen(true)}
-        variant="secondary"
-        title="Delete account"
-      />
-
-      <ConfirmationModal
+      <StyledDangerActions>
+        {userHasMultipleWorkspaces && (
+          <Button
+            onClick={() => openDialog(LEAVE_WORKSPACE_MODAL_ID)}
+            variant="outline"
+            color="danger"
+          >{t`Leave workspace`}</Button>
+        )}
+        <Button
+          onClick={() => openDialog(DELETE_ACCOUNT_MODAL_ID)}
+          variant="outline"
+          color="danger"
+        >{t`Delete account`}</Button>
+      </StyledDangerActions>
+      {userHasMultipleWorkspaces && (
+        <ConfirmationDialog
+          confirmationValue={userEmail}
+          confirmationPlaceholder={userEmail ?? ''}
+          dialogId={LEAVE_WORKSPACE_MODAL_ID}
+          title={t`Leave workspace`}
+          subtitle={
+            <>
+              {t`This action cannot be undone. Your membership will be removed; synced emails and calendars stay with the workspace.`}
+              <br />
+              {t`Please type in your email to confirm.`}
+            </>
+          }
+          onConfirmClick={leaveWorkspace}
+          confirmButtonText={t`Leave workspace`}
+        />
+      )}
+      <ConfirmationDialog
         confirmationValue={userEmail}
         confirmationPlaceholder={userEmail ?? ''}
-        isOpen={isDeleteAccountModalOpen}
-        setIsOpen={setIsDeleteAccountModalOpen}
-        title="Account Deletion"
+        dialogId={DELETE_ACCOUNT_MODAL_ID}
+        title={t`Account Deletion`}
         subtitle={
           <>
-            This action cannot be undone. This will permanently delete your
-            entire account. <br /> Please type in your email to confirm.
+            {t`This action cannot be undone. This will permanently delete your
+            entire account.`}
+            <br />
+            {t`Please type in your email to confirm.`}
           </>
         }
         onConfirmClick={deleteAccount}
-        deleteButtonText="Delete account"
+        confirmButtonText={t`Delete account`}
       />
     </>
   );

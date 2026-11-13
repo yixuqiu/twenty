@@ -1,74 +1,55 @@
-import { useRecoilCallback } from 'recoil';
+import { useCallback } from 'react';
 
 import { objectMetadataItemFamilySelector } from '@/object-metadata/states/objectMetadataItemFamilySelector';
-import { RelationType } from '@/settings/data-model/types/RelationType';
-import {
-  FieldMetadataType,
-  RelationMetadataType,
-} from '~/generated-metadata/graphql';
+import { FieldMetadataType } from '~/generated-metadata/graphql';
 
-import { FieldMetadataItem } from '../types/FieldMetadataItem';
+import { type FieldMetadataItem } from '@/object-metadata/types/FieldMetadataItem';
+import { useStore } from 'jotai';
 
-export const useGetRelationMetadata = () =>
-  useRecoilCallback(
-    ({ snapshot }) =>
-      ({
-        fieldMetadataItem,
-      }: {
-        fieldMetadataItem: Pick<
-          FieldMetadataItem,
-          'fromRelationMetadata' | 'toRelationMetadata' | 'type'
-        >;
-      }) => {
-        if (fieldMetadataItem.type !== FieldMetadataType.Relation) return null;
+export const useGetRelationMetadata = () => {
+  const store = useStore();
 
-        const relationMetadata =
-          fieldMetadataItem.fromRelationMetadata ||
-          fieldMetadataItem.toRelationMetadata;
+  return useCallback(
+    ({
+      fieldMetadataItem,
+    }: {
+      fieldMetadataItem: Pick<FieldMetadataItem, 'type' | 'relation'>;
+    }) => {
+      if (fieldMetadataItem.type !== FieldMetadataType.RELATION) {
+        return null;
+      }
 
-        if (!relationMetadata) return null;
+      const relation = fieldMetadataItem.relation;
 
-        const relationFieldMetadataId =
-          'toFieldMetadataId' in relationMetadata
-            ? relationMetadata.toFieldMetadataId
-            : relationMetadata.fromFieldMetadataId;
+      if (!relation) {
+        return null;
+      }
 
-        if (!relationFieldMetadataId) return null;
+      const relationObjectMetadataItem = store.get(
+        objectMetadataItemFamilySelector.selectorFamily({
+          objectName: relation.targetObjectMetadata.nameSingular,
+          objectNameType: 'singular',
+        }),
+      );
 
-        const relationType =
-          relationMetadata.relationType === RelationMetadataType.OneToMany &&
-          fieldMetadataItem.toRelationMetadata
-            ? 'MANY_TO_ONE'
-            : (relationMetadata.relationType as RelationType);
+      if (!relationObjectMetadataItem) {
+        return null;
+      }
 
-        const relationObjectMetadataNameSingular =
-          'toObjectMetadata' in relationMetadata
-            ? relationMetadata.toObjectMetadata.nameSingular
-            : relationMetadata.fromObjectMetadata.nameSingular;
+      const relationFieldMetadataItem = relationObjectMetadataItem.fields.find(
+        (field) => field.id === relation.targetFieldMetadata.id,
+      );
 
-        const relationObjectMetadataItem = snapshot
-          .getLoadable(
-            objectMetadataItemFamilySelector({
-              objectName: relationObjectMetadataNameSingular,
-              objectNameType: 'singular',
-            }),
-          )
-          .getValue();
+      if (!relationFieldMetadataItem) {
+        return null;
+      }
 
-        if (!relationObjectMetadataItem) return null;
-
-        const relationFieldMetadataItem =
-          relationObjectMetadataItem.fields.find(
-            (field) => field.id === relationFieldMetadataId,
-          );
-
-        if (!relationFieldMetadataItem) return null;
-
-        return {
-          relationFieldMetadataItem,
-          relationObjectMetadataItem,
-          relationType,
-        };
-      },
-    [],
+      return {
+        relationFieldMetadataItem,
+        relationObjectMetadataItem,
+        relationType: relation.type,
+      };
+    },
+    [store],
   );
+};

@@ -1,25 +1,19 @@
-import { Meta, StoryObj } from '@storybook/react';
-import { within } from '@storybook/test';
+import { type Meta, type StoryObj } from '@storybook/react-vite';
+import { within } from 'storybook/test';
 
-import { ComponentWithRouterDecorator } from '~/testing/decorators/ComponentWithRouterDecorator';
-import { HelmetProviderDecorator } from '~/testing/decorators/HelmetProviderDecorator';
-import { PageDecoratorArgs } from '~/testing/decorators/PageDecorator';
-import { RelationPickerDecorator } from '~/testing/decorators/RelationPickerDecorator';
-import { SnackBarDecorator } from '~/testing/decorators/SnackBarDecorator';
+import {
+  PageDecorator,
+  type PageDecoratorArgs,
+} from '~/testing/decorators/PageDecorator';
 import { graphqlMocks } from '~/testing/graphqlMocks';
 
-import { NotFound } from '../NotFound';
+import { NotFound } from '~/pages/not-found/NotFound';
 const meta: Meta<PageDecoratorArgs> = {
   title: 'Pages/NotFound/Default',
   component: NotFound,
-  decorators: [
-    HelmetProviderDecorator,
-    ComponentWithRouterDecorator,
-    SnackBarDecorator,
-    RelationPickerDecorator,
-  ],
+  decorators: [PageDecorator],
   args: {
-    routePath: 'toto-not-found',
+    routePath: '/toto-not-found',
   },
   parameters: {
     msw: graphqlMocks,
@@ -34,5 +28,6 @@ export const Default: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByText('Off the beaten path');
+    await canvas.findByRole('button', { name: 'New Company' });
   },
 };

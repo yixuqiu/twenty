@@ -1,43 +1,39 @@
-import { ReactNode, useEffect } from 'react';
-import { MockedProvider } from '@apollo/client/testing';
+import { MockedProvider } from '@apollo/client/testing/react';
 import { renderHook } from '@testing-library/react';
-import { RecoilRoot, useSetRecoilState } from 'recoil';
+import { type ReactNode } from 'react';
+import { Provider as JotaiProvider } from 'jotai';
 
 import { useGetRelationMetadata } from '@/object-metadata/hooks/useGetRelationMetadata';
-import { objectMetadataItemsState } from '@/object-metadata/states/objectMetadataItemsState';
-import { getObjectMetadataItemsMock } from '@/object-metadata/utils/getObjectMetadataItemsMock';
+import { jotaiStore } from '@/ui/utilities/state/jotai/jotaiStore';
+import { setTestObjectMetadataItemsInMetadataStore } from '~/testing/utils/setTestObjectMetadataItemsInMetadataStore';
+import { getTestEnrichedObjectMetadataItemsMock } from '~/testing/utils/getTestEnrichedObjectMetadataItemsMock';
 
 const Wrapper = ({ children }: { children: ReactNode }) => (
-  <RecoilRoot>
-    <MockedProvider addTypename={false}>{children}</MockedProvider>
-  </RecoilRoot>
+  <JotaiProvider store={jotaiStore}>
+    <MockedProvider>{children}</MockedProvider>
+  </JotaiProvider>
 );
 
 describe('useGetRelationMetadata', () => {
+  beforeEach(() => {
+    setTestObjectMetadataItemsInMetadataStore(
+      jotaiStore,
+      getTestEnrichedObjectMetadataItemsMock(),
+    );
+  });
+
   it('should return correct properties', async () => {
-    const objectMetadataItems = getObjectMetadataItemsMock();
-    const objectMetadata = objectMetadataItems.find(
+    const objectMetadata = getTestEnrichedObjectMetadataItemsMock().find(
       (item) => item.nameSingular === 'person',
     )!;
     const fieldMetadataItem = objectMetadata.fields.find(
-      (field) => field.name === 'opportunities',
+      (field) => field.name === 'pointOfContactForOpportunities',
     )!;
 
-    const { result } = renderHook(
-      () => {
-        const setMetadataItems = useSetRecoilState(objectMetadataItemsState);
-
-        useEffect(() => {
-          setMetadataItems(objectMetadataItems);
-        }, [setMetadataItems]);
-
-        return useGetRelationMetadata();
-      },
-      {
-        wrapper: Wrapper,
-        initialProps: {},
-      },
-    );
+    const { result } = renderHook(() => useGetRelationMetadata(), {
+      wrapper: Wrapper,
+      initialProps: {},
+    });
 
     const {
       relationFieldMetadataItem,
@@ -45,19 +41,20 @@ describe('useGetRelationMetadata', () => {
       relationType,
     } = result.current({ fieldMetadataItem }) ?? {};
 
-    const expectedRelationObjectMetadataItem = objectMetadataItems.find(
-      (item) => item.nameSingular === 'opportunity',
-    );
+    const expectedRelationObjectMetadataItem =
+      getTestEnrichedObjectMetadataItemsMock().find(
+        (item) => item.nameSingular === 'opportunity',
+      );
     const expectedRelationFieldMetadataItem =
       expectedRelationObjectMetadataItem?.fields.find(
-        (field) => field.name === 'person',
+        (field) => field.name === 'pointOfContact',
       );
 
-    expect(relationObjectMetadataItem).toEqual(
-      expectedRelationObjectMetadataItem,
+    expect(relationObjectMetadataItem).toMatchObject(
+      expectedRelationObjectMetadataItem!,
     );
-    expect(relationFieldMetadataItem).toEqual(
-      expectedRelationFieldMetadataItem,
+    expect(relationFieldMetadataItem).toMatchObject(
+      expectedRelationFieldMetadataItem!,
     );
     expect(relationType).toBe('ONE_TO_MANY');
   });

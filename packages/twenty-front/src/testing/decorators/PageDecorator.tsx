@@ -1,38 +1,79 @@
-import { HelmetProvider } from 'react-helmet-async';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { ApolloProvider } from '@apollo/client';
-import { loadDevMessages } from '@apollo/client/dev';
-import { Decorator } from '@storybook/react';
-import { RecoilRoot } from 'recoil';
-
+import { AppNavigatorProvider } from '@/app/components/AppNavigatorProvider';
+import { WorkspaceRouteObjectsProvider } from '@/app/routing/components/WorkspaceRouteObjectsProvider';
+import { type WorkspaceRouteObject } from '@/app/routing/types/WorkspaceRouteObject';
 import { ClientConfigProviderEffect } from '@/client-config/components/ClientConfigProviderEffect';
-import { ObjectMetadataItemsProvider } from '@/object-metadata/components/ObjectMetadataItemsProvider';
-import { ApolloMetadataClientMockedProvider } from '@/object-metadata/hooks/__mocks__/ApolloMetadataClientProvider';
-import { SnackBarProviderScope } from '@/ui/feedback/snack-bar-manager/scopes/SnackBarProviderScope';
-import { UserProviderEffect } from '@/users/components/UserProviderEffect';
-import { ClientConfigProvider } from '~/modules/client-config/components/ClientConfigProvider';
-import { DefaultLayout } from '~/modules/ui/layout/page/DefaultLayout';
-import { UserProvider } from '~/modules/users/components/UserProvider';
+import { MinimalMetadataGate } from '@/metadata-store/components/MinimalMetadataGate';
+import { ApolloCoreClientMockedProvider } from '@/object-metadata/hooks/__mocks__/ApolloCoreClientMockedProvider';
+import { loadDevMessages } from '@apollo/client/dev';
+import { ApolloProvider } from '@apollo/client/react';
+import { HelmetProvider } from '@dr.pogodin/react-helmet';
+import { type Decorator } from '@storybook/react-vite';
+import { Provider as JotaiProvider } from 'jotai';
+import { RouterProvider, createMemoryRouter } from 'react-router-dom';
+
+import { UserMetadataProviderInitialEffect } from '@/metadata-store/effect-components/UserMetadataProviderInitialEffect';
+import { DefaultLayout } from '@/app/components/DefaultLayout';
+import { jotaiStore } from '@/ui/utilities/state/jotai/jotaiStore';
+import { UserContextProvider } from '@/users/components/UserContextProvider';
+import { type JSX, useState } from 'react';
+import { ClientConfigProvider } from '@/client-config/components/ClientConfigProvider';
+import { MockedMetadataLoadEffect } from '~/testing/decorators/MockedMetadataLoadEffect';
 import { mockedApolloClient } from '~/testing/mockedApolloClient';
 
-import { FullHeightStorybookLayout } from '../FullHeightStorybookLayout';
+import { RouteContextStoreProvider } from '@/context-store/components/RouteContextStoreProvider';
+import { MAIN_CONTEXT_STORE_INSTANCE_ID } from '@/context-store/constants/MainContextStoreInstanceId';
+import { ContextStoreComponentInstanceContext } from '@/context-store/states/contexts/ContextStoreComponentInstanceContext';
+import { PreComputedChipGeneratorsProvider } from '@/object-metadata/components/PreComputedChipGeneratorsProvider';
+import { RecordComponentInstanceContextsWrapper } from '@/object-record/components/RecordComponentInstanceContextsWrapper';
+import { WorkspaceProviderEffect } from '@/workspace/components/WorkspaceProviderEffect';
+import { i18n } from '@lingui/core';
+import { I18nProvider } from '@lingui/react';
+import { SOURCE_LOCALE } from 'twenty-shared/translations';
+import { ToastProvider } from 'twenty-ui/components/feedback';
+import { IconsProvider } from 'twenty-ui/icon/provider';
+import { FullHeightStorybookLayout } from '~/testing/FullHeightStorybookLayout';
+import { dynamicActivate } from '~/utils/i18n/dynamicActivate';
 
 export type PageDecoratorArgs = {
   routePath: string;
   routeParams: RouteParams;
   additionalRoutes?: string[];
+  searchParams?: RouteParams;
+  routeHash?: string;
 };
 
-type RouteParams = {
+export type RouteParams = {
   [param: string]: string;
 };
 
-const computeLocation = (routePath: string, routeParams: RouteParams) => {
+export const isRouteParams = (obj: any): obj is RouteParams => {
+  if (typeof obj !== 'object' || obj === null) {
+    return false;
+  }
+
+  return Object.keys(obj).every((key) => typeof obj[key] === 'string');
+};
+
+export const computeLocation = ({
+  routePath,
+  routeParams,
+  searchParams,
+  routeHash = '',
+}: Pick<PageDecoratorArgs, 'routePath'> &
+  Partial<
+    Pick<PageDecoratorArgs, 'routeParams' | 'searchParams' | 'routeHash'>
+  >) => {
+  const search = searchParams
+    ? `?${new URLSearchParams(searchParams).toString()}`
+    : '';
+
   return {
     pathname: routePath.replace(
       /:(\w+)/g,
-      (paramName) => routeParams[paramName] ?? '',
+      (paramName) => routeParams?.[paramName] ?? '',
     ),
+    search,
+    hash: routeHash,
   };
 };
 
@@ -42,50 +83,116 @@ const ApolloStorybookDevLogEffect = () => {
   return <></>;
 };
 
+await dynamicActivate(SOURCE_LOCALE);
+
+const Providers = () => {
+  const [store] = useState(() => jotaiStore);
+
+  return (
+    <JotaiProvider store={store}>
+      <ToastProvider>
+        <ApolloProvider client={mockedApolloClient}>
+          <I18nProvider i18n={i18n}>
+            <ApolloStorybookDevLogEffect />
+            <ClientConfigProviderEffect />
+            <ClientConfigProvider>
+              <UserMetadataProviderInitialEffect />
+              <MockedMetadataLoadEffect />
+              <WorkspaceProviderEffect />
+              <UserContextProvider>
+                <ApolloCoreClientMockedProvider>
+                  <ContextStoreComponentInstanceContext.Provider
+                    value={{ instanceId: MAIN_CONTEXT_STORE_INSTANCE_ID }}
+                  >
+                    <PreComputedChipGeneratorsProvider>
+                      <FullHeightStorybookLayout>
+                        <HelmetProvider>
+                          <IconsProvider>
+                            <RecordComponentInstanceContextsWrapper componentInstanceId="storybook-test-record">
+                              <MinimalMetadataGate />
+                            </RecordComponentInstanceContextsWrapper>
+                          </IconsProvider>
+                        </HelmetProvider>
+                      </FullHeightStorybookLayout>
+                    </PreComputedChipGeneratorsProvider>
+                    <RouteContextStoreProvider />
+                  </ContextStoreComponentInstanceContext.Provider>
+                </ApolloCoreClientMockedProvider>
+              </UserContextProvider>
+            </ClientConfigProvider>
+          </I18nProvider>
+        </ApolloProvider>
+      </ToastProvider>
+    </JotaiProvider>
+  );
+};
+
+const createRouter = ({
+  Story,
+  args,
+  initialEntries,
+  initialIndex,
+}: {
+  Story: () => JSX.Element;
+  args: {
+    routePath: string;
+    routeParams: RouteParams;
+    additionalRoutes?: string[] | undefined;
+  };
+  initialEntries?: {
+    pathname: string;
+    search?: string;
+    hash?: string;
+  }[];
+  initialIndex?: number;
+}) => {
+  const routeObjects: WorkspaceRouteObject[] = [
+    { path: args.routePath, element: <Story /> },
+    ...(args.additionalRoutes ?? []).map((route) => ({
+      path: route,
+      element: <div>Navigated to {route}</div>,
+    })),
+  ];
+
+  return createMemoryRouter(
+    [
+      {
+        element: <WorkspaceRouteObjectsProvider routeObjects={routeObjects} />,
+        children: [
+          {
+            element: <Providers />,
+            children: [{ element: <DefaultLayout />, children: routeObjects }],
+          },
+        ],
+      },
+    ],
+    { initialEntries, initialIndex },
+  );
+};
+
 export const PageDecorator: Decorator<{
   routePath: string;
   routeParams: RouteParams;
   additionalRoutes?: string[];
+  searchParams?: RouteParams;
+  routeHash?: string;
 }> = (Story, { args }) => {
+  const router = createRouter({
+    Story,
+    args,
+    initialEntries: [
+      computeLocation({
+        routePath: args.routePath,
+        routeParams: args.routeParams,
+        searchParams: args.searchParams,
+        routeHash: args.routeHash,
+      }),
+    ],
+  });
+
   return (
-    <RecoilRoot>
-      <ApolloProvider client={mockedApolloClient}>
-        <ApolloStorybookDevLogEffect />
-        <ApolloMetadataClientMockedProvider>
-          <UserProviderEffect />
-          <UserProvider>
-            <ClientConfigProviderEffect />
-            <ClientConfigProvider>
-              <MemoryRouter
-                initialEntries={[
-                  computeLocation(args.routePath, args.routeParams),
-                ]}
-              >
-                <FullHeightStorybookLayout>
-                  <HelmetProvider>
-                    <SnackBarProviderScope snackBarManagerScopeId="snack-bar-manager">
-                      <ObjectMetadataItemsProvider>
-                        <Routes>
-                          <Route element={<DefaultLayout />}>
-                            <Route path={args.routePath} element={<Story />} />
-                            {args.additionalRoutes?.map((route) => (
-                              <Route
-                                key={route}
-                                path={route}
-                                element={<div>Navigated to {route}</div>}
-                              />
-                            ))}
-                          </Route>
-                        </Routes>
-                      </ObjectMetadataItemsProvider>
-                    </SnackBarProviderScope>
-                  </HelmetProvider>
-                </FullHeightStorybookLayout>
-              </MemoryRouter>
-            </ClientConfigProvider>
-          </UserProvider>
-        </ApolloMetadataClientMockedProvider>
-      </ApolloProvider>
-    </RecoilRoot>
+    <AppNavigatorProvider router={router}>
+      <RouterProvider useTransitions={false} router={router} />
+    </AppNavigatorProvider>
   );
 };

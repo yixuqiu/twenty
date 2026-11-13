@@ -1,16 +1,17 @@
-import { ReactNode } from 'react';
-import { MockedProvider } from '@apollo/client/testing';
+import { MockedProvider } from '@apollo/client/testing/react';
 import { act, renderHook } from '@testing-library/react';
-import { RecoilRoot, useSetRecoilState } from 'recoil';
-
+import { Provider as JotaiProvider } from 'jotai';
+import { type ReactNode } from 'react';
 import {
   query,
   responseData,
   variables,
 } from '@/object-metadata/hooks/__mocks__/useFilteredObjectMetadataItems';
 import { useFilteredObjectMetadataItems } from '@/object-metadata/hooks/useFilteredObjectMetadataItems';
-import { objectMetadataItemsState } from '@/object-metadata/states/objectMetadataItemsState';
-import { getObjectMetadataItemsMock } from '@/object-metadata/utils/getObjectMetadataItemsMock';
+import { jotaiStore } from '@/ui/utilities/state/jotai/jotaiStore';
+import { setTestObjectMetadataItemsInMetadataStore } from '~/testing/utils/setTestObjectMetadataItemsInMetadataStore';
+import { isDefined } from 'twenty-shared/utils';
+import { getTestEnrichedObjectMetadataItemsMock } from '~/testing/utils/getTestEnrichedObjectMetadataItemsMock';
 
 const mocks = [
   {
@@ -26,71 +27,71 @@ const mocks = [
   },
 ];
 
-const Wrapper = ({ children }: { children: ReactNode }) => (
-  <RecoilRoot>
-    <MockedProvider mocks={mocks} addTypename={false}>
-      {children}
-    </MockedProvider>
-  </RecoilRoot>
-);
+const Wrapper = ({ children }: { children: ReactNode }) => {
+  setTestObjectMetadataItemsInMetadataStore(
+    jotaiStore,
+    getTestEnrichedObjectMetadataItemsMock(),
+  );
 
-const mockObjectMetadataItems = getObjectMetadataItemsMock();
+  return (
+    <JotaiProvider store={jotaiStore}>
+      <MockedProvider mocks={mocks}>{children}</MockedProvider>
+    </JotaiProvider>
+  );
+};
 
 describe('useFilteredObjectMetadataItems', () => {
-  it('should findActiveObjectMetadataItemBySlug', async () => {
-    const { result } = renderHook(
-      () => {
-        const setMetadataItems = useSetRecoilState(objectMetadataItemsState);
-        setMetadataItems(mockObjectMetadataItems);
-
-        return useFilteredObjectMetadataItems();
-      },
-      {
-        wrapper: Wrapper,
-      },
-    );
+  it('should findActiveObjectMetadataItemByNamePlural', async () => {
+    const { result } = renderHook(useFilteredObjectMetadataItems, {
+      wrapper: Wrapper,
+    });
 
     act(() => {
-      const res = result.current.findActiveObjectMetadataItemBySlug('people');
+      const res =
+        result.current.findActiveObjectMetadataItemByNamePlural('people');
+      expect(res).toBeDefined();
+      expect(res?.namePlural).toBe('people');
+    });
+  });
+
+  it('should findObjectMetadataItemByNamePlural', async () => {
+    const { result } = renderHook(useFilteredObjectMetadataItems, {
+      wrapper: Wrapper,
+    });
+
+    act(() => {
+      const res = result.current.findObjectMetadataItemByNamePlural('people');
       expect(res).toBeDefined();
       expect(res?.namePlural).toBe('people');
     });
   });
 
   it('should findObjectMetadataItemById', async () => {
-    const { result } = renderHook(
-      () => {
-        const setMetadataItems = useSetRecoilState(objectMetadataItemsState);
-        setMetadataItems(mockObjectMetadataItems);
-
-        return useFilteredObjectMetadataItems();
-      },
-      {
-        wrapper: Wrapper,
-      },
+    const peopleObjectMetadata = getTestEnrichedObjectMetadataItemsMock().find(
+      (item) => item.namePlural === 'people',
     );
+
+    if (!isDefined(peopleObjectMetadata)) {
+      throw new Error('People object metadata not found');
+    }
+
+    const { result } = renderHook(useFilteredObjectMetadataItems, {
+      wrapper: Wrapper,
+    });
 
     act(() => {
       const res = result.current.findObjectMetadataItemById(
-        '20202020-480c-434e-b4c7-e22408b97047',
+        peopleObjectMetadata.id,
       );
       expect(res).toBeDefined();
-      expect(res?.namePlural).toBe('companies');
+      expect(res?.namePlural).toBe('people');
     });
   });
 
   it('should findObjectMetadataItemByNamePlural', async () => {
-    const { result } = renderHook(
-      () => {
-        const setMetadataItems = useSetRecoilState(objectMetadataItemsState);
-        setMetadataItems(mockObjectMetadataItems);
-
-        return useFilteredObjectMetadataItems();
-      },
-      {
-        wrapper: Wrapper,
-      },
-    );
+    const { result } = renderHook(useFilteredObjectMetadataItems, {
+      wrapper: Wrapper,
+    });
 
     act(() => {
       const res =

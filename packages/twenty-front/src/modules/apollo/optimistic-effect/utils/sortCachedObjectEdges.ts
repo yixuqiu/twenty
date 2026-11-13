@@ -1,11 +1,32 @@
-import { Reference, StoreObject } from '@apollo/client';
-import { ReadFieldFunction } from '@apollo/client/cache/core/types/common';
+import { type Reference, type StoreObject } from '@apollo/client';
+import { type FieldFunctionOptions } from '@apollo/client/cache';
+import { isNonEmptyString } from '@sniptt/guards';
 
-import { OrderBy } from '@/object-metadata/types/OrderBy';
-import { RecordGqlRefEdge } from '@/object-record/cache/types/RecordGqlRefEdge';
-import { RecordGqlOperationOrderBy } from '@/object-record/graphql/types/RecordGqlOperationOrderBy';
-import { isDefined } from '~/utils/isDefined';
+import { type RecordGqlRefEdge } from '@/object-record/cache/types/RecordGqlRefEdge';
+import { doNotTranslate } from 'twenty-shared/i18n';
+import {
+  type OrderBy,
+  type RecordGqlOperationOrderBy,
+} from 'twenty-shared/types';
+import { isDefined } from 'twenty-shared/utils';
 import { sortAsc, sortDesc, sortNullsFirst, sortNullsLast } from '~/utils/sort';
+
+type SortCriterion = {
+  fieldPath: string[];
+  direction: OrderBy;
+};
+
+const extractSortCriteria = (
+  orderBy: RecordGqlOperationOrderBy[number],
+  parentPath: string[] = [],
+): SortCriterion[] =>
+  Object.entries(orderBy).flatMap(([fieldName, value]) => {
+    const fieldPath = [...parentPath, fieldName];
+
+    return isNonEmptyString(value)
+      ? [{ fieldPath, direction: value }]
+      : extractSortCriteria(value, fieldPath);
+  });
 
 export const sortCachedObjectEdges = ({
   edges,
@@ -14,53 +35,57 @@ export const sortCachedObjectEdges = ({
 }: {
   edges: RecordGqlRefEdge[];
   orderBy: RecordGqlOperationOrderBy;
-  readCacheField: ReadFieldFunction;
+  readCacheField: FieldFunctionOptions['readField'];
 }) => {
-  const [orderByFieldName, orderByFieldValue] = Object.entries(orderBy)[0];
-  const [orderBySubFieldName, orderBySubFieldValue] =
-    typeof orderByFieldValue === 'string'
-      ? []
-      : Object.entries(orderByFieldValue)[0];
+  const sortCriteria = orderBy.flatMap((criterion) =>
+    extractSortCriteria(criterion),
+  );
+
+  if (sortCriteria.length === 0) {
+    return edges;
+  }
 
   const readFieldValueToSort = (
     edge: RecordGqlRefEdge,
+    fieldPath: string[],
   ): string | number | null => {
-    const recordFromCache = edge.node;
-    const fieldValue =
-      readCacheField<Reference | StoreObject | string | number | null>(
-        orderByFieldName,
-        recordFromCache,
-      ) ?? null;
-    const isSubFieldFilter = isDefined(fieldValue) && !!orderBySubFieldName;
+    let value: Reference | StoreObject | string | number | null = edge.node;
 
-    if (!isSubFieldFilter) return fieldValue as string | number | null;
+    for (const fieldName of fieldPath) {
+      if (!isDefined(value)) {
+        return null;
+      }
 
-    const subFieldValue =
-      readCacheField<string | number | null>(
-        orderBySubFieldName,
-        fieldValue as Reference | StoreObject,
-      ) ?? null;
-
-    return subFieldValue;
-  };
-
-  const orderByValue = orderBySubFieldValue || (orderByFieldValue as OrderBy);
-
-  const isAsc = orderByValue.startsWith('Asc');
-  const isNullsFirst = orderByValue.endsWith('NullsFirst');
-
-  return [...edges].sort((edgeA, edgeB) => {
-    const fieldValueA = readFieldValueToSort(edgeA);
-    const fieldValueB = readFieldValueToSort(edgeB);
-
-    if (fieldValueA === null || fieldValueB === null) {
-      return isNullsFirst
-        ? sortNullsFirst(fieldValueA, fieldValueB)
-        : sortNullsLast(fieldValueA, fieldValueB);
+      value =
+        readCacheField<Reference | StoreObject | string | number | null>(
+          fieldName,
+          value as Reference | StoreObject,
+        ) ?? null;
     }
 
-    return isAsc
-      ? sortAsc(fieldValueA, fieldValueB)
-      : sortDesc(fieldValueA, fieldValueB);
+    return value as string | number | null;
+  };
+
+  return [...edges].sort((edgeA, edgeB) => {
+    for (const { fieldPath, direction } of sortCriteria) {
+      const fieldValueA = readFieldValueToSort(edgeA, fieldPath);
+      const fieldValueB = readFieldValueToSort(edgeB, fieldPath);
+      const isAsc = direction.startsWith(doNotTranslate('Asc'));
+      const isNullsFirst = direction.endsWith('NullsFirst');
+      const comparison =
+        fieldValueA === null || fieldValueB === null
+          ? isNullsFirst
+            ? sortNullsFirst(fieldValueA, fieldValueB)
+            : sortNullsLast(fieldValueA, fieldValueB)
+          : isAsc
+            ? sortAsc(fieldValueA, fieldValueB)
+            : sortDesc(fieldValueA, fieldValueB);
+
+      if (comparison !== 0) {
+        return comparison;
+      }
+    }
+
+    return 0;
   });
 };

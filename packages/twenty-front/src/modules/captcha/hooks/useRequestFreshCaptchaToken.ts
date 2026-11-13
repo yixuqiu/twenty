@@ -1,77 +1,59 @@
-import { useRecoilCallback, useSetRecoilState } from 'recoil';
-
 import { captchaTokenState } from '@/captcha/states/captchaTokenState';
 import { isRequestingCaptchaTokenState } from '@/captcha/states/isRequestingCaptchaTokenState';
-import { captchaProviderState } from '@/client-config/states/captchaProviderState';
+import { isCaptchaRequiredForPath } from '@/captcha/utils/isCaptchaRequiredForPath';
+import { captchaState } from '@/client-config/states/captchaState';
+import { useSetAtomState } from '@/ui/utilities/state/jotai/hooks/useSetAtomState';
+import { useCallback } from 'react';
+import { assertIsDefinedOrThrow, isDefined } from 'twenty-shared/utils';
 import { CaptchaDriverType } from '~/generated-metadata/graphql';
-import { isDefined } from '~/utils/isDefined';
-import { isUndefinedOrNull } from '~/utils/isUndefinedOrNull';
-
-declare global {
-  interface Window {
-    grecaptcha?: any;
-    turnstile?: any;
-  }
-}
+import { useStore } from 'jotai';
 
 export const useRequestFreshCaptchaToken = () => {
-  const setCaptchaToken = useSetRecoilState(captchaTokenState);
-  const setIsRequestingCaptchaToken = useSetRecoilState(
+  const store = useStore();
+  const setCaptchaToken = useSetAtomState(captchaTokenState);
+  const setIsRequestingCaptchaToken = useSetAtomState(
     isRequestingCaptchaTokenState,
   );
 
-  const requestFreshCaptchaToken = useRecoilCallback(
-    ({ snapshot }) =>
-      async () => {
-        const captchaProvider = snapshot
-          .getLoadable(captchaProviderState)
-          .getValue();
+  const requestFreshCaptchaToken = useCallback(async () => {
+    if (!isCaptchaRequiredForPath(window.location.pathname)) {
+      return;
+    }
 
-        if (isUndefinedOrNull(captchaProvider)) {
-          return;
-        }
+    const captcha = store.get(captchaState.atom);
 
-        const existingCaptchaToken = snapshot
-          .getLoadable(captchaTokenState)
-          .getValue();
+    if (!isDefined(captcha)) {
+      return;
+    }
 
-        setIsRequestingCaptchaToken(true);
+    assertIsDefinedOrThrow(captcha);
 
-        let captchaWidget: any;
+    setIsRequestingCaptchaToken(true);
 
-        switch (captchaProvider.provider) {
-          case CaptchaDriverType.GoogleRecatpcha:
-            window.grecaptcha
-              .execute(captchaProvider.siteKey, {
-                action: 'submit',
-              })
-              .then((token: string) => {
-                setCaptchaToken(token);
-                setIsRequestingCaptchaToken(false);
-              });
-            break;
-          case CaptchaDriverType.Turnstile:
-            if (isDefined(existingCaptchaToken)) {
-              // If we already have a token, we don't need to request a new one as turnstile will
-              // automatically refresh the token when the widget is rendered.
-              setIsRequestingCaptchaToken(false);
-              break;
-            }
-            // TODO: fix workspace-no-hardcoded-colors rule
-            // eslint-disable-next-line @nx/workspace-no-hardcoded-colors
-            captchaWidget = window.turnstile.render('#captcha-widget', {
-              sitekey: captchaProvider.siteKey,
-            });
-            window.turnstile.execute(captchaWidget, {
-              callback: (token: string) => {
-                setCaptchaToken(token);
-                setIsRequestingCaptchaToken(false);
-              },
-            });
-        }
-      },
-    [setCaptchaToken, setIsRequestingCaptchaToken],
-  );
+    let captchaWidget: any;
+    switch (captcha.provider) {
+      case CaptchaDriverType.GOOGLE_RECAPTCHA:
+        window.grecaptcha
+          .execute(captcha.siteKey, {
+            action: 'submit',
+          })
+          .then((token: string) => {
+            setCaptchaToken(token);
+            setIsRequestingCaptchaToken(false);
+          });
+        break;
+      case CaptchaDriverType.TURNSTILE:
+        captchaWidget = window.turnstile.render('#captcha-widget', {
+          sitekey: captcha.siteKey,
+        });
+        window.turnstile.execute(captchaWidget, {
+          callback: (token: string) => {
+            setCaptchaToken(token);
+            setIsRequestingCaptchaToken(false);
+          },
+        });
+    }
+  }, [setCaptchaToken, setIsRequestingCaptchaToken, store]);
 
   return { requestFreshCaptchaToken };
 };

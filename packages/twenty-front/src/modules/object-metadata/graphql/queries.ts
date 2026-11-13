@@ -1,102 +1,13 @@
 import { gql } from '@apollo/client';
+import { OBJECT_METADATA_FRAGMENT } from '@/object-metadata/graphql/fragment';
 
 export const FIND_MANY_OBJECT_METADATA_ITEMS = gql`
-  query ObjectMetadataItems(
-    $objectFilter: objectFilter
-    $fieldFilter: fieldFilter
-  ) {
-    objects(paging: { first: 1000 }, filter: $objectFilter) {
+  ${OBJECT_METADATA_FRAGMENT}
+  query ObjectMetadataItems {
+    objects(paging: { first: 1000 }) {
       edges {
         node {
-          id
-          dataSourceId
-          nameSingular
-          namePlural
-          labelSingular
-          labelPlural
-          description
-          icon
-          isCustom
-          isRemote
-          isActive
-          isSystem
-          createdAt
-          updatedAt
-          labelIdentifierFieldMetadataId
-          imageIdentifierFieldMetadataId
-          fields(paging: { first: 1000 }, filter: $fieldFilter) {
-            edges {
-              node {
-                id
-                type
-                name
-                label
-                description
-                icon
-                isCustom
-                isActive
-                isSystem
-                isNullable
-                createdAt
-                updatedAt
-                fromRelationMetadata {
-                  id
-                  relationType
-                  toObjectMetadata {
-                    id
-                    dataSourceId
-                    nameSingular
-                    namePlural
-                    isSystem
-                    isRemote
-                  }
-                  toFieldMetadataId
-                }
-                toRelationMetadata {
-                  id
-                  relationType
-                  fromObjectMetadata {
-                    id
-                    dataSourceId
-                    nameSingular
-                    namePlural
-                    isSystem
-                    isRemote
-                  }
-                  fromFieldMetadataId
-                }
-                defaultValue
-                options
-                relationDefinition {
-                  direction
-                  sourceObjectMetadata {
-                    id
-                    nameSingular
-                    namePlural
-                  }
-                  sourceFieldMetadata {
-                    id
-                    name
-                  }
-                  targetObjectMetadata {
-                    id
-                    nameSingular
-                    namePlural
-                  }
-                  targetFieldMetadata {
-                    id
-                    name
-                  }
-                }
-              }
-            }
-            pageInfo {
-              hasNextPage
-              hasPreviousPage
-              startCursor
-              endCursor
-            }
-          }
+          ...ObjectMetadataFields
         }
       }
       pageInfo {
@@ -106,5 +17,20 @@ export const FIND_MANY_OBJECT_METADATA_ITEMS = gql`
         endCursor
       }
     }
+  }
+`;
+
+export const OBJECT_RECORD_COUNTS = gql`
+  query ObjectRecordCounts {
+    objectRecordCounts {
+      objectNamePlural
+      totalCount
+    }
+  }
+`;
+
+export const MOSTLY_EMPTY_FIELD_METADATA_IDS = gql`
+  query MostlyEmptyFieldMetadataIds($objectMetadataId: UUID!) {
+    mostlyEmptyFieldMetadataIds(objectMetadataId: $objectMetadataId)
   }
 `;

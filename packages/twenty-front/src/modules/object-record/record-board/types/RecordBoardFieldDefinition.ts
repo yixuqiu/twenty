@@ -1,9 +1,10 @@
-import { FieldDefinition } from '@/object-record/record-field/types/FieldDefinition';
-import { FieldMetadata } from '@/object-record/record-field/types/FieldMetadata';
+import { type FieldDefinition } from '@/object-record/record-field/ui/types/FieldDefinition';
+import { type FieldMetadata } from '@/object-record/record-field/ui/types/FieldMetadata';
 
 export type RecordBoardFieldDefinition<T extends FieldMetadata> =
   FieldDefinition<T> & {
     viewFieldId?: string;
     position: number;
     isVisible?: boolean;
+    isLabelIdentifier?: boolean;
   };

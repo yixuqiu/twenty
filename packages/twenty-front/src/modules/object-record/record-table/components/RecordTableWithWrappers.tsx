@@ -1,145 +1,79 @@
-import { useRef } from 'react';
-import styled from '@emotion/styled';
-import { useRecoilCallback, useRecoilValue } from 'recoil';
-import { IconPlus } from 'twenty-ui';
-
-import { useObjectMetadataItem } from '@/object-metadata/hooks/useObjectMetadataItem';
 import { useDeleteOneRecord } from '@/object-record/hooks/useDeleteOneRecord';
-import { FieldMetadata } from '@/object-record/record-field/types/FieldMetadata';
+import { useOpenRecordFromIndexView } from '@/object-record/record-index/hooks/useOpenRecordFromIndexView';
 import { RecordTable } from '@/object-record/record-table/components/RecordTable';
+import { RecordTableComponentInstance } from '@/object-record/record-table/components/RecordTableComponentInstance';
+import { RecordTableContextProvider } from '@/object-record/record-table/components/RecordTableContextProvider';
 import { EntityDeleteContext } from '@/object-record/record-table/contexts/EntityDeleteHookContext';
-import { useRecordTableStates } from '@/object-record/record-table/hooks/internal/useRecordTableStates';
-import { ColumnDefinition } from '@/object-record/record-table/types/ColumnDefinition';
-import { Button } from '@/ui/input/button/components/Button';
-import AnimatedPlaceholder from '@/ui/layout/animated-placeholder/components/AnimatedPlaceholder';
-import {
-  AnimatedPlaceholderEmptyContainer,
-  AnimatedPlaceholderEmptySubTitle,
-  AnimatedPlaceholderEmptyTextContainer,
-  AnimatedPlaceholderEmptyTitle,
-} from '@/ui/layout/animated-placeholder/components/EmptyPlaceholderStyled';
-import { DragSelect } from '@/ui/utilities/drag-select/components/DragSelect';
+import { useRecordTableSelectAllHotkeys } from '@/object-record/record-table/hooks/useRecordTableSelectAllHotkeys';
+import { useActiveRecordTableRow } from '@/object-record/record-table/hooks/useActiveRecordTableRow';
+import { useFocusedRecordTableRow } from '@/object-record/record-table/hooks/useFocusedRecordTableRow';
+import { RecordTableRecordLimitReloadEffect } from '@/object-record/record-table/virtualization/components/RecordTableRecordLimitReloadEffect';
+import { PageFocusId } from '@/types/PageFocusId';
 import { ScrollWrapper } from '@/ui/utilities/scroll/components/ScrollWrapper';
-import { useSaveCurrentViewFields } from '@/views/hooks/useSaveCurrentViewFields';
-import { mapColumnDefinitionsToViewFields } from '@/views/utils/mapColumnDefinitionToViewField';
+import { styled } from '@linaria/react';
 
-import { RecordUpdateContext } from '../contexts/EntityUpdateMutationHookContext';
-import { useRecordTable } from '../hooks/useRecordTable';
+const StyledRecordTablePrintBoundary = styled.div`
+  display: contents;
 
-import { RecordTableInternalEffect } from './RecordTableInternalEffect';
+  // Otherwise swiping back to the first column triggers iOS back navigation.
+  .scroll-wrapper-x-enabled {
+    overscroll-behavior-x: contain;
+  }
 
-const StyledTableWithHeader = styled.div`
-  height: 100%;
-`;
-
-const StyledTableContainer = styled.div`
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  position: relative;
+  @media print {
+    display: block;
+    max-height: calc(100vh / var(--t-zoom, 1));
+    overflow: hidden;
+  }
 `;
 
 type RecordTableWithWrappersProps = {
   objectNameSingular: string;
   recordTableId: string;
   viewBarId: string;
-  updateRecordMutation: (params: any) => void;
-  createRecord: () => Promise<void>;
 };
 
 export const RecordTableWithWrappers = ({
-  updateRecordMutation,
-  createRecord,
   objectNameSingular,
   recordTableId,
   viewBarId,
 }: RecordTableWithWrappersProps) => {
-  const tableBodyRef = useRef<HTMLDivElement>(null);
-
-  const { numberOfTableRowsState, isRecordTableInitialLoadingState } =
-    useRecordTableStates(recordTableId);
-
-  const numberOfTableRows = useRecoilValue(numberOfTableRowsState);
-
-  const isRecordTableInitialLoading = useRecoilValue(
-    isRecordTableInitialLoadingState,
-  );
-
-  const { resetTableRowSelection, setRowSelected } = useRecordTable({
+  useRecordTableSelectAllHotkeys({
     recordTableId,
+    focusId: PageFocusId.RecordIndex,
   });
 
-  const { objectMetadataItem: foundObjectMetadataItem } = useObjectMetadataItem(
-    {
-      objectNameSingular,
-    },
-  );
+  const { activateRecordTableRow } = useActiveRecordTableRow(recordTableId);
+  const { unfocusRecordTableRow } = useFocusedRecordTableRow(recordTableId);
+  const { openRecordFromIndexView } = useOpenRecordFromIndexView();
 
-  const { saveViewFields } = useSaveCurrentViewFields(viewBarId);
+  const handleRecordIdentifierClick = (rowIndex: number, recordId: string) => {
+    activateRecordTableRow(rowIndex);
+    unfocusRecordTableRow();
+    openRecordFromIndexView({ recordId });
+  };
 
   const { deleteOneRecord } = useDeleteOneRecord({ objectNameSingular });
 
-  const objectLabel = foundObjectMetadataItem?.labelSingular;
-
-  const isRemote = foundObjectMetadataItem?.isRemote ?? false;
-
   return (
-    <EntityDeleteContext.Provider value={deleteOneRecord}>
-      <ScrollWrapper>
-        <RecordUpdateContext.Provider value={updateRecordMutation}>
-          <StyledTableWithHeader>
-            <StyledTableContainer>
-              <div ref={tableBodyRef}>
-                <RecordTable
-                  recordTableId={recordTableId}
-                  objectNameSingular={objectNameSingular}
-                  onColumnsChange={useRecoilCallback(
-                    () => (columns) => {
-                      saveViewFields(
-                        mapColumnDefinitionsToViewFields(
-                          columns as ColumnDefinition<FieldMetadata>[],
-                        ),
-                      );
-                    },
-                    [saveViewFields],
-                  )}
-                  createRecord={createRecord}
-                />
-                <DragSelect
-                  dragSelectable={tableBodyRef}
-                  onDragSelectionStart={resetTableRowSelection}
-                  onDragSelectionChange={setRowSelected}
-                />
-              </div>
-              <RecordTableInternalEffect
-                recordTableId={recordTableId}
-                tableBodyRef={tableBodyRef}
-              />
-              {!isRecordTableInitialLoading &&
-                numberOfTableRows === 0 &&
-                !isRemote && (
-                  <AnimatedPlaceholderEmptyContainer>
-                    <AnimatedPlaceholder type="noRecord" />
-                    <AnimatedPlaceholderEmptyTextContainer>
-                      <AnimatedPlaceholderEmptyTitle>
-                        Add your first {objectLabel}
-                      </AnimatedPlaceholderEmptyTitle>
-                      <AnimatedPlaceholderEmptySubTitle>
-                        Use our API or add your first {objectLabel} manually
-                      </AnimatedPlaceholderEmptySubTitle>
-                    </AnimatedPlaceholderEmptyTextContainer>
-                    <Button
-                      Icon={IconPlus}
-                      title={`Add a ${objectLabel}`}
-                      variant={'secondary'}
-                      onClick={createRecord}
-                    />
-                  </AnimatedPlaceholderEmptyContainer>
-                )}
-            </StyledTableContainer>
-          </StyledTableWithHeader>
-        </RecordUpdateContext.Provider>
-      </ScrollWrapper>
-    </EntityDeleteContext.Provider>
+    <RecordTableComponentInstance recordTableId={recordTableId}>
+      <RecordTableContextProvider
+        recordTableId={recordTableId}
+        viewBarId={viewBarId}
+        objectNameSingular={objectNameSingular}
+        onRecordIdentifierClick={handleRecordIdentifierClick}
+      >
+        <EntityDeleteContext.Provider value={deleteOneRecord}>
+          <StyledRecordTablePrintBoundary>
+            <ScrollWrapper
+              componentInstanceId={`record-table-scroll-${recordTableId}`}
+            >
+              <RecordTableRecordLimitReloadEffect />
+              <RecordTable />
+            </ScrollWrapper>
+          </StyledRecordTablePrintBoundary>
+        </EntityDeleteContext.Provider>
+      </RecordTableContextProvider>
+    </RecordTableComponentInstance>
   );
 };

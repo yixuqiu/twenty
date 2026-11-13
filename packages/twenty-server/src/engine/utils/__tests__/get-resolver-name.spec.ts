@@ -1,4 +1,4 @@
-import { WorkspaceResolverBuilderMethodNames } from 'src/engine/api/graphql/workspace-resolver-builder/interfaces/workspace-resolvers-builder.interface';
+import { type WorkspaceResolverBuilderMethodNames } from 'src/engine/api/graphql/workspace-resolver-builder/interfaces/workspace-resolvers-builder.interface';
 
 import { getResolverName } from 'src/engine/utils/get-resolver-name.util';
 
@@ -15,7 +15,8 @@ describe('getResolverName', () => {
     ['createOne', 'createEntity'],
     ['updateOne', 'updateEntity'],
     ['deleteOne', 'deleteEntity'],
-    ['executeQuickActionOnOne', 'executeQuickActionOnEntity'],
+    ['restoreMany', 'restoreEntities'],
+    ['destroyMany', 'destroyEntities'],
   ])('should return correct name for %s resolver', (type, expectedResult) => {
     expect(
       getResolverName(metadata, type as WorkspaceResolverBuilderMethodNames),

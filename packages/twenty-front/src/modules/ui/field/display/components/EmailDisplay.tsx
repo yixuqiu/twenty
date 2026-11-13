@@ -1,21 +1,33 @@
-import { MouseEvent } from 'react';
-
-import { ContactLink } from '@/ui/navigation/link/components/ContactLink';
-
-import { EllipsisDisplay } from './EllipsisDisplay';
+import { ContactLink } from '@/ui/field/display/components/internal/ContactLink/ContactLink';
+import { EllipsisDisplay } from '@/ui/field/display/components/internal/EllipsisDisplay/EllipsisDisplay';
+import { type MouseEvent } from 'react';
+import { isDefined } from 'twenty-shared/utils';
 
 const validateEmail = (email: string) => {
-  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailPattern.test(email.trim());
+  const emailParts = email.split('@');
+
+  if (emailParts.length !== 2) {
+    return false;
+  }
+
+  return true;
 };
 
 type EmailDisplayProps = {
-  value: string | null;
+  value: string | null | undefined;
 };
 
-export const EmailDisplay = ({ value }: EmailDisplayProps) => (
-  <EllipsisDisplay>
-    {value && validateEmail(value) ? (
+export const EmailDisplay = ({ value }: EmailDisplayProps) => {
+  if (!isDefined(value)) {
+    return <ContactLink href="#">{value}</ContactLink>;
+  }
+
+  if (!validateEmail(value)) {
+    return <ContactLink href="#">{value}</ContactLink>;
+  }
+
+  return (
+    <EllipsisDisplay>
       <ContactLink
         href={`mailto:${value}`}
         onClick={(event: MouseEvent<HTMLElement>) => {
@@ -24,8 +36,6 @@ export const EmailDisplay = ({ value }: EmailDisplayProps) => (
       >
         {value}
       </ContactLink>
-    ) : (
-      <ContactLink href="#">{value}</ContactLink>
-    )}
-  </EllipsisDisplay>
-);
+    </EllipsisDisplay>
+  );
+};

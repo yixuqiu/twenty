@@ -1,13 +1,13 @@
-import { Meta, StoryObj } from '@storybook/react';
-import { userEvent, within } from '@storybook/test';
+import { type Meta, type StoryObj } from '@storybook/react-vite';
+import { userEvent, within } from 'storybook/test';
 
 import {
   PageDecorator,
-  PageDecoratorArgs,
+  type PageDecoratorArgs,
 } from '~/testing/decorators/PageDecorator';
 import { graphqlMocks } from '~/testing/graphqlMocks';
 
-import { SettingsNewObject } from '../SettingsNewObject';
+import { SettingsNewObject } from '~/pages/settings/data-model/SettingsNewObject';
 
 const meta: Meta<PageDecoratorArgs> = {
   title: 'Pages/Settings/DataModel/SettingsNewObject',
@@ -26,8 +26,11 @@ export default meta;
 export type Story = StoryObj<typeof SettingsNewObject>;
 
 export const WithStandardSelected: Story = {
-  play: async () => {
-    const canvas = within(document.body);
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+
+    await canvas.findByText('New Object');
+
     const listingInput = await canvas.findByPlaceholderText('Listing');
     const pluralInput = await canvas.findByPlaceholderText('Listings');
     const descriptionInput = await canvas.findByPlaceholderText(

@@ -1,38 +1,47 @@
-import { useRecoilValue } from 'recoil';
-
-import { Attachment } from '@/activities/files/types/Attachment';
-import { getFileType } from '@/activities/files/utils/getFileType';
-import { ActivityTargetableObject } from '@/activities/types/ActivityTargetableEntity';
+import { type Attachment } from '@/activities/files/types/Attachment';
+import { type ActivityTargetableObject } from '@/activities/types/ActivityTargetableEntity';
 import { getActivityTargetObjectFieldIdName } from '@/activities/utils/getActivityTargetObjectFieldIdName';
-import { currentWorkspaceMemberState } from '@/auth/states/currentWorkspaceMemberState';
-import { CoreObjectNameSingular } from '@/object-metadata/types/CoreObjectNameSingular';
+import { useDirectFileUpload } from '@/file/hooks/useDirectFileUpload';
+import { useObjectMetadataItem } from '@/object-metadata/hooks/useObjectMetadataItem';
+import { StandardObjectNameSingular } from 'twenty-shared/types';
 import { useCreateOneRecord } from '@/object-record/hooks/useCreateOneRecord';
-import { FileFolder, useUploadFileMutation } from '~/generated/graphql';
+import { assertIsDefinedOrThrow, isDefined } from 'twenty-shared/utils';
+import { FieldMetadataType, FileFolder } from '~/generated-metadata/graphql';
+import { useLingui } from '@lingui/react/macro';
 
 export const useUploadAttachmentFile = () => {
-  const currentWorkspaceMember = useRecoilValue(currentWorkspaceMemberState);
-  const [uploadFile] = useUploadFileMutation();
+  const { t } = useLingui();
+  const { uploadFile: directUploadFile } = useDirectFileUpload();
+  const { objectMetadataItem: attachmentMetadata } = useObjectMetadataItem({
+    objectNameSingular: StandardObjectNameSingular.Attachment,
+  });
+
+  const filesFieldMetadataId = attachmentMetadata.fields.find(
+    (field) => field.type === FieldMetadataType.FILES && field.name === 'file',
+  )?.id;
 
   const { createOneRecord: createOneAttachment } =
     useCreateOneRecord<Attachment>({
-      objectNameSingular: CoreObjectNameSingular.Attachment,
+      objectNameSingular: StandardObjectNameSingular.Attachment,
+      shouldMatchRootQueryFilter: true,
     });
 
   const uploadAttachmentFile = async (
     file: File,
     targetableObject: ActivityTargetableObject,
   ) => {
-    const result = await uploadFile({
-      variables: {
-        file,
-        fileFolder: FileFolder.Attachment,
-      },
+    assertIsDefinedOrThrow(
+      filesFieldMetadataId,
+      new Error(t`File field not found for attachment object`),
+    );
+
+    const uploadedFile = await directUploadFile(file, {
+      fileFolder: FileFolder.FilesField,
+      fieldMetadataId: filesFieldMetadataId,
     });
 
-    const attachmentUrl = result?.data?.uploadFile;
-
-    if (!attachmentUrl) {
-      return;
+    if (!isDefined(uploadedFile)) {
+      throw new Error(t`Couldn't upload the attachment.`);
     }
 
     const targetableObjectFieldIdName = getActivityTargetObjectFieldIdName({
@@ -40,16 +49,22 @@ export const useUploadAttachmentFile = () => {
     });
 
     const attachmentToCreate = {
-      authorId: currentWorkspaceMember?.id,
       name: file.name,
-      fullPath: attachmentUrl,
-      type: getFileType(file.name),
       [targetableObjectFieldIdName]: targetableObject.id,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      file: [
+        {
+          fileId: uploadedFile.id,
+          label: file.name,
+        },
+      ],
     } as Partial<Attachment>;
 
     await createOneAttachment(attachmentToCreate);
+
+    return {
+      attachmentAbsoluteURL: uploadedFile.url,
+      attachmentFileId: uploadedFile.id,
+    };
   };
 
   return { uploadAttachmentFile };

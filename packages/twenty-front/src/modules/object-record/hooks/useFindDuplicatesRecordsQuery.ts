@@ -1,11 +1,14 @@
 import gql from 'graphql-tag';
-import { useRecoilValue } from 'recoil';
+import { useMemo } from 'react';
 
 import { useObjectMetadataItem } from '@/object-metadata/hooks/useObjectMetadataItem';
-import { objectMetadataItemsState } from '@/object-metadata/states/objectMetadataItemsState';
+import { objectMetadataItemsSelector } from '@/object-metadata/states/objectMetadataItemsSelector';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import { isAggregationEnabled } from '@/object-metadata/utils/isAggregationEnabled';
 import { mapObjectMetadataToGraphQLQuery } from '@/object-metadata/utils/mapObjectMetadataToGraphQLQuery';
+import { useObjectPermissions } from '@/object-record/hooks/useObjectPermissions';
 import { getFindDuplicateRecordsQueryResponseField } from '@/object-record/utils/getFindDuplicateRecordsQueryResponseField';
-import { capitalize } from '~/utils/string/capitalize';
+import { capitalize } from 'twenty-shared/utils';
 
 export const useFindDuplicateRecordsQuery = ({
   objectNameSingular,
@@ -16,31 +19,40 @@ export const useFindDuplicateRecordsQuery = ({
     objectNameSingular,
   });
 
-  const objectMetadataItems = useRecoilValue(objectMetadataItemsState);
+  const { objectPermissionsByObjectMetadataId } = useObjectPermissions();
 
-  const findDuplicateRecordsQuery = gql`
+  const objectMetadataItems = useAtomStateValue(objectMetadataItemsSelector);
+
+  const findDuplicateRecordsQuery = useMemo(
+    () => gql`
     query FindDuplicate${capitalize(
       objectMetadataItem.nameSingular,
-    )}($id: ID!) {
+    )}($ids: [UUID!]!) {
       ${getFindDuplicateRecordsQueryResponseField(
         objectMetadataItem.nameSingular,
-      )}(id: $id) {
+      )}(ids: $ids) {
         edges {
           node ${mapObjectMetadataToGraphQLQuery({
             objectMetadataItems,
             objectMetadataItem,
+            objectPermissionsByObjectMetadataId,
           })}
           cursor
         }
         pageInfo {
-          hasNextPage
+          ${isAggregationEnabled(objectMetadataItem) ? 'hasNextPage' : ''}
           startCursor
           endCursor
         }
-        totalCount
       }
     }
-  `;
+  `,
+    [
+      objectMetadataItem,
+      objectMetadataItems,
+      objectPermissionsByObjectMetadataId,
+    ],
+  );
 
   return {
     findDuplicateRecordsQuery,

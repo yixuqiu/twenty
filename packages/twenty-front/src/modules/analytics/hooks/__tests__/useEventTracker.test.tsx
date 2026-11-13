@@ -1,25 +1,86 @@
-import { ReactNode } from 'react';
 import { gql } from '@apollo/client';
-import { MockedProvider, MockedResponse } from '@apollo/client/testing';
-import { expect } from '@storybook/test';
+import { type MockedResponse } from '@apollo/client/testing';
+import { MockedProvider } from '@apollo/client/testing/react';
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { RecoilRoot } from 'recoil';
+import { type ReactNode } from 'react';
+import {
+  ANALYTICS_COOKIE_NAME,
+  useEventTracker,
+} from '@/analytics/hooks/useEventTracker';
+import { AnalyticsType } from '~/generated-metadata/graphql';
 
-import { useEventTracker } from '../useEventTracker';
+Object.defineProperty(document, 'cookie', {
+  writable: true,
+  value: `${ANALYTICS_COOKIE_NAME}=exampleId`,
+});
 
 const mocks: MockedResponse[] = [
   {
     request: {
       query: gql`
-        mutation Track($type: String!, $data: JSON!) {
-          track(type: $type, data: $data) {
+        mutation TrackAnalytics(
+          $type: AnalyticsType!
+          $event: String
+          $name: String
+          $properties: JSON
+        ) {
+          trackAnalytics(
+            type: $type
+            event: $event
+            name: $name
+            properties: $properties
+          ) {
             success
           }
         }
       `,
       variables: {
-        type: 'exampleType',
-        data: { location: { pathname: '/examplePath' } },
+        type: AnalyticsType['TRACK'],
+        event: 'Example Event',
+        properties: {
+          foo: 'bar',
+        },
+      },
+    },
+    result: jest.fn(() => ({
+      data: {
+        track: {
+          success: true,
+        },
+      },
+    })),
+  },
+  {
+    request: {
+      query: gql`
+        mutation TrackAnalytics(
+          $type: AnalyticsType!
+          $event: String
+          $name: String
+          $properties: JSON
+        ) {
+          trackAnalytics(
+            type: $type
+            event: $event
+            name: $name
+            properties: $properties
+          ) {
+            success
+          }
+        }
+      `,
+      variables: {
+        type: AnalyticsType['PAGEVIEW'],
+        name: 'Example',
+        properties: {
+          sessionId: 'exampleId',
+          pathname: '/example/path',
+          userAgent: '',
+          timeZone: '',
+          locale: '',
+          href: '',
+          referrer: '',
+        },
       },
     },
     result: jest.fn(() => ({
@@ -33,25 +94,50 @@ const mocks: MockedResponse[] = [
 ];
 
 const Wrapper = ({ children }: { children: ReactNode }) => (
-  <RecoilRoot>
-    <MockedProvider mocks={mocks} addTypename={false}>
-      {children}
-    </MockedProvider>
-  </RecoilRoot>
+  <MockedProvider mocks={mocks}>{children}</MockedProvider>
 );
 
 describe('useEventTracker', () => {
   it('should make the call to track the event', async () => {
-    const eventType = 'exampleType';
-    const eventData = { location: { pathname: '/examplePath' } };
+    const payload = {
+      event: 'Example Event',
+      properties: {
+        foo: 'bar',
+      },
+    };
+
     const { result } = renderHook(() => useEventTracker(), {
       wrapper: Wrapper,
     });
     act(() => {
-      result.current(eventType, eventData);
+      result.current(AnalyticsType['TRACK'], payload);
     });
     await waitFor(() => {
       expect(mocks[0].result).toHaveBeenCalled();
+    });
+  });
+
+  it('should make the call to track a pageview', async () => {
+    const payload = {
+      name: 'Example',
+      properties: {
+        sessionId: 'exampleId',
+        pathname: '/example/path',
+        userAgent: '',
+        timeZone: '',
+        locale: '',
+        href: '',
+        referrer: '',
+      },
+    };
+    const { result } = renderHook(() => useEventTracker(), {
+      wrapper: Wrapper,
+    });
+    act(() => {
+      result.current(AnalyticsType['PAGEVIEW'], payload);
+    });
+    await waitFor(() => {
+      expect(mocks[1].result).toHaveBeenCalled();
     });
   });
 });

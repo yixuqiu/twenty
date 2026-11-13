@@ -1,273 +1,715 @@
-import { useCallback } from 'react';
-import { useApolloClient } from '@apollo/client';
 import {
-  snapshot_UNSTABLE,
-  useGotoRecoilSnapshot,
-  useRecoilCallback,
-  useRecoilState,
-  useSetRecoilState,
-} from 'recoil';
-import { iconsState } from 'twenty-ui';
+  useApolloClient,
+  useLazyQuery,
+  useMutation,
+} from '@apollo/client/react';
+import { useCallback } from 'react';
+import { AppPath } from 'twenty-shared/types';
 
-import { currentWorkspaceMemberState } from '@/auth/states/currentWorkspaceMemberState';
-import { currentWorkspaceState } from '@/auth/states/currentWorkspaceState';
-import { isCurrentUserLoadedState } from '@/auth/states/isCurrentUserLoadingState';
-import { isVerifyPendingState } from '@/auth/states/isVerifyPendingState';
-import { workspacesState } from '@/auth/states/workspaces';
-import { authProvidersState } from '@/client-config/states/authProvidersState';
-import { billingState } from '@/client-config/states/billingState';
-import { captchaProviderState } from '@/client-config/states/captchaProviderState';
-import { isClientConfigLoadedState } from '@/client-config/states/isClientConfigLoadedState';
-import { isDebugModeState } from '@/client-config/states/isDebugModeState';
-import { isSignInPrefilledState } from '@/client-config/states/isSignInPrefilledState';
-import { supportChatState } from '@/client-config/states/supportChatState';
-import { telemetryState } from '@/client-config/states/telemetryState';
-import { ColorScheme } from '@/workspace-member/types/WorkspaceMember';
 import { REACT_APP_SERVER_BASE_URL } from '~/config';
 import {
-  useChallengeMutation,
-  useCheckUserExistsLazyQuery,
-  useSignUpMutation,
-  useVerifyMutation,
-} from '~/generated/graphql';
-import { isDefined } from '~/utils/isDefined';
+  type AuthToken,
+  CheckUserExistsDocument,
+  GetAuthTokensFromLoginTokenDocument,
+  GetAuthTokensFromOtpDocument,
+  GetAuthTokensFromTwoFactorAuthenticationRecoveryCodeDocument,
+  GetLoginTokenFromCredentialsDocument,
+  GetWorkspaceCreationDefaultsDocument,
+  SignInDocument,
+  SignOutDocument,
+  SignUpInWorkspaceDocument,
+  SignUpDocument,
+  VerifyEmailAndGetLoginTokenDocument,
+  VerifyEmailAndGetWorkspaceAgnosticTokenDocument,
+} from '~/generated-metadata/graphql';
 
-import { currentUserState } from '../states/currentUserState';
-import { tokenPairState } from '../states/tokenPairState';
+import { useMarkSessionActive } from '@/auth/hooks/useMarkSessionActive';
+import { currentUserState } from '@/auth/states/currentUserState';
+import { isCookieAuthActiveState } from '@/auth/states/isCookieAuthActiveState';
+import { isPendingServerSignOutState } from '@/auth/states/isPendingServerSignOutState';
+import { affiliatePartnerNameState } from '@/auth/states/affiliatePartnerNameState';
+import { currentUserWorkspaceState } from '@/auth/states/currentUserWorkspaceState';
+import { currentWorkspaceMemberState } from '@/auth/states/currentWorkspaceMemberState';
+import { currentWorkspaceState } from '@/auth/states/currentWorkspaceState';
+import { returnToPathState } from '@/auth/states/returnToPathState';
+import { clearSessionLocalStorageKeys } from '@/auth/utils/clearSessionLocalStorageKeys';
+import { broadcastSignOutToOtherTabs } from '@/auth/utils/crossTabSignOut';
+import { clearSessionGeneration } from '@/auth/utils/clearSessionGeneration';
+import { isValidReturnToPath } from '@/auth/utils/isValidReturnToPath';
+import { isNonEmptyString } from '@sniptt/guards';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import { useSetAtomState } from '@/ui/utilities/state/jotai/hooks/useSetAtomState';
+
+import { isAppEffectRedirectEnabledState } from '@/auth/states/isAppEffectRedirectEnabledState';
+import { loginTokenState } from '@/auth/states/loginTokenState';
+import {
+  SignInUpStep,
+  signInUpStepState,
+} from '@/auth/states/signInUpStepState';
+import { workspacePublicDataState } from '@/auth/states/workspacePublicDataState';
+import { type BillingCheckoutSession } from '@/auth/types/BillingCheckoutSession';
+import {
+  countAvailableWorkspaces,
+  getFirstAvailableWorkspaces,
+} from '@/auth/utils/availableWorkspacesUtils';
+import { isEmailVerificationRequiredState } from '@/client-config/states/isEmailVerificationRequiredState';
+import { isMultiWorkspaceEnabledState } from '@/client-config/states/isMultiWorkspaceEnabledState';
+import { useLastAuthenticatedWorkspaceDomain } from '@/domain-manager/hooks/useLastAuthenticatedWorkspaceDomain';
+import { useOrigin } from '@/domain-manager/hooks/useOrigin';
+import { useRedirect } from '@/domain-manager/hooks/useRedirect';
+import { useRedirectToWorkspaceDomain } from '@/domain-manager/hooks/useRedirectToWorkspaceDomain';
+import { isChooseWorkspaceActionRequested } from '@/auth/utils/isChooseWorkspaceActionRequested';
+import { useLoadCurrentUser } from '@/users/hooks/useLoadCurrentUser';
+import { i18n } from '@lingui/core';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { SOURCE_LOCALE } from 'twenty-shared/translations';
+import { isDefined } from 'twenty-shared/utils';
+import { doNotTranslate } from 'twenty-shared/i18n';
+import { getWorkspaceUrl } from '~/utils/getWorkspaceUrl';
+import { isGraphqlErrorOfType } from '~/utils/is-graphql-error-of-type.util';
+import { useStore } from 'jotai';
 
 export const useAuth = () => {
-  const [, setTokenPair] = useRecoilState(tokenPairState);
-  const setCurrentUser = useSetRecoilState(currentUserState);
-  const setCurrentWorkspaceMember = useSetRecoilState(
-    currentWorkspaceMemberState,
+  const store = useStore();
+  const markSessionActive = useMarkSessionActive();
+  const setLoginToken = useSetAtomState(loginTokenState);
+  const setIsAppEffectRedirectEnabled = useSetAtomState(
+    isAppEffectRedirectEnabledState,
   );
 
-  const setCurrentWorkspace = useSetRecoilState(currentWorkspaceState);
-  const setIsVerifyPendingState = useSetRecoilState(isVerifyPendingState);
-  const setWorkspaces = useSetRecoilState(workspacesState);
+  const { origin } = useOrigin();
+  const isMultiWorkspaceEnabled = useAtomStateValue(
+    isMultiWorkspaceEnabledState,
+  );
+  const isEmailVerificationRequired = useAtomStateValue(
+    isEmailVerificationRequiredState,
+  );
+  const { loadCurrentUser } = useLoadCurrentUser();
+  const apolloClient = useApolloClient();
 
-  const [challenge] = useChallengeMutation();
-  const [signUp] = useSignUpMutation();
-  const [verify] = useVerifyMutation();
-  const [checkUserExistsQuery, { data: checkUserExistsData }] =
-    useCheckUserExistsLazyQuery();
+  const setSignInUpStep = useSetAtomState(signInUpStepState);
+  const { redirect } = useRedirect();
+  const { redirectToWorkspaceDomain } = useRedirectToWorkspaceDomain();
 
-  const client = useApolloClient();
+  const [getLoginTokenFromCredentials] = useMutation(
+    GetLoginTokenFromCredentialsDocument,
+  );
+  const [signIn] = useMutation(SignInDocument);
+  const [signUp] = useMutation(SignUpDocument);
+  const [signUpInWorkspace] = useMutation(SignUpInWorkspaceDocument);
+  const [getAuthTokensFromLoginToken] = useMutation(
+    GetAuthTokensFromLoginTokenDocument,
+  );
+  const [verifyEmailAndGetLoginToken] = useMutation(
+    VerifyEmailAndGetLoginTokenDocument,
+  );
+  const [verifyEmailAndGetWorkspaceAgnosticToken] = useMutation(
+    VerifyEmailAndGetWorkspaceAgnosticTokenDocument,
+  );
+  const [getAuthTokensFromOtp] = useMutation(GetAuthTokensFromOtpDocument);
+  const [getAuthTokensFromTwoFactorAuthenticationRecoveryCode] = useMutation(
+    GetAuthTokensFromTwoFactorAuthenticationRecoveryCodeDocument,
+  );
+  const [signOutMutation] = useMutation(SignOutDocument);
 
-  const goToRecoilSnapshot = useGotoRecoilSnapshot();
+  const workspacePublicData = useAtomStateValue(workspacePublicDataState);
 
-  const handleChallenge = useCallback(
+  const { setLastAuthenticateWorkspaceDomain } =
+    useLastAuthenticatedWorkspaceDomain();
+  const [checkUserExistsQuery, { data: checkUserExistsData }] = useLazyQuery(
+    CheckUserExistsDocument,
+  );
+
+  const [, setSearchParams] = useSearchParams();
+
+  const navigate = useNavigate();
+
+  const clearSession = useCallback(() => {
+    // The assign below is the only navigation: keep the redirect effect from racing it to the sign-in page.
+    store.set(isAppEffectRedirectEnabledState.atom, false);
+    sessionStorage.clear();
+    store.set(isCookieAuthActiveState.atom, false);
+    store.set(currentUserState.atom, null);
+    store.set(currentWorkspaceState.atom, null);
+    store.set(currentWorkspaceMemberState.atom, null);
+    store.set(currentUserWorkspaceState.atom, null);
+    clearSessionGeneration();
+    clearSessionLocalStorageKeys();
+    setLastAuthenticateWorkspaceDomain(null);
+    window.location.assign(AppPath.SignInUp);
+  }, [store, setLastAuthenticateWorkspaceDomain]);
+
+  const navigateAfterMultiWorkspaceSignInUp = useCallback(
+    async (
+      availableWorkspaces: Parameters<typeof countAvailableWorkspaces>[0],
+      email: string,
+    ) => {
+      const availableWorkspacesCount =
+        countAvailableWorkspaces(availableWorkspaces);
+
+      // Set by the in-app "Create Workspace" entry point to skip workspace selection.
+      const wantsToCreateNewWorkspace =
+        new URLSearchParams(window.location.search).get('action') ===
+        'create-new-workspace';
+
+      if (availableWorkspacesCount === 0 || wantsToCreateNewWorkspace) {
+        await apolloClient.query({
+          query: GetWorkspaceCreationDefaultsDocument,
+        });
+        setSignInUpStep(SignInUpStep.WorkspaceCreation);
+        return;
+      }
+
+      if (
+        availableWorkspacesCount === 1 &&
+        !isChooseWorkspaceActionRequested()
+      ) {
+        const targetWorkspace =
+          getFirstAvailableWorkspaces(availableWorkspaces);
+
+        return await redirectToWorkspaceDomain({
+          baseUrl: getWorkspaceUrl(targetWorkspace.workspaceUrls),
+          pathname: targetWorkspace.loginToken
+            ? AppPath.Verify
+            : AppPath.SignInUp,
+          searchParams: {
+            ...(targetWorkspace.loginToken && {
+              loginToken: targetWorkspace.loginToken,
+            }),
+            email,
+          },
+        });
+      }
+
+      setSignInUpStep(SignInUpStep.WorkspaceSelection);
+    },
+    [apolloClient, redirectToWorkspaceDomain, setSignInUpStep],
+  );
+
+  const handleGetLoginTokenFromCredentials = useCallback(
     async (email: string, password: string, captchaToken?: string) => {
-      const challengeResult = await challenge({
+      try {
+        const getLoginTokenResult = await getLoginTokenFromCredentials({
+          variables: {
+            email,
+            password,
+            captchaToken,
+            origin,
+          },
+        });
+        if (isDefined(getLoginTokenResult.error)) {
+          throw getLoginTokenResult.error;
+        }
+
+        if (!getLoginTokenResult.data?.getLoginTokenFromCredentials) {
+          throw new Error(doNotTranslate('No login token'));
+        }
+
+        return getLoginTokenResult.data.getLoginTokenFromCredentials;
+      } catch (error) {
+        if (isGraphqlErrorOfType(error, 'EMAIL_NOT_VERIFIED')) {
+          setSearchParams({ email });
+          setSignInUpStep(SignInUpStep.EmailVerification);
+          throw error;
+        }
+        throw error;
+      }
+    },
+    [getLoginTokenFromCredentials, setSearchParams, setSignInUpStep, origin],
+  );
+
+  const handleverifyEmailAndGetLoginToken = useCallback(
+    async (
+      emailVerificationToken: string,
+      email: string,
+      captchaToken?: string,
+    ) => {
+      const loginTokenResult = await verifyEmailAndGetLoginToken({
         variables: {
           email,
-          password,
+          emailVerificationToken,
+          captchaToken,
+          origin,
+        },
+      });
+
+      if (isDefined(loginTokenResult.error)) {
+        throw loginTokenResult.error;
+      }
+
+      if (!loginTokenResult.data?.verifyEmailAndGetLoginToken) {
+        throw new Error(doNotTranslate('No login token'));
+      }
+
+      return loginTokenResult.data.verifyEmailAndGetLoginToken;
+    },
+    [verifyEmailAndGetLoginToken, origin],
+  );
+
+  const handleverifyEmailAndGetWorkspaceAgnosticToken = useCallback(
+    async (
+      emailVerificationToken: string,
+      email: string,
+      captchaToken?: string,
+    ) => {
+      const { data, error } = await verifyEmailAndGetWorkspaceAgnosticToken({
+        variables: {
+          email,
+          emailVerificationToken,
           captchaToken,
         },
       });
 
-      if (isDefined(challengeResult.errors)) {
-        throw challengeResult.errors;
+      if (isDefined(error)) {
+        throw error;
       }
 
-      if (!challengeResult.data?.challenge) {
-        throw new Error('No login token');
+      if (!data?.verifyEmailAndGetWorkspaceAgnosticToken) {
+        throw new Error(
+          doNotTranslate('No workspace agnostic token in result'),
+        );
       }
 
-      return challengeResult.data.challenge;
-    },
-    [challenge],
-  );
+      markSessionActive();
 
-  const handleVerify = useCallback(
-    async (loginToken: string) => {
-      const verifyResult = await verify({
-        variables: { loginToken },
-      });
+      const { user } = await loadCurrentUser();
 
-      if (isDefined(verifyResult.errors)) {
-        throw verifyResult.errors;
-      }
-
-      if (!verifyResult.data?.verify) {
-        throw new Error('No verify result');
-      }
-
-      setTokenPair(verifyResult.data?.verify.tokens);
-
-      const user = verifyResult.data?.verify.user;
-      let workspaceMember = null;
-      setCurrentUser(user);
-      if (isDefined(user.workspaceMember)) {
-        workspaceMember = {
-          ...user.workspaceMember,
-          colorScheme: user.workspaceMember?.colorScheme as ColorScheme,
-        };
-        setCurrentWorkspaceMember(workspaceMember);
-      }
-      const workspace = user.defaultWorkspace ?? null;
-      setCurrentWorkspace(workspace);
-      if (isDefined(verifyResult.data?.verify.user.workspaces)) {
-        const validWorkspaces = verifyResult.data?.verify.user.workspaces
-          .filter(
-            ({ workspace }) => workspace !== null && workspace !== undefined,
-          )
-          .map((validWorkspace) => validWorkspace.workspace)
-          .filter(isDefined);
-
-        setWorkspaces(validWorkspaces);
-      }
-      return {
-        user,
-        workspaceMember,
-        workspace,
-        tokens: verifyResult.data?.verify.tokens,
-      };
+      await navigateAfterMultiWorkspaceSignInUp(
+        user.availableWorkspaces,
+        user.email,
+      );
     },
     [
-      verify,
-      setTokenPair,
-      setCurrentUser,
-      setCurrentWorkspaceMember,
-      setCurrentWorkspace,
-      setWorkspaces,
+      verifyEmailAndGetWorkspaceAgnosticToken,
+      markSessionActive,
+      loadCurrentUser,
+      navigateAfterMultiWorkspaceSignInUp,
     ],
   );
 
-  const handleCrendentialsSignIn = useCallback(
-    async (email: string, password: string, captchaToken?: string) => {
-      const { loginToken } = await handleChallenge(
-        email,
-        password,
-        captchaToken,
-      );
-      setIsVerifyPendingState(true);
-
-      const { user, workspaceMember, workspace } = await handleVerify(
-        loginToken.token,
-      );
-
-      setIsVerifyPendingState(false);
-
-      return {
-        user,
-        workspaceMember,
-        workspace,
-      };
+  const handleSetLoginToken = useCallback(
+    (token: AuthToken['token']) => {
+      setLoginToken(token);
     },
-    [handleChallenge, handleVerify, setIsVerifyPendingState],
+    [setLoginToken],
   );
 
-  const handleSignOut = useRecoilCallback(
-    ({ snapshot }) =>
-      async () => {
-        const emptySnapshot = snapshot_UNSTABLE();
-        const iconsValue = snapshot.getLoadable(iconsState).getValue();
-        const authProvidersValue = snapshot
-          .getLoadable(authProvidersState)
-          .getValue();
-        const billing = snapshot.getLoadable(billingState).getValue();
-        const isSignInPrefilled = snapshot
-          .getLoadable(isSignInPrefilledState)
-          .getValue();
-        const supportChat = snapshot.getLoadable(supportChatState).getValue();
-        const telemetry = snapshot.getLoadable(telemetryState).getValue();
-        const isDebugMode = snapshot.getLoadable(isDebugModeState).getValue();
-        const captchaProvider = snapshot
-          .getLoadable(captchaProviderState)
-          .getValue();
-        const isClientConfigLoaded = snapshot
-          .getLoadable(isClientConfigLoadedState)
-          .getValue();
-        const isCurrentUserLoaded = snapshot
-          .getLoadable(isCurrentUserLoadedState)
-          .getValue();
+  const handleLoadWorkspaceAfterAuthentication = useCallback(async () => {
+    markSessionActive();
+    setIsAppEffectRedirectEnabled(false);
 
-        const initialSnapshot = emptySnapshot.map(({ set }) => {
-          set(iconsState, iconsValue);
-          set(authProvidersState, authProvidersValue);
-          set(billingState, billing);
-          set(isSignInPrefilledState, isSignInPrefilled);
-          set(supportChatState, supportChat);
-          set(telemetryState, telemetry);
-          set(isDebugModeState, isDebugMode);
-          set(captchaProviderState, captchaProvider);
-          set(isClientConfigLoadedState, isClientConfigLoaded);
-          set(isCurrentUserLoadedState, isCurrentUserLoaded);
-          return undefined;
+    try {
+      await loadCurrentUser();
+    } finally {
+      setIsAppEffectRedirectEnabled(true);
+    }
+  }, [loadCurrentUser, markSessionActive, setIsAppEffectRedirectEnabled]);
+
+  const handleGetAuthTokensFromLoginToken = useCallback(
+    async (loginToken: string) => {
+      try {
+        const getAuthTokensResult = await getAuthTokensFromLoginToken({
+          variables: {
+            loginToken: loginToken,
+            origin,
+          },
         });
 
-        goToRecoilSnapshot(initialSnapshot);
+        if (isDefined(getAuthTokensResult.error)) {
+          throw getAuthTokensResult.error;
+        }
 
-        await client.clearStore();
-        sessionStorage.clear();
-      },
-    [client, goToRecoilSnapshot],
+        if (!getAuthTokensResult.data?.getAuthTokensFromLoginToken) {
+          throw new Error(
+            doNotTranslate('No getAuthTokensFromLoginToken result'),
+          );
+        }
+
+        await handleLoadWorkspaceAfterAuthentication();
+      } catch (error) {
+        if (
+          isGraphqlErrorOfType(
+            error,
+            'TWO_FACTOR_AUTHENTICATION_PROVISION_REQUIRED',
+          )
+        ) {
+          handleSetLoginToken(loginToken);
+          navigate(AppPath.SignInUp);
+          setSignInUpStep(SignInUpStep.TwoFactorAuthenticationProvision);
+          return;
+        }
+
+        if (
+          isGraphqlErrorOfType(
+            error,
+            'TWO_FACTOR_AUTHENTICATION_VERIFICATION_REQUIRED',
+          )
+        ) {
+          handleSetLoginToken(loginToken);
+          navigate(AppPath.SignInUp);
+          setSignInUpStep(SignInUpStep.TwoFactorAuthenticationVerification);
+          return;
+        }
+        throw error;
+      }
+    },
+    [
+      handleSetLoginToken,
+      getAuthTokensFromLoginToken,
+      origin,
+      handleLoadWorkspaceAfterAuthentication,
+      setSignInUpStep,
+      navigate,
+    ],
+  );
+
+  const handleCredentialsSignIn = useCallback(
+    async (email: string, password: string, captchaToken?: string) => {
+      await signIn({
+        variables: { email, password, captchaToken },
+        onCompleted: async () => {
+          markSessionActive();
+          const { user } = await loadCurrentUser();
+
+          await navigateAfterMultiWorkspaceSignInUp(
+            user.availableWorkspaces,
+            user.email,
+          );
+        },
+        onError: (error) => {
+          if (isGraphqlErrorOfType(error, 'EMAIL_NOT_VERIFIED')) {
+            setSearchParams({ email });
+            setSignInUpStep(SignInUpStep.EmailVerification);
+            throw error;
+          }
+          throw error;
+        },
+      });
+    },
+    [
+      markSessionActive,
+      signIn,
+      loadCurrentUser,
+      setSearchParams,
+      setSignInUpStep,
+      navigateAfterMultiWorkspaceSignInUp,
+    ],
   );
 
   const handleCredentialsSignUp = useCallback(
-    async (
-      email: string,
-      password: string,
-      workspaceInviteHash?: string,
-      captchaToken?: string,
-    ) => {
-      setIsVerifyPendingState(true);
-
+    async (email: string, password: string, captchaToken?: string) => {
       const signUpResult = await signUp({
         variables: {
           email,
           password,
-          workspaceInviteHash,
           captchaToken,
+          locale: i18n.locale ?? SOURCE_LOCALE,
+          affiliatePartnerName: store.get(affiliatePartnerNameState.atom)
+            ?.partner,
         },
       });
 
-      if (isDefined(signUpResult.errors)) {
-        throw signUpResult.errors;
+      if (isDefined(signUpResult.error)) {
+        throw signUpResult.error;
+      }
+
+      if (isEmailVerificationRequired) {
+        setSearchParams({ email });
+        setSignInUpStep(SignInUpStep.EmailVerification);
+        return null;
       }
 
       if (!signUpResult.data?.signUp) {
-        throw new Error('No login token');
+        throw new Error(doNotTranslate('No signUp result'));
       }
 
-      const { user, workspace, workspaceMember } = await handleVerify(
-        signUpResult.data?.signUp.loginToken.token,
+      markSessionActive();
+
+      const { user } = await loadCurrentUser();
+
+      await navigateAfterMultiWorkspaceSignInUp(
+        user.availableWorkspaces,
+        user.email,
       );
-
-      setIsVerifyPendingState(false);
-
-      return { user, workspaceMember, workspace };
     },
-    [setIsVerifyPendingState, signUp, handleVerify],
+    [
+      isEmailVerificationRequired,
+      setSearchParams,
+      markSessionActive,
+      signUp,
+      store,
+      loadCurrentUser,
+      setSignInUpStep,
+      navigateAfterMultiWorkspaceSignInUp,
+    ],
   );
 
-  const handleGoogleLogin = useCallback((workspaceInviteHash?: string) => {
-    const authServerUrl = REACT_APP_SERVER_BASE_URL;
-    window.location.href =
-      `${authServerUrl}/auth/google/${
-        workspaceInviteHash ? '?inviteHash=' + workspaceInviteHash : ''
-      }` || '';
-  }, []);
+  const handleCredentialsSignInInWorkspace = useCallback(
+    async (email: string, password: string, captchaToken?: string) => {
+      const { loginToken } = await handleGetLoginTokenFromCredentials(
+        email,
+        password,
+        captchaToken,
+      );
+      await handleGetAuthTokensFromLoginToken(loginToken.token);
+    },
+    [handleGetLoginTokenFromCredentials, handleGetAuthTokensFromLoginToken],
+  );
 
-  const handleMicrosoftLogin = useCallback((workspaceInviteHash?: string) => {
-    const authServerUrl = REACT_APP_SERVER_BASE_URL;
-    window.location.href =
-      `${authServerUrl}/auth/microsoft/${
-        workspaceInviteHash ? '?inviteHash=' + workspaceInviteHash : ''
-      }` || '';
-  }, []);
+  const handleSignOut = useCallback(async () => {
+    // Before clearSession, whose navigation kills in-flight requests.
+    store.set(isPendingServerSignOutState.atom, true);
+
+    try {
+      await signOutMutation();
+      store.set(isPendingServerSignOutState.atom, false);
+    } catch {}
+
+    broadcastSignOutToOtherTabs();
+    clearSession();
+  }, [clearSession, signOutMutation, store]);
+
+  const handleCredentialsSignUpInWorkspace = useCallback(
+    async ({
+      email,
+      password,
+      workspaceInviteHash,
+      workspacePersonalInviteToken,
+      captchaToken,
+      verifyEmailRedirectPath,
+    }: {
+      email: string;
+      password: string;
+      workspaceInviteHash?: string;
+      workspacePersonalInviteToken?: string;
+      captchaToken?: string;
+      verifyEmailRedirectPath?: string;
+    }) => {
+      const signUpInWorkspaceResult = await signUpInWorkspace({
+        variables: {
+          email,
+          password,
+          workspaceInviteHash,
+          workspacePersonalInviteToken,
+          captchaToken,
+          locale: i18n.locale ?? SOURCE_LOCALE,
+          ...(workspacePublicData?.id
+            ? { workspaceId: workspacePublicData.id }
+            : {}),
+          verifyEmailRedirectPath,
+        },
+      });
+
+      if (isDefined(signUpInWorkspaceResult.error)) {
+        throw signUpInWorkspaceResult.error;
+      }
+
+      if (!signUpInWorkspaceResult.data?.signUpInWorkspace) {
+        throw new Error(doNotTranslate('No login token'));
+      }
+
+      if (isEmailVerificationRequired) {
+        setSearchParams({ email });
+        setSignInUpStep(SignInUpStep.EmailVerification);
+        return null;
+      }
+
+      if (isMultiWorkspaceEnabled) {
+        return await redirectToWorkspaceDomain({
+          baseUrl: getWorkspaceUrl(
+            signUpInWorkspaceResult.data.signUpInWorkspace.workspace
+              .workspaceUrls,
+          ),
+          pathname: isEmailVerificationRequired
+            ? AppPath.SignInUp
+            : AppPath.Verify,
+          searchParams: {
+            ...(!isEmailVerificationRequired && {
+              loginToken:
+                signUpInWorkspaceResult.data.signUpInWorkspace.loginToken.token,
+            }),
+            email,
+          },
+        });
+      }
+
+      await handleGetAuthTokensFromLoginToken(
+        signUpInWorkspaceResult.data?.signUpInWorkspace.loginToken.token,
+      );
+    },
+    [
+      signUpInWorkspace,
+      workspacePublicData,
+      isMultiWorkspaceEnabled,
+      handleGetAuthTokensFromLoginToken,
+      setSignInUpStep,
+      setSearchParams,
+      isEmailVerificationRequired,
+      redirectToWorkspaceDomain,
+    ],
+  );
+
+  const buildRedirectUrl = useCallback(
+    (
+      path: string,
+      params: {
+        workspacePersonalInviteToken?: string;
+        workspaceInviteHash?: string;
+        billingCheckoutSession?: BillingCheckoutSession;
+        action?: string;
+      },
+    ) => {
+      const url = new URL(`${REACT_APP_SERVER_BASE_URL}${path}`);
+      if (isDefined(params.workspaceInviteHash)) {
+        url.searchParams.set('workspaceInviteHash', params.workspaceInviteHash);
+      }
+      if (isDefined(params.workspacePersonalInviteToken)) {
+        url.searchParams.set(
+          'inviteToken',
+          params.workspacePersonalInviteToken,
+        );
+      }
+      if (isDefined(params.billingCheckoutSession)) {
+        url.searchParams.set(
+          'billingCheckoutSessionState',
+          JSON.stringify(params.billingCheckoutSession),
+        );
+      }
+
+      if (isDefined(params.action)) {
+        url.searchParams.set('action', params.action);
+      }
+
+      if (isDefined(workspacePublicData)) {
+        url.searchParams.set('workspaceId', workspacePublicData.id);
+      }
+
+      const returnToPath = store.get(returnToPathState.atom);
+
+      if (isNonEmptyString(returnToPath) && isValidReturnToPath(returnToPath)) {
+        url.searchParams.set('returnToPath', returnToPath);
+      }
+
+      return url.toString();
+    },
+    [workspacePublicData, store],
+  );
+
+  const handleGoogleLogin = useCallback(
+    (params: {
+      workspacePersonalInviteToken?: string;
+      workspaceInviteHash?: string;
+      billingCheckoutSession?: BillingCheckoutSession;
+      action: string;
+    }) => {
+      redirect(buildRedirectUrl('/auth/google', params));
+    },
+    [buildRedirectUrl, redirect],
+  );
+
+  const handleMicrosoftLogin = useCallback(
+    (params: {
+      workspacePersonalInviteToken?: string;
+      workspaceInviteHash?: string;
+      billingCheckoutSession?: BillingCheckoutSession;
+      action: string;
+    }) => {
+      redirect(buildRedirectUrl('/auth/microsoft', params));
+    },
+    [buildRedirectUrl, redirect],
+  );
+
+  const handleGetAuthTokensFromOTP = useCallback(
+    async (otp: string, loginToken: string, captchaToken?: string) => {
+      const getAuthTokensFromOtpResult = await getAuthTokensFromOtp({
+        variables: {
+          captchaToken,
+          origin,
+          otp,
+          loginToken,
+        },
+      });
+
+      if (isDefined(getAuthTokensFromOtpResult.error)) {
+        throw getAuthTokensFromOtpResult.error;
+      }
+
+      if (!getAuthTokensFromOtpResult.data?.getAuthTokensFromOTP) {
+        throw new Error(doNotTranslate('No getAuthTokensFromOTP result'));
+      }
+
+      await handleLoadWorkspaceAfterAuthentication();
+    },
+    [getAuthTokensFromOtp, origin, handleLoadWorkspaceAfterAuthentication],
+  );
+
+  const handleGetAuthTokensFromTwoFactorAuthenticationRecoveryCode =
+    useCallback(
+      async (
+        recoveryCode: string,
+        loginToken: string,
+        captchaToken?: string,
+      ) => {
+        const result =
+          await getAuthTokensFromTwoFactorAuthenticationRecoveryCode({
+            variables: {
+              captchaToken,
+              origin,
+              recoveryCode,
+              loginToken,
+            },
+          });
+
+        if (isDefined(result.error)) {
+          throw result.error;
+        }
+
+        const redemption =
+          result.data?.getAuthTokensFromTwoFactorAuthenticationRecoveryCode;
+
+        if (!isDefined(redemption)) {
+          throw new Error(
+            doNotTranslate(
+              'No getAuthTokensFromTwoFactorAuthenticationRecoveryCode result',
+            ),
+          );
+        }
+
+        if (!isDefined(redemption.provisioningUri)) {
+          await handleLoadWorkspaceAfterAuthentication();
+        }
+
+        return {
+          provisioningUri: redemption.provisioningUri ?? null,
+          isTwoFactorAuthenticationReset:
+            redemption.isTwoFactorAuthenticationReset,
+        };
+      },
+      [
+        getAuthTokensFromTwoFactorAuthenticationRecoveryCode,
+        origin,
+        handleLoadWorkspaceAfterAuthentication,
+      ],
+    );
 
   return {
-    challenge: handleChallenge,
-    verify: handleVerify,
-
+    getLoginTokenFromCredentials: handleGetLoginTokenFromCredentials,
+    verifyEmailAndGetWorkspaceAgnosticToken:
+      handleverifyEmailAndGetWorkspaceAgnosticToken,
+    verifyEmailAndGetLoginToken: handleverifyEmailAndGetLoginToken,
+    getAuthTokensFromLoginToken: handleGetAuthTokensFromLoginToken,
     checkUserExists: { checkUserExistsData, checkUserExistsQuery },
-
+    clearSession,
     signOut: handleSignOut,
     signUpWithCredentials: handleCredentialsSignUp,
-    signInWithCredentials: handleCrendentialsSignIn,
+    signUpWithCredentialsInWorkspace: handleCredentialsSignUpInWorkspace,
+    signInWithCredentialsInWorkspace: handleCredentialsSignInInWorkspace,
+    signInWithCredentials: handleCredentialsSignIn,
     signInWithGoogle: handleGoogleLogin,
     signInWithMicrosoft: handleMicrosoftLogin,
+    getAuthTokensFromOTP: handleGetAuthTokensFromOTP,
+    getAuthTokensFromTwoFactorAuthenticationRecoveryCode:
+      handleGetAuthTokensFromTwoFactorAuthenticationRecoveryCode,
+    navigateAfterMultiWorkspaceSignInUp,
   };
 };

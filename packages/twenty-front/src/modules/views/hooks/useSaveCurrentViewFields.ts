@@ -1,83 +1,144 @@
-import { useRecoilCallback } from 'recoil';
+import { useStore } from 'jotai';
+import { useCallback } from 'react';
 
-import { usePersistViewFieldRecords } from '@/views/hooks/internal/usePersistViewFieldRecords';
-import { useViewStates } from '@/views/hooks/internal/useViewStates';
-import { useGetViewFromCache } from '@/views/hooks/useGetViewFromCache';
-import { ViewField } from '@/views/types/ViewField';
+import { contextStoreCurrentViewIdComponentState } from '@/context-store/states/contextStoreCurrentViewIdComponentState';
+import { useAtomComponentStateCallbackState } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateCallbackState';
+import { usePerformViewFieldApiPersist } from '@/views/hooks/internal/usePerformViewFieldApiPersist';
+import { useCanPersistViewChanges } from '@/views/hooks/useCanPersistViewChanges';
+import { useGetViewFromState } from '@/views/hooks/useGetViewFromState';
+import { type ViewField } from '@/views/types/ViewField';
+import {
+  type CreateViewFieldInput,
+  type UpdateViewFieldMutationVariables,
+} from '~/generated-metadata/graphql';
 import { isDeeplyEqual } from '~/utils/isDeeplyEqual';
-import { isDefined } from '~/utils/isDefined';
-import { isUndefinedOrNull } from '~/utils/isUndefinedOrNull';
+import { isDefined } from 'twenty-shared/utils';
 
-export const useSaveCurrentViewFields = (viewBarComponentId?: string) => {
-  const { createViewFieldRecords, updateViewFieldRecords } =
-    usePersistViewFieldRecords();
+export const useSaveCurrentViewFields = () => {
+  const { canPersistChanges } = useCanPersistViewChanges();
+  const { performViewFieldApiCreate, performViewFieldApiUpdate } =
+    usePerformViewFieldApiPersist();
 
-  const { getViewFromCache } = useGetViewFromCache();
+  const { getViewFromState } = useGetViewFromState();
 
-  const { isPersistingViewFieldsState, currentViewIdState } =
-    useViewStates(viewBarComponentId);
+  const currentViewIdCallbackState = useAtomComponentStateCallbackState(
+    contextStoreCurrentViewIdComponentState,
+  );
 
-  const saveViewFields = useRecoilCallback(
-    ({ set, snapshot }) =>
-      async (fields: ViewField[]) => {
-        const currentViewId = snapshot
-          .getLoadable(currentViewIdState)
-          .getValue();
+  const store = useStore();
 
-        if (!currentViewId) {
-          return;
-        }
+  const saveViewFields = useCallback(
+    async (viewFieldsToSave: Omit<ViewField, 'definition'>[]) => {
+      if (!canPersistChanges) {
+        return;
+      }
 
-        set(isPersistingViewFieldsState, true);
-        const view = await getViewFromCache(currentViewId);
+      const currentViewId = store.get(currentViewIdCallbackState);
 
-        if (isUndefinedOrNull(view)) {
-          return;
-        }
+      if (!currentViewId) {
+        return;
+      }
 
-        const viewFieldsToUpdate = fields
-          .map((field) => {
-            const existingField = view.viewFields.find(
-              (viewField) => viewField.id === field.id,
+      const view = getViewFromState(currentViewId);
+
+      if (!isDefined(view)) {
+        return;
+      }
+
+      const currentViewFields = view.viewFields;
+
+      const { viewFieldsToCreate, viewFieldsToUpdate } =
+        viewFieldsToSave.reduce<{
+          viewFieldsToCreate: CreateViewFieldInput[];
+          viewFieldsToUpdate: UpdateViewFieldMutationVariables[];
+        }>(
+          (
+            { viewFieldsToCreate, viewFieldsToUpdate },
+            viewFieldToCreateOrUpdate,
+          ) => {
+            const createViewFieldInput: CreateViewFieldInput = {
+              id: viewFieldToCreateOrUpdate.id,
+              fieldMetadataId: viewFieldToCreateOrUpdate.fieldMetadataId,
+              position: viewFieldToCreateOrUpdate.position,
+              isVisible: viewFieldToCreateOrUpdate.isVisible,
+              size: viewFieldToCreateOrUpdate.size,
+              aggregateOperation: viewFieldToCreateOrUpdate.aggregateOperation,
+              viewId: currentViewId,
+            };
+            const existingField = currentViewFields.find(
+              (currentViewField) =>
+                currentViewField.id === viewFieldToCreateOrUpdate.id,
             );
 
-            if (isUndefinedOrNull(existingField)) {
-              return undefined;
+            if (!isDefined(existingField)) {
+              return {
+                viewFieldsToCreate: [
+                  ...viewFieldsToCreate,
+                  createViewFieldInput,
+                ],
+                viewFieldsToUpdate,
+              };
             }
+
             if (
               isDeeplyEqual(
                 {
                   position: existingField.position,
                   size: existingField.size,
                   isVisible: existingField.isVisible,
+                  aggregateOperation: existingField.aggregateOperation,
                 },
                 {
-                  position: field.position,
-                  size: field.size,
-                  isVisible: field.isVisible,
+                  position: createViewFieldInput.position,
+                  size: createViewFieldInput.size,
+                  isVisible: createViewFieldInput.isVisible,
+                  aggregateOperation: createViewFieldInput.aggregateOperation,
                 },
               )
             ) {
-              return undefined;
+              return {
+                viewFieldsToCreate,
+                viewFieldsToUpdate,
+              };
             }
-            return field;
-          })
-          .filter(isDefined);
 
-        const viewFieldsToCreate = fields.filter((field) => !field.id);
+            return {
+              viewFieldsToCreate,
+              viewFieldsToUpdate: [
+                ...viewFieldsToUpdate,
+                {
+                  input: {
+                    id: existingField.id,
+                    update: {
+                      aggregateOperation:
+                        createViewFieldInput.aggregateOperation,
+                      isVisible: createViewFieldInput.isVisible,
+                      position: createViewFieldInput.position,
+                      size: createViewFieldInput.size,
+                    },
+                  },
+                },
+              ],
+            };
+          },
+          {
+            viewFieldsToUpdate: [],
+            viewFieldsToCreate: [],
+          },
+        );
 
-        await Promise.all([
-          createViewFieldRecords(viewFieldsToCreate, view),
-          updateViewFieldRecords(viewFieldsToUpdate),
-        ]);
-        set(isPersistingViewFieldsState, false);
-      },
+      await Promise.all([
+        performViewFieldApiCreate({ inputs: viewFieldsToCreate }),
+        performViewFieldApiUpdate(viewFieldsToUpdate),
+      ]);
+    },
     [
-      createViewFieldRecords,
-      currentViewIdState,
-      getViewFromCache,
-      isPersistingViewFieldsState,
-      updateViewFieldRecords,
+      store,
+      canPersistChanges,
+      performViewFieldApiCreate,
+      currentViewIdCallbackState,
+      getViewFromState,
+      performViewFieldApiUpdate,
     ],
   );
 

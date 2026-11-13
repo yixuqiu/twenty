@@ -1,44 +1,55 @@
-import { Controller, Get, Req, Res, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Req,
+  Res,
+  UseFilters,
+  UseGuards,
+} from '@nestjs/common';
 
 import { Response } from 'express';
+import { ApiPath } from 'twenty-shared/types';
 
-import { GoogleRequest } from 'src/engine/core-modules/auth/strategies/google.auth.strategy';
-import { TokenService } from 'src/engine/core-modules/auth/services/token.service';
-import { GoogleProviderEnabledGuard } from 'src/engine/core-modules/auth/guards/google-provider-enabled.guard';
+import { AuthOAuthExceptionFilter } from 'src/engine/core-modules/auth/filters/auth-oauth-exception.filter';
+import { AuthRestApiExceptionFilter } from 'src/engine/core-modules/auth/filters/auth-rest-api-exception.filter';
 import { GoogleOauthGuard } from 'src/engine/core-modules/auth/guards/google-oauth.guard';
+import { GoogleProviderEnabledGuard } from 'src/engine/core-modules/auth/guards/google-provider-enabled.guard';
 import { AuthService } from 'src/engine/core-modules/auth/services/auth.service';
+import { GoogleRequest } from 'src/engine/core-modules/auth/strategies/google.auth.strategy';
+import { AuthProviderEnum } from 'src/engine/core-modules/workspace/types/workspace.type';
+import { NoPermissionGuard } from 'src/engine/guards/no-permission.guard';
+import { PublicEndpointGuard } from 'src/engine/guards/public-endpoint.guard';
 
-@Controller('auth/google')
+@Controller(`${ApiPath.Auth}/google`)
+@UseFilters(AuthRestApiExceptionFilter)
 export class GoogleAuthController {
-  constructor(
-    private readonly tokenService: TokenService,
-    private readonly authService: AuthService,
-  ) {}
+  constructor(private readonly authService: AuthService) {}
 
   @Get()
-  @UseGuards(GoogleProviderEnabledGuard, GoogleOauthGuard)
+  @UseGuards(
+    GoogleProviderEnabledGuard,
+    GoogleOauthGuard,
+    PublicEndpointGuard,
+    NoPermissionGuard,
+  )
   async googleAuth() {
-    // As this method is protected by Google Auth guard, it will trigger Google SSO flow
     return;
   }
 
   @Get('redirect')
-  @UseGuards(GoogleProviderEnabledGuard, GoogleOauthGuard)
+  @UseGuards(
+    GoogleProviderEnabledGuard,
+    GoogleOauthGuard,
+    PublicEndpointGuard,
+    NoPermissionGuard,
+  )
+  @UseFilters(AuthOAuthExceptionFilter)
   async googleAuthRedirect(@Req() req: GoogleRequest, @Res() res: Response) {
-    const { firstName, lastName, email, picture, workspaceInviteHash } =
-      req.user;
-
-    const user = await this.authService.signInUp({
-      email,
-      firstName,
-      lastName,
-      picture,
-      workspaceInviteHash,
-      fromSSO: true,
-    });
-
-    const loginToken = await this.tokenService.generateLoginToken(user.email);
-
-    return res.redirect(this.tokenService.computeRedirectURI(loginToken.token));
+    return res.redirect(
+      await this.authService.signInUpWithSocialSso(
+        req.user,
+        AuthProviderEnum.Google,
+      ),
+    );
   }
 }

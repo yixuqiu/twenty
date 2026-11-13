@@ -1,12 +1,16 @@
 import { Field, Int, ObjectType } from '@nestjs/graphql';
 
-import { TimelineCalendarEvent } from 'src/engine/core-modules/calendar/dtos/timeline-calendar-event.dto';
+import { UUIDScalarType } from 'src/engine/api/graphql/workspace-schema-builder/graphql-types/scalars';
+import { TimelineCalendarEventDTO } from 'src/engine/core-modules/calendar/dtos/timeline-calendar-event.dto';
 
 @ObjectType('TimelineCalendarEventsWithTotal')
-export class TimelineCalendarEventsWithTotal {
+export class TimelineCalendarEventsWithTotalDTO {
   @Field(() => Int)
   totalNumberOfCalendarEvents: number;
 
-  @Field(() => [TimelineCalendarEvent])
-  timelineCalendarEvents: TimelineCalendarEvent[];
+  @Field(() => [TimelineCalendarEventDTO])
+  timelineCalendarEvents: TimelineCalendarEventDTO[];
+
+  @Field(() => [UUIDScalarType])
+  relatedPersonIds: string[];
 }

@@ -1,60 +1,18 @@
-import { gql } from '@apollo/client';
+import {
+  CreateOneObjectMetadataItemDocument,
+  FindManyCommandMenuItemsDocument,
+  FindManyNavigationMenuItemsDocument,
+  FindManyViewsDocument,
+} from '~/generated-metadata/graphql';
 
-export const query = gql`
-  mutation CreateOneObjectMetadataItem($input: CreateOneObjectInput!) {
-    createOneObject(input: $input) {
-      id
-      dataSourceId
-      nameSingular
-      namePlural
-      labelSingular
-      labelPlural
-      description
-      icon
-      isCustom
-      isActive
-      createdAt
-      updatedAt
-      labelIdentifierFieldMetadataId
-      imageIdentifierFieldMetadataId
-    }
-  }
-`;
+export const query = CreateOneObjectMetadataItemDocument;
 
-export const findManyViewsQuery = gql`
-  query FindManyViews(
-    $filter: ViewFilterInput
-    $orderBy: ViewOrderByInput
-    $lastCursor: String
-    $limit: Int
-  ) {
-    views(
-      filter: $filter
-      orderBy: $orderBy
-      first: $limit
-      after: $lastCursor
-    ) {
-      edges {
-        node {
-          __typename
-          id
-          objectMetadataId
-          type
-          createdAt
-          name
-          updatedAt
-        }
-        cursor
-      }
-      pageInfo {
-        hasNextPage
-        startCursor
-        endCursor
-      }
-      totalCount
-    }
-  }
-`;
+export const findManyViewsQuery = FindManyViewsDocument;
+
+export const findManyNavigationMenuItemsQuery =
+  FindManyNavigationMenuItemsDocument;
+
+export const findManyCommandMenuItemsQuery = FindManyCommandMenuItemsDocument;
 
 export const variables = {
   input: {
@@ -70,17 +28,26 @@ export const variables = {
 
 export const responseData = {
   id: '',
-  dataSourceId: '',
+  universalIdentifier: '',
   nameSingular: 'viewFilter',
   namePlural: 'viewFilters',
   labelSingular: 'View Filter',
   labelPlural: 'View Filters',
   description: '',
   icon: '',
-  isCustom: false,
+  color: null,
+  isRemote: false,
   isActive: true,
+  isSystem: false,
+  isUIEditable: true,
+  isUICreatable: true,
+  isSearchable: false,
+  shortcut: null,
+  duplicateCriteria: null,
   createdAt: '',
   updatedAt: '',
-  labelIdentifierFieldMetadataId: '',
+  labelIdentifierFieldMetadataId: '20202020-72ba-4e11-a36d-e17b544541e1',
   imageIdentifierFieldMetadataId: '',
+  isLabelSyncedWithName: false,
+  fieldsList: [],
 };

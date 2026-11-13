@@ -1,50 +1,32 @@
-import { Injectable } from '@nestjs/common';
+import { type ObjectRecordNonDestructiveEvent } from 'twenty-shared/database-events';
 
-import { MessageQueueJob } from 'src/engine/integrations/message-queue/interfaces/message-queue-job.interface';
-
-import { ObjectRecordBaseEvent } from 'src/engine/integrations/event-emitter/types/object-record.base.event';
-import { InjectObjectMetadataRepository } from 'src/engine/object-metadata-repository/object-metadata-repository.decorator';
-import { WorkspaceMemberRepository } from 'src/modules/workspace-member/repositories/workspace-member.repository';
-import { WorkspaceMemberObjectMetadata } from 'src/modules/workspace-member/standard-objects/workspace-member.object-metadata';
+import { Process } from 'src/engine/core-modules/message-queue/decorators/process.decorator';
+import { Processor } from 'src/engine/core-modules/message-queue/decorators/processor.decorator';
+import { MessageQueue } from 'src/engine/core-modules/message-queue/message-queue.constants';
+import { WorkspaceOrmManager } from 'src/engine/twenty-orm/workspace-orm.manager';
+import { buildSystemAuthContext } from 'src/engine/twenty-orm/utils/build-system-auth-context.util';
+import { WorkspaceEventBatch } from 'src/engine/workspace-event-emitter/types/workspace-event-batch.type';
 import { TimelineActivityService } from 'src/modules/timeline/services/timeline-activity.service';
 
-@Injectable()
-export class UpsertTimelineActivityFromInternalEvent
-  implements MessageQueueJob<ObjectRecordBaseEvent>
-{
+@Processor(MessageQueue.entityEventsToDbQueue)
+export class UpsertTimelineActivityFromInternalEvent {
   constructor(
-    @InjectObjectMetadataRepository(WorkspaceMemberObjectMetadata)
-    private readonly workspaceMemberService: WorkspaceMemberRepository,
     private readonly timelineActivityService: TimelineActivityService,
+    private readonly workspaceOrmManager: WorkspaceOrmManager,
   ) {}
 
-  async handle(data: ObjectRecordBaseEvent): Promise<void> {
-    if (data.userId) {
-      const workspaceMember = await this.workspaceMemberService.getByIdOrFail(
-        data.userId,
-        data.workspaceId,
-      );
-
-      data.workspaceMemberId = workspaceMember.id;
-    }
-
-    if (data.properties.diff) {
-      // we remove "before" and "after" property for a cleaner/slimmer event payload
-      data.properties = {
-        diff: data.properties.diff,
-      };
-    }
-
-    // Temporary
-    // We ignore every that is not a LinkedObject or a Business Object
-    if (
-      data.objectMetadata.isSystem &&
-      data.objectMetadata.nameSingular !== 'activityTarget' &&
-      data.objectMetadata.nameSingular !== 'activity'
-    ) {
+  @Process(UpsertTimelineActivityFromInternalEvent.name)
+  async handle(
+    workspaceEventBatch: WorkspaceEventBatch<ObjectRecordNonDestructiveEvent>,
+  ): Promise<void> {
+    if (workspaceEventBatch.events.length === 0) {
       return;
     }
 
-    await this.timelineActivityService.upsertEvent(data);
+    await this.workspaceOrmManager.executeInWorkspaceContext(
+      async () =>
+        await this.timelineActivityService.upsertEvents(workspaceEventBatch),
+      buildSystemAuthContext(workspaceEventBatch.workspaceId),
+    );
   }
 }

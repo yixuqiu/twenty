@@ -1,7 +1,9 @@
-import { createComponentFamilyState } from '@/ui/utilities/state/component-state/utils/createComponentFamilyState';
+import { RecordBoardComponentInstanceContext } from '@/object-record/record-board/states/contexts/RecordBoardComponentInstanceContext';
+import { createAtomComponentFamilyState } from '@/ui/utilities/state/jotai/utils/createAtomComponentFamilyState';
 
 export const recordBoardShouldFetchMoreInColumnComponentFamilyState =
-  createComponentFamilyState<boolean, string>({
-    key: 'onRecordBoardFetchMoreIrecordBoardShouldFetchMoreInColumnComponentFamilyStatesVisibleComponentFamilyState',
-    defaultValue: false,
+  createAtomComponentFamilyState<boolean, string>({
+    key: 'recordBoardShouldFetchMoreInColumnComponentFamilyState',
+    defaultValue: true,
+    componentInstanceContext: RecordBoardComponentInstanceContext,
   });

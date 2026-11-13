@@ -1,53 +1,98 @@
 import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
 
-import { NestjsQueryGraphQLModule } from '@ptc-org/nestjs-query-graphql';
-import { NestjsQueryTypeOrmModule } from '@ptc-org/nestjs-query-typeorm';
-
-import { WorkspaceManagerModule } from 'src/engine/workspace-manager/workspace-manager.module';
-import { WorkspaceResolver } from 'src/engine/core-modules/workspace/workspace.resolver';
 import { TypeORMModule } from 'src/database/typeorm/typeorm.module';
-import { FeatureFlagEntity } from 'src/engine/core-modules/feature-flag/feature-flag.entity';
-import { UserWorkspace } from 'src/engine/core-modules/user-workspace/user-workspace.entity';
-import { UserWorkspaceModule } from 'src/engine/core-modules/user-workspace/user-workspace.module';
+import { ApplicationModule } from 'src/engine/core-modules/application/application.module';
+import { ApplicationManifestModule } from 'src/engine/core-modules/application/application-manifest/application-manifest.module';
+import { PreInstalledAppsModule } from 'src/engine/core-modules/application/pre-installed-apps/pre-installed-apps.module';
 import { BillingModule } from 'src/engine/core-modules/billing/billing.module';
-import { FileUploadModule } from 'src/engine/core-modules/file/file-upload/file-upload.module';
-import { DataSourceModule } from 'src/engine/metadata-modules/data-source/data-source.module';
-import { UserModule } from 'src/engine/core-modules/user/user.module';
-import { WorkspaceWorkspaceMemberListener } from 'src/engine/core-modules/workspace/workspace-workspace-member.listener';
-import { WorkspaceCacheVersionModule } from 'src/engine/metadata-modules/workspace-cache-version/workspace-cache-version.module';
-
-import { workspaceAutoResolverOpts } from './workspace.auto-resolver-opts';
-import { Workspace } from './workspace.entity';
-
-import { WorkspaceService } from './services/workspace.service';
+import { EventLogRetentionModule } from 'src/engine/core-modules/event-logs/retention/event-log-retention.module';
+import { CompanyEnrichmentModule } from 'src/engine/core-modules/company-enrichment/company-enrichment.module';
+import { DnsManagerModule } from 'src/engine/core-modules/dns-manager/dns-manager.module';
+import { CustomDomainManagerModule } from 'src/engine/core-modules/domain/custom-domain-manager/custom-domain-manager.module';
+import { SubdomainManagerModule } from 'src/engine/core-modules/domain/subdomain-manager/subdomain-manager.module';
+import { WorkspaceDomainsModule } from 'src/engine/core-modules/domain/workspace-domains/workspace-domains.module';
+import { EnterpriseModule } from 'src/engine/core-modules/enterprise/enterprise.module';
+import { FeatureFlagModule } from 'src/engine/core-modules/feature-flag/feature-flag.module';
+import { FileModule } from 'src/engine/core-modules/file/file.module';
+import { MetricsModule } from 'src/engine/core-modules/metrics/metrics.module';
+import { SdkClientModule } from 'src/engine/core-modules/sdk-client/sdk-client.module';
+import { UserWorkspaceEntity } from 'src/engine/core-modules/user-workspace/user-workspace.entity';
+import { UserWorkspaceModule } from 'src/engine/core-modules/user-workspace/user-workspace.module';
+import { UserEntity } from 'src/engine/core-modules/user/user.entity';
+import { CheckCustomDomainValidRecordsCronCommand } from 'src/engine/core-modules/workspace/crons/commands/check-custom-domain-valid-records.cron.command';
+import { CheckCustomDomainValidRecordsCronJob } from 'src/engine/core-modules/workspace/crons/jobs/check-custom-domain-valid-records.cron.job';
+import { UpgradeModule } from 'src/engine/core-modules/upgrade/upgrade.module';
+import { CoreEntityCacheModule } from 'src/engine/core-entity-cache/core-entity-cache.module';
+import { WorkspaceEntityCacheProviderService } from 'src/engine/core-modules/workspace/services/workspace-entity-cache-provider.service';
+import { WorkspaceAssistantProfileService } from 'src/engine/core-modules/workspace/services/workspace-assistant-profile.service';
+import { WorkspaceService } from 'src/engine/core-modules/workspace/services/workspace.service';
+import { WorkspaceGaugeService } from 'src/engine/core-modules/workspace/workspace-gauge.service';
+import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
+import { WorkspaceResolver } from 'src/engine/core-modules/workspace/workspace.resolver';
+import { WorkspaceAssistantProfileResolver } from 'src/engine/core-modules/workspace/workspace-assistant-profile.resolver';
+import { BillingDisabledGuard } from 'src/engine/guards/billing-disabled.guard';
+import { AiAgentModule } from 'src/engine/metadata-modules/ai/ai-agent/ai-agent.module';
+import { WorkspaceManyOrAllFlatEntityMapsCacheModule } from 'src/engine/metadata-modules/flat-entity/services/workspace-many-or-all-flat-entity-maps-cache.module';
+import { PermissionsModule } from 'src/engine/permissions/permissions.module';
+import { RoleModule } from 'src/engine/metadata-modules/role/role.module';
+import { RoleAssignmentModule } from 'src/engine/permissions/role-assignment/role-assignment.module';
+import { ViewModule } from 'src/engine/metadata-modules/view/view.module';
+import { WorkspaceCacheStorageModule } from 'src/engine/workspace-cache-storage/workspace-cache-storage.module';
+import { WorkspaceDataSourceModule } from 'src/engine/workspace-datasource/workspace-datasource.module';
+import { WorkspaceManagerModule } from 'src/engine/workspace-manager/workspace-manager.module';
+import { WorkspaceMigrationModule } from 'src/engine/workspace-manager/workspace-migration/workspace-migration.module';
+import { StandardObjectsPrefillModule } from 'src/engine/workspace-manager/standard-objects-prefill-data/standard-objects-prefill.module';
 
 @Module({
   imports: [
     TypeORMModule,
-    NestjsQueryGraphQLModule.forFeature({
-      imports: [
-        BillingModule,
-        FileUploadModule,
-        WorkspaceCacheVersionModule,
-        NestjsQueryTypeOrmModule.forFeature(
-          [Workspace, UserWorkspace, FeatureFlagEntity],
-          'core',
-        ),
-        UserWorkspaceModule,
-        WorkspaceManagerModule,
-        DataSourceModule,
-        TypeORMModule,
-        UserModule,
-      ],
-      services: [WorkspaceService],
-      resolvers: workspaceAutoResolverOpts,
-    }),
+    TypeOrmModule.forFeature([
+      WorkspaceEntity,
+      UserEntity,
+      UserWorkspaceEntity,
+    ]),
+    MetricsModule,
+    StandardObjectsPrefillModule,
+    BillingModule,
+    EventLogRetentionModule,
+    FileModule,
+    UserWorkspaceModule,
+    WorkspaceManagerModule,
+    FeatureFlagModule,
+    WorkspaceDataSourceModule,
+    PermissionsModule,
+    WorkspaceCacheStorageModule,
+    RoleModule,
+    RoleAssignmentModule,
+    AiAgentModule,
+    DnsManagerModule,
+    WorkspaceDomainsModule,
+    SubdomainManagerModule,
+    CustomDomainManagerModule,
+    ViewModule,
+    WorkspaceManyOrAllFlatEntityMapsCacheModule,
+    ApplicationModule,
+    ApplicationManifestModule,
+    PreInstalledAppsModule,
+    EnterpriseModule,
+    WorkspaceMigrationModule,
+    CoreEntityCacheModule,
+    UpgradeModule,
+    SdkClientModule,
+    CompanyEnrichmentModule,
   ],
-  exports: [WorkspaceService],
+  exports: [WorkspaceService, CheckCustomDomainValidRecordsCronCommand],
   providers: [
     WorkspaceResolver,
+    WorkspaceAssistantProfileResolver,
     WorkspaceService,
-    WorkspaceWorkspaceMemberListener,
+    WorkspaceAssistantProfileService,
+    WorkspaceGaugeService,
+    WorkspaceEntityCacheProviderService,
+    BillingDisabledGuard,
+    CheckCustomDomainValidRecordsCronCommand,
+    CheckCustomDomainValidRecordsCronJob,
   ],
 })
 export class WorkspaceModule {}

@@ -1,27 +1,41 @@
-import { Field, ObjectType } from '@nestjs/graphql';
+import { Field, ObjectType, registerEnumType } from '@nestjs/graphql';
 
+import { APP_LOCALES, SOURCE_LOCALE } from 'twenty-shared/translations';
 import {
-  Entity,
+  BeforeInsert,
+  BeforeUpdate,
   Column,
-  PrimaryGeneratedColumn,
   CreateDateColumn,
-  UpdateDateColumn,
+  DeleteDateColumn,
+  Entity,
+  Index,
   OneToMany,
-  ManyToOne,
+  PrimaryGeneratedColumn,
   Relation,
+  UpdateDateColumn,
 } from 'typeorm';
-import { IDField } from '@ptc-org/nestjs-query-graphql';
 
-import { AppToken } from 'src/engine/core-modules/app-token/app-token.entity';
-import { Workspace } from 'src/engine/core-modules/workspace/workspace.entity';
-import { WorkspaceMember } from 'src/engine/core-modules/user/dtos/workspace-member.dto';
-import { UserWorkspace } from 'src/engine/core-modules/user-workspace/user-workspace.entity';
 import { UUIDScalarType } from 'src/engine/api/graphql/workspace-schema-builder/graphql-types/scalars';
+import { AppTokenEntity } from 'src/engine/core-modules/app-token/app-token.entity';
+import { KeyValuePairEntity } from 'src/engine/core-modules/key-value-pair/key-value-pair.entity';
+import { OnboardingStatus } from 'src/engine/core-modules/onboarding/enums/onboarding-status.enum';
+import { UserWorkspaceEntity } from 'src/engine/core-modules/user-workspace/user-workspace.entity';
+import { WorkspaceMemberDTO } from 'src/engine/core-modules/user/dtos/workspace-member.dto';
+import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
+
+registerEnumType(OnboardingStatus, {
+  name: 'OnboardingStatus',
+  description: 'Onboarding status',
+});
 
 @Entity({ name: 'user', schema: 'core' })
 @ObjectType('User')
-export class User {
-  @IDField(() => UUIDScalarType)
+@Index('UQ_USER_EMAIL', ['email'], {
+  unique: true,
+  where: '"deletedAt" IS NULL',
+})
+export class UserEntity {
+  @Field(() => UUIDScalarType)
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
@@ -33,29 +47,34 @@ export class User {
   @Column({ default: '' })
   lastName: string;
 
-  @Field()
-  @Column()
-  email: string;
+  @BeforeInsert()
+  @BeforeUpdate()
+  formatEmail?() {
+    this.email = this.email.toLowerCase();
+  }
 
-  @Field({ nullable: true })
-  @Column({ nullable: true })
-  defaultAvatarUrl: string;
+  @Field()
+  @Column({ type: 'citext' })
+  email: string;
 
   @Field()
   @Column({ default: false })
-  emailVerified: boolean;
+  isEmailVerified: boolean;
 
   @Field({ nullable: true })
   @Column({ default: false })
   disabled: boolean;
 
-  @Field({ nullable: true })
   @Column({ nullable: true })
   passwordHash: string;
 
   @Field()
   @Column({ default: false })
   canImpersonate: boolean;
+
+  @Field()
+  @Column({ default: false })
+  canAccessFullAdminPanel: boolean;
 
   @Field()
   @CreateDateColumn({ type: 'timestamptz' })
@@ -66,44 +85,42 @@ export class User {
   updatedAt: Date;
 
   @Field({ nullable: true })
-  @Column({ nullable: true, type: 'timestamptz' })
+  @DeleteDateColumn({ type: 'timestamptz' })
   deletedAt: Date;
 
-  @Field(() => Workspace, { nullable: false })
-  @ManyToOne(() => Workspace, (workspace) => workspace.users, {
-    onDelete: 'SET NULL',
-  })
-  defaultWorkspace: Relation<Workspace>;
+  @Field(() => String, { nullable: false })
+  @Column({ nullable: false, default: SOURCE_LOCALE, type: 'varchar' })
+  locale: keyof typeof APP_LOCALES;
 
-  @Field()
-  @Column()
-  defaultWorkspaceId: string;
-
-  @Field({
-    nullable: true,
-    deprecationReason:
-      'field migrated into the AppTokens Table ref: https://github.com/twentyhq/twenty/issues/5021',
-  })
-  @Column({ nullable: true })
-  passwordResetToken: string;
-
-  @Field({
-    nullable: true,
-    deprecationReason:
-      'field migrated into the AppTokens Table ref: https://github.com/twentyhq/twenty/issues/5021',
-  })
-  @Column({ nullable: true, type: 'timestamptz' })
-  passwordResetTokenExpiresAt: Date;
-
-  @OneToMany(() => AppToken, (appToken) => appToken.user, {
+  @OneToMany(() => AppTokenEntity, (appToken) => appToken.user, {
     cascade: true,
   })
-  appTokens: Relation<AppToken[]>;
+  appTokens: Relation<AppTokenEntity[]>;
 
-  @Field(() => WorkspaceMember, { nullable: true })
-  workspaceMember: Relation<WorkspaceMember>;
+  @OneToMany(() => KeyValuePairEntity, (keyValuePair) => keyValuePair.user, {
+    cascade: true,
+  })
+  keyValuePairs: Relation<KeyValuePairEntity[]>;
 
-  @Field(() => [UserWorkspace])
-  @OneToMany(() => UserWorkspace, (userWorkspace) => userWorkspace.user)
-  workspaces: Relation<UserWorkspace[]>;
+  @Field(() => WorkspaceMemberDTO, { nullable: true })
+  workspaceMember: Relation<WorkspaceMemberDTO>;
+
+  @Field(() => [UserWorkspaceEntity])
+  @OneToMany(
+    () => UserWorkspaceEntity,
+    (userWorkspace: UserWorkspaceEntity) => userWorkspace.user,
+  )
+  userWorkspaces: Relation<UserWorkspaceEntity[]>;
+
+  @Field(() => OnboardingStatus, { nullable: true })
+  onboardingStatus: OnboardingStatus;
+
+  @Field(() => OnboardingStatus, { nullable: true })
+  previousOnboardingStatus: OnboardingStatus;
+
+  @Field(() => WorkspaceEntity, { nullable: true })
+  currentWorkspace?: Relation<WorkspaceEntity>;
+
+  @Field(() => UserWorkspaceEntity, { nullable: true })
+  currentUserWorkspace?: Relation<UserWorkspaceEntity>;
 }

@@ -1,36 +1,57 @@
-/* eslint-disable no-restricted-imports */
 import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
 
-import { NestjsQueryGraphQLModule } from '@ptc-org/nestjs-query-graphql';
-import { NestjsQueryTypeOrmModule } from '@ptc-org/nestjs-query-typeorm';
-
-import { User } from 'src/engine/core-modules/user/user.entity';
-import { UserResolver } from 'src/engine/core-modules/user/user.resolver';
-import { TypeORMService } from 'src/database/typeorm/typeorm.service';
-import { DataSourceModule } from 'src/engine/metadata-modules/data-source/data-source.module';
-import { TypeORMModule } from 'src/database/typeorm/typeorm.module';
+import { CoreEntityCacheModule } from 'src/engine/core-entity-cache/core-entity-cache.module';
+import { WorkspaceDomainsModule } from 'src/engine/core-modules/domain/workspace-domains/workspace-domains.module';
+import { EmailVerificationModule } from 'src/engine/core-modules/email-verification/email-verification.module';
+import { FileModule } from 'src/engine/core-modules/file/file.module';
+import { OnboardingModule } from 'src/engine/core-modules/onboarding/onboarding.module';
+import { UserWorkspaceEntity } from 'src/engine/core-modules/user-workspace/user-workspace.entity';
 import { UserWorkspaceModule } from 'src/engine/core-modules/user-workspace/user-workspace.module';
-import { UserWorkspace } from 'src/engine/core-modules/user-workspace/user-workspace.entity';
-import { FileUploadModule } from 'src/engine/core-modules/file/file-upload/file-upload.module';
-
-import { userAutoResolverOpts } from './user.auto-resolver-opts';
+import { GlobalWorkspaceMemberListener } from 'src/engine/core-modules/user/services/global-workspace-member.listener';
+import { UserEntityCacheProviderService } from 'src/engine/core-modules/user/services/user-entity-cache-provider.service';
+import { WorkspaceFlatWorkspaceMemberMapCacheService } from 'src/engine/core-modules/user/services/workspace-flat-workspace-member-map-cache.service';
+import { WorkspaceMemberTranspiler } from 'src/engine/core-modules/user/services/workspace-member-transpiler.service';
+import { UserVarsModule } from 'src/engine/core-modules/user/user-vars/user-vars.module';
+import { UserEntity } from 'src/engine/core-modules/user/user.entity';
+import { UserResolver } from 'src/engine/core-modules/user/user.resolver';
+import { WorkspaceModule } from 'src/engine/core-modules/workspace/workspace.module';
+import { AgentHistoryModule } from 'src/engine/metadata-modules/ai/ai-history/ai-history.module';
+import { RecordShareModule } from 'src/engine/permissions/record-share/record-share.module';
+import { ConnectedAccountMetadataModule } from 'src/engine/metadata-modules/connected-account/connected-account-metadata.module';
+import { PermissionsModule } from 'src/engine/permissions/permissions.module';
+import { RoleAssignmentModule } from 'src/engine/permissions/role-assignment/role-assignment.module';
+import { WorkspaceCacheModule } from 'src/engine/workspace-cache/workspace-cache.module';
 
 import { UserService } from './services/user.service';
 
 @Module({
   imports: [
-    NestjsQueryGraphQLModule.forFeature({
-      imports: [
-        NestjsQueryTypeOrmModule.forFeature([User, UserWorkspace], 'core'),
-        TypeORMModule,
-      ],
-      resolvers: userAutoResolverOpts,
-    }),
-    DataSourceModule,
-    FileUploadModule,
+    TypeOrmModule.forFeature([UserEntity]),
+    FileModule,
+    WorkspaceModule,
+    OnboardingModule,
+    TypeOrmModule.forFeature([UserWorkspaceEntity]),
+    UserVarsModule,
     UserWorkspaceModule,
+    RoleAssignmentModule,
+    ConnectedAccountMetadataModule,
+    RecordShareModule,
+    AgentHistoryModule,
+    PermissionsModule,
+    EmailVerificationModule,
+    WorkspaceDomainsModule,
+    WorkspaceCacheModule,
+    CoreEntityCacheModule,
   ],
-  exports: [UserService],
-  providers: [UserService, UserResolver, TypeORMService],
+  exports: [UserService, WorkspaceMemberTranspiler],
+  providers: [
+    UserService,
+    UserResolver,
+    UserEntityCacheProviderService,
+    WorkspaceMemberTranspiler,
+    WorkspaceFlatWorkspaceMemberMapCacheService,
+    GlobalWorkspaceMemberListener,
+  ],
 })
 export class UserModule {}

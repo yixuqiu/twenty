@@ -1,142 +1,70 @@
-import { useEffect } from 'react';
-import { useParams } from 'react-router-dom';
-import { useSetRecoilState } from 'recoil';
-import { useIcons } from 'twenty-ui';
+import { Navigate, useParams } from 'react-router-dom';
+import { AppPath, StandardObjectNameSingular } from 'twenty-shared/types';
+import { getAppPath, isDefined } from 'twenty-shared/utils';
 
-import { useFavorites } from '@/favorites/hooks/useFavorites';
-import { useLabelIdentifierFieldMetadataItem } from '@/object-metadata/hooks/useLabelIdentifierFieldMetadataItem';
-import { useObjectMetadataItem } from '@/object-metadata/hooks/useObjectMetadataItem';
-import { useFindOneRecord } from '@/object-record/hooks/useFindOneRecord';
-import { RecordShowContainer } from '@/object-record/record-show/components/RecordShowContainer';
-import { findOneRecordForShowPageOperationSignatureFactory } from '@/object-record/record-show/graphql/operations/factories/findOneRecordForShowPageOperationSignatureFactory';
-import { recordStoreFamilyState } from '@/object-record/record-store/states/recordStoreFamilyState';
-import { PageBody } from '@/ui/layout/page/PageBody';
-import { PageContainer } from '@/ui/layout/page/PageContainer';
-import { PageFavoriteButton } from '@/ui/layout/page/PageFavoriteButton';
-import { PageHeader } from '@/ui/layout/page/PageHeader';
-import { ShowPageAddButton } from '@/ui/layout/show-page/components/ShowPageAddButton';
-import { ShowPageMoreButton } from '@/ui/layout/show-page/components/ShowPageMoreButton';
-import { PageTitle } from '@/ui/utilities/page-title/PageTitle';
-import { FieldMetadataType } from '~/generated-metadata/graphql';
-import { isDefined } from '~/utils/isDefined';
-import { capitalize } from '~/utils/string/capitalize';
+import { WorkspaceRouteUnavailable } from '@/ui/layout/page/components/WorkspaceRouteUnavailable';
+import { findCoreObjectShowPage } from '@/object-core/utils/findCoreObjectShowPage';
+import { isWorkspaceWorkflowVersionRouteHidden } from '@/object-core/workflows/utils/isWorkspaceWorkflowVersionRouteHidden';
+import { useObjectMetadataItems } from '@/object-metadata/hooks/useObjectMetadataItems';
+import { useWorkspaceSurface } from '@/ui/layout/hooks/useWorkspaceSurface';
+import { AiChatThreadPageContent } from '~/pages/ai-chat/AiChatThreadPageContent';
+import {
+  type RecordShowPageParameters,
+  RecordShowPageContent,
+} from '~/pages/object-record/RecordShowPageContent';
 
 export const RecordShowPage = () => {
-  const { objectNameSingular, objectRecordId } = useParams<{
-    objectNameSingular: string;
-    objectRecordId: string;
-  }>();
+  const parameters = useParams<RecordShowPageParameters>();
+  const workspaceSurface = useWorkspaceSurface();
+  const { objectMetadataItems } = useObjectMetadataItems();
 
-  if (!objectNameSingular) {
-    throw new Error(`Object name is not defined`);
+  const isInSidePanel = workspaceSurface.type === 'side-panel';
+  const isRouteObjectMetadataAvailable =
+    isDefined(parameters.objectNameSingular) &&
+    objectMetadataItems.some(
+      (objectMetadataItem) =>
+        objectMetadataItem.nameSingular === parameters.objectNameSingular,
+    );
+
+  if (isInSidePanel && !isRouteObjectMetadataAvailable) {
+    return <WorkspaceRouteUnavailable />;
   }
 
-  if (!objectRecordId) {
-    throw new Error(`Record id is not defined`);
-  }
-
-  const { objectMetadataItem } = useObjectMetadataItem({
-    objectNameSingular,
-  });
-
-  const { labelIdentifierFieldMetadataItem } =
-    useLabelIdentifierFieldMetadataItem({
-      objectNameSingular,
-    });
-
-  const { favorites, createFavorite, deleteFavorite } = useFavorites();
-
-  const setEntityFields = useSetRecoilState(
-    recordStoreFamilyState(objectRecordId),
-  );
-
-  const { getIcon } = useIcons();
-
-  const headerIcon = getIcon(objectMetadataItem?.icon);
-
-  const FIND_ONE_RECORD_FOR_SHOW_PAGE_OPERATION_SIGNATURE =
-    findOneRecordForShowPageOperationSignatureFactory({ objectMetadataItem });
-
-  const { record, loading } = useFindOneRecord({
-    objectRecordId,
-    objectNameSingular,
-    recordGqlFields: FIND_ONE_RECORD_FOR_SHOW_PAGE_OPERATION_SIGNATURE.fields,
-  });
-
-  useEffect(() => {
-    if (!record) return;
-    setEntityFields(record);
-  }, [record, setEntityFields]);
-
-  const correspondingFavorite = favorites.find(
-    (favorite) => favorite.recordId === objectRecordId,
-  );
-
-  const isFavorite = isDefined(correspondingFavorite);
-
-  const handleFavoriteButtonClick = async () => {
-    if (!objectNameSingular || !record) return;
-
-    if (isFavorite && isDefined(record)) {
-      deleteFavorite(correspondingFavorite.id);
-    } else {
-      createFavorite(record, objectNameSingular);
-    }
-  };
-
-  const labelIdentifierFieldValue =
-    record?.[labelIdentifierFieldMetadataItem?.name ?? ''];
-
-  const pageName =
-    labelIdentifierFieldMetadataItem?.type === FieldMetadataType.FullName
-      ? [
-          labelIdentifierFieldValue?.firstName,
-          labelIdentifierFieldValue?.lastName,
-        ].join(' ')
-      : isDefined(labelIdentifierFieldValue)
-        ? `${labelIdentifierFieldValue}`
-        : '';
-
-  const pageTitle = pageName.trim()
-    ? `${pageName} - ${capitalize(objectNameSingular)}`
-    : capitalize(objectNameSingular);
-
-  return (
-    <PageContainer>
-      <PageTitle title={pageTitle} />
-      <PageHeader
-        title={pageName ?? ''}
-        hasBackButton
-        Icon={headerIcon}
-        loading={loading}
-      >
-        {record && (
-          <>
-            <PageFavoriteButton
-              isFavorite={isFavorite}
-              onClick={handleFavoriteButtonClick}
-            />
-            <ShowPageAddButton
-              key="add"
-              activityTargetObject={{
-                id: record.id,
-                targetObjectNameSingular: objectMetadataItem?.nameSingular,
-              }}
-            />
-            <ShowPageMoreButton
-              key="more"
-              recordId={record.id}
-              objectNameSingular={objectNameSingular}
-            />
-          </>
-        )}
-      </PageHeader>
-      <PageBody>
-        <RecordShowContainer
-          objectNameSingular={objectNameSingular}
-          objectRecordId={objectRecordId}
+  if (
+    parameters.objectNameSingular ===
+      StandardObjectNameSingular.AgentChatThread &&
+    isDefined(parameters.objectRecordId)
+  ) {
+    // A chat's record page is the chat page, on its own route
+    if (!isInSidePanel) {
+      return (
+        <Navigate
+          replace
+          to={getAppPath(AppPath.AiChat, {
+            threadId: parameters.objectRecordId,
+          })}
         />
-      </PageBody>
-    </PageContainer>
+      );
+    }
+
+    return <AiChatThreadPageContent threadId={parameters.objectRecordId} />;
+  }
+
+  if (
+    isWorkspaceWorkflowVersionRouteHidden({
+      objectNameSingular: parameters.objectNameSingular,
+    })
+  ) {
+    return <WorkspaceRouteUnavailable />;
+  }
+
+  const CoreObjectShowPage = findCoreObjectShowPage(
+    parameters.objectNameSingular,
   );
+
+  if (isDefined(CoreObjectShowPage) && isDefined(parameters.objectRecordId)) {
+    return <CoreObjectShowPage objectRecordId={parameters.objectRecordId} />;
+  }
+
+  return <RecordShowPageContent parameters={parameters} />;
 };

@@ -1,230 +1,132 @@
-import React, { useContext, useEffect, useRef, useState } from 'react';
-import { Tooltip } from 'react-tooltip';
-import { css, useTheme } from '@emotion/react';
-import styled from '@emotion/styled';
-import { IconComponent } from 'twenty-ui';
+import { FieldDescriptionTooltip } from '@/object-record/record-field/ui/components/FieldDescriptionTooltip';
+import { styled } from '@linaria/react';
+import { useContext } from 'react';
+import { useTheme, themeCssVariables } from 'twenty-ui/theme';
 
-import { FieldContext } from '@/object-record/record-field/contexts/FieldContext';
-import { EllipsisDisplay } from '@/ui/field/display/components/EllipsisDisplay';
-import { ExpandableListProps } from '@/ui/layout/expandable-list/components/ExpandableList';
-import { HotkeyScope } from '@/ui/utilities/hotkey/types/HotkeyScope';
+import { FieldContext } from '@/object-record/record-field/ui/contexts/FieldContext';
+import { useFieldFocus } from '@/object-record/record-field/ui/hooks/useFieldFocus';
+import { RecordInlineCellValue } from '@/object-record/record-inline-cell/components/RecordInlineCellValue';
 
-import { useInlineCell } from '../hooks/useInlineCell';
-
-import { RecordInlineCellDisplayMode } from './RecordInlineCellDisplayMode';
-import { RecordInlineCellButton } from './RecordInlineCellEditButton';
-import { RecordInlineCellEditMode } from './RecordInlineCellEditMode';
+import { assertFieldMetadata } from '@/object-record/record-field/ui/types/guards/assertFieldMetadata';
+import { isFieldText } from '@/object-record/record-field/ui/types/guards/isFieldText';
+import { TooltipDelay } from '@/ui/layout/tooltip/constants/TooltipDelay';
+import { OverflowingTextWithTooltip } from 'twenty-ui/primitives/typography';
+import { Tooltip } from 'twenty-ui/primitives/surfaces';
+import { FieldMetadataType } from '~/generated-metadata/graphql';
+import { useRecordInlineCellContext } from './RecordInlineCellContext';
 
 const StyledIconContainer = styled.div`
   align-items: center;
-  color: ${({ theme }) => theme.font.color.tertiary};
+  color: ${themeCssVariables.font.color.tertiary};
   display: flex;
   width: 16px;
-
-  svg {
-    align-items: center;
-    display: flex;
-    height: 16px;
-    justify-content: center;
-    width: 16px;
-  }
 `;
 
 const StyledLabelAndIconContainer = styled.div`
   align-items: center;
-  color: ${({ theme }) => theme.font.color.tertiary};
+  align-self: flex-start;
+  color: ${themeCssVariables.font.color.tertiary};
   display: flex;
-  gap: ${({ theme }) => theme.spacing(1)};
+  gap: ${themeCssVariables.spacing[1]};
+  height: 24px;
 `;
 
-const StyledValueContainer = styled.div`
+const StyledValueContainer = styled.div<{ readonly: boolean }>`
   display: flex;
   min-width: 0;
+  position: relative;
+  user-select: text;
+  width: 100%;
 `;
 
 const StyledLabelContainer = styled.div<{ width?: number }>`
-  color: ${({ theme }) => theme.font.color.tertiary};
-  font-size: ${({ theme }) => theme.font.size.sm};
-  width: ${({ width }) => width}px;
+  color: ${themeCssVariables.font.color.tertiary};
+  font-size: ${themeCssVariables.font.size.sm};
+  width: ${({ width }) => (width !== undefined ? `${width}px` : 'auto')};
 `;
 
-const StyledClickableContainer = styled.div<{ readonly?: boolean }>`
-  display: flex;
-  gap: ${({ theme }) => theme.spacing(1)};
-  width: 100%;
-
-  ${({ readonly }) =>
-    !readonly &&
-    css`
-      cursor: pointer;
-    `};
-`;
-
-const StyledInlineCellBaseContainer = styled.div`
+const StyledInlineCellBaseContainer = styled.div<{ readonly: boolean }>`
   align-items: center;
   box-sizing: border-box;
-  width: 100%;
+  cursor: ${({ readonly }) => (readonly ? 'default' : 'pointer')};
   display: flex;
-
-  gap: ${({ theme }) => theme.spacing(1)};
-
+  gap: ${themeCssVariables.spacing[1]};
+  height: fit-content;
   user-select: none;
+  width: 100%;
 `;
 
-const StyledTooltip = styled(Tooltip)`
-  background-color: ${({ theme }) => theme.background.primary};
-  box-shadow: ${({ theme }) => theme.boxShadow.light};
-
-  color: ${({ theme }) => theme.font.color.primary};
-
-  font-size: ${({ theme }) => theme.font.size.sm};
-  font-weight: ${({ theme }) => theme.font.weight.regular};
-  padding: ${({ theme }) => theme.spacing(2)};
+export const StyledSkeletonDiv = styled.div`
+  height: 24px;
 `;
 
-type RecordInlineCellContainerProps = {
-  readonly?: boolean;
-  IconLabel?: IconComponent;
-  label?: string;
-  labelWidth?: number;
-  showLabel?: boolean;
-  buttonIcon?: IconComponent;
-  editModeContent?: React.ReactNode;
-  editModeContentOnly?: boolean;
-  displayModeContent: React.ReactNode;
-  customEditHotkeyScope?: HotkeyScope;
-  isDisplayModeContentEmpty?: boolean;
-  isDisplayModeFixHeight?: boolean;
-  disableHoverEffect?: boolean;
-};
+export const RecordInlineCellContainer = () => {
+  const { readonly, IconLabel, label, labelWidth, showLabel } =
+    useRecordInlineCellContext();
+  const theme = useTheme();
 
-export const RecordInlineCellContainer = ({
-  readonly,
-  IconLabel,
-  label,
-  labelWidth,
-  showLabel,
-  buttonIcon,
-  editModeContent,
-  displayModeContent,
-  customEditHotkeyScope,
-  isDisplayModeContentEmpty,
-  editModeContentOnly,
-  isDisplayModeFixHeight,
-  disableHoverEffect,
-}: RecordInlineCellContainerProps) => {
-  const { entityId, fieldDefinition } = useContext(FieldContext);
-  const reference = useRef<HTMLDivElement>(null);
-  const [isHovered, setIsHovered] = useState(false);
-  const [isHoveredForDisplayMode, setIsHoveredForDisplayMode] = useState(false);
-  const [newDisplayModeContent, setNewDisplayModeContent] =
-    useState<React.ReactNode>(displayModeContent);
+  const { fieldDefinition, onMouseEnter, onMouseLeave, anchorId } =
+    useContext(FieldContext);
+
+  if (isFieldText(fieldDefinition)) {
+    assertFieldMetadata(FieldMetadataType.TEXT, isFieldText, fieldDefinition);
+  }
+
+  const { setIsFocused } = useFieldFocus();
 
   const handleContainerMouseEnter = () => {
     if (!readonly) {
-      setIsHovered(true);
+      setIsFocused(true);
     }
-    setIsHoveredForDisplayMode(true);
+    onMouseEnter?.();
   };
 
   const handleContainerMouseLeave = () => {
     if (!readonly) {
-      setIsHovered(false);
+      setIsFocused(false);
     }
-    setIsHoveredForDisplayMode(false);
+    onMouseLeave?.();
   };
-
-  const { isInlineCellInEditMode, openInlineCell } = useInlineCell();
-
-  const handleDisplayModeClick = () => {
-    if (!readonly && !editModeContentOnly) {
-      openInlineCell(customEditHotkeyScope);
-    }
-  };
-
-  const showEditButton =
-    buttonIcon &&
-    !isInlineCellInEditMode &&
-    isHovered &&
-    !editModeContentOnly &&
-    !isDisplayModeContentEmpty;
-
-  const theme = useTheme();
-  const labelId = `label-${entityId}-${fieldDefinition?.metadata?.fieldName}`;
-
-  useEffect(() => {
-    if (React.isValidElement<ExpandableListProps>(displayModeContent)) {
-      setNewDisplayModeContent(
-        React.cloneElement(displayModeContent, {
-          isHovered: isHoveredForDisplayMode,
-          reference: reference.current || undefined,
-        }),
-      );
-    }
-  }, [isHoveredForDisplayMode, displayModeContent, reference]);
 
   return (
     <StyledInlineCellBaseContainer
+      readonly={readonly ?? false}
       onMouseEnter={handleContainerMouseEnter}
       onMouseLeave={handleContainerMouseLeave}
     >
       {(IconLabel || label) && (
-        <StyledLabelAndIconContainer id={labelId}>
-          {IconLabel && (
-            <StyledIconContainer>
-              <IconLabel stroke={theme.icon.stroke.sm} />
-            </StyledIconContainer>
-          )}
-          {showLabel && label && (
-            <StyledLabelContainer width={labelWidth}>
-              <EllipsisDisplay maxWidth={labelWidth}>{label}</EllipsisDisplay>
-            </StyledLabelContainer>
-          )}
-          {/* TODO: Displaying Tooltips on the board is causing performance issues https://react-tooltip.com/docs/examples/render */}
-          {!showLabel && !fieldDefinition?.disableTooltip && (
-            <StyledTooltip
-              anchorSelect={`#${labelId}`}
-              content={label}
-              clickable
-              noArrow
-              place="bottom"
-              positionStrategy="fixed"
-            />
-          )}
-        </StyledLabelAndIconContainer>
+        <Tooltip
+          content={label}
+          disabled={showLabel}
+          side="bottom"
+          positionMethod="fixed"
+          delay={TooltipDelay.shortDelay}
+        >
+          <StyledLabelAndIconContainer>
+            {IconLabel && (
+              <StyledIconContainer>
+                <IconLabel
+                  size={theme.icon.size.md}
+                  stroke={theme.icon.stroke.sm}
+                />
+              </StyledIconContainer>
+            )}
+            {showLabel && (
+              <StyledLabelContainer width={labelWidth}>
+                <FieldDescriptionTooltip
+                  label={label}
+                  description={fieldDefinition?.metadata?.description}
+                  fallback={
+                    <OverflowingTextWithTooltip text={label} lineClamp={1} />
+                  }
+                />
+              </StyledLabelContainer>
+            )}
+          </StyledLabelAndIconContainer>
+        </Tooltip>
       )}
-      <StyledValueContainer ref={reference}>
-        {!readonly && isInlineCellInEditMode ? (
-          <RecordInlineCellEditMode>{editModeContent}</RecordInlineCellEditMode>
-        ) : editModeContentOnly ? (
-          <StyledClickableContainer readonly={readonly}>
-            <RecordInlineCellDisplayMode
-              disableHoverEffect={disableHoverEffect}
-              isDisplayModeContentEmpty={isDisplayModeContentEmpty}
-              isDisplayModeFixHeight={isDisplayModeFixHeight}
-              isHovered={isHovered}
-              emptyPlaceholder={showLabel ? 'Empty' : label}
-            >
-              {editModeContent}
-            </RecordInlineCellDisplayMode>
-          </StyledClickableContainer>
-        ) : (
-          <StyledClickableContainer
-            readonly={readonly}
-            onClick={handleDisplayModeClick}
-          >
-            <RecordInlineCellDisplayMode
-              disableHoverEffect={disableHoverEffect}
-              isDisplayModeContentEmpty={isDisplayModeContentEmpty}
-              isDisplayModeFixHeight={isDisplayModeFixHeight}
-              isHovered={isHovered}
-              emptyPlaceholder={showLabel ? 'Empty' : label}
-            >
-              {newDisplayModeContent}
-            </RecordInlineCellDisplayMode>
-            {showEditButton && <RecordInlineCellButton Icon={buttonIcon} />}
-          </StyledClickableContainer>
-        )}
+      <StyledValueContainer readonly={readonly ?? false} id={anchorId}>
+        <RecordInlineCellValue />
       </StyledValueContainer>
     </StyledInlineCellBaseContainer>
   );

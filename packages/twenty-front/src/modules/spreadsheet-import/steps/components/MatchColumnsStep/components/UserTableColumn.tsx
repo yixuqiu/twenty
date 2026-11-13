@@ -1,9 +1,11 @@
-import styled from '@emotion/styled';
+import { styled } from '@linaria/react';
+import { themeCssVariables } from 'twenty-ui/theme';
 
-import { RawData } from '@/spreadsheet-import/types';
-import { isDefined } from '~/utils/isDefined';
+import { type ImportedRow } from '@/spreadsheet-import/types';
 
-import { Column } from '../MatchColumnsStep';
+import { type SpreadsheetColumn } from '@/spreadsheet-import/types/SpreadsheetColumn';
+import { isDefined } from 'twenty-shared/utils';
+import { useLingui } from '@lingui/react/macro';
 
 const StyledContainer = styled.div`
   display: flex;
@@ -12,39 +14,42 @@ const StyledContainer = styled.div`
 `;
 
 const StyledValue = styled.span`
-  color: ${({ theme }) => theme.font.color.primary};
-  font-size: ${({ theme }) => theme.font.size.sm};
-  font-weight: ${({ theme }) => theme.font.weight.medium};
+  color: ${themeCssVariables.font.color.primary};
+  font-size: ${themeCssVariables.font.size.md};
+  font-weight: ${themeCssVariables.font.weight.medium};
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 `;
 
 const StyledExample = styled.span`
-  color: ${({ theme }) => theme.font.color.tertiary};
-  font-size: ${({ theme }) => theme.font.size.sm};
-  font-weight: ${({ theme }) => theme.font.weight.medium};
+  color: ${themeCssVariables.font.color.tertiary};
+  font-size: ${themeCssVariables.font.size.sm};
+  font-weight: ${themeCssVariables.font.weight.medium};
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 `;
 
-type UserTableColumnProps<T extends string> = {
-  column: Column<T>;
-  entries: RawData;
+type UserTableColumnProps = {
+  column: SpreadsheetColumn;
+  importedRow: ImportedRow;
 };
 
-export const UserTableColumn = <T extends string>({
+export const UserTableColumn = ({
   column,
-  entries,
-}: UserTableColumnProps<T>) => {
+  importedRow,
+}: UserTableColumnProps) => {
+  const { t } = useLingui();
   const { header } = column;
-  const entry = entries.find(isDefined);
+  const firstDefinedValue = importedRow.find(isDefined);
 
   return (
     <StyledContainer>
       <StyledValue>{header}</StyledValue>
-      {entry && <StyledExample>{`ex: ${entry}`}</StyledExample>}
+      {firstDefinedValue && (
+        <StyledExample>{t`ex: ${firstDefinedValue}`}</StyledExample>
+      )}
     </StyledContainer>
   );
 };

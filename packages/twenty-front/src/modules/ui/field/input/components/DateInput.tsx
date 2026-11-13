@@ -1,55 +1,46 @@
-import { useRef, useState } from 'react';
-import styled from '@emotion/styled';
-import { Nullable } from 'twenty-ui';
+import { useCallback, useRef, useState } from 'react';
 
-import {
-  InternalDatePicker,
-  MONTH_AND_YEAR_DROPDOWN_ID,
-  MONTH_AND_YEAR_DROPDOWN_MONTH_SELECT_ID,
-  MONTH_AND_YEAR_DROPDOWN_YEAR_SELECT_ID,
-} from '@/ui/input/components/internal/date/components/InternalDatePicker';
-import { useDropdown } from '@/ui/layout/dropdown/hooks/useDropdown';
-import { useListenClickOutsideV2 } from '@/ui/utilities/pointer-event/hooks/useListenClickOutsideV2';
-
-const StyledCalendarContainer = styled.div`
-  background: ${({ theme }) => theme.background.secondary};
-  border: 1px solid ${({ theme }) => theme.border.color.light};
-  border-radius: ${({ theme }) => theme.border.radius.md};
-  box-shadow: ${({ theme }) => theme.boxShadow.strong};
-  top: 0;
-
-  position: absolute;
-`;
+import { useRegisterInputEvents } from '@/ui/input/hooks/useRegisterInputEvents';
+import { DatePicker } from '@/ui/input/components/internal/date/components/DatePicker';
+import { currentFocusIdSelector } from '@/ui/utilities/focus/states/currentFocusIdSelector';
+import { useStore } from 'jotai';
+import { type Nullable } from 'twenty-shared/types';
 
 export type DateInputProps = {
-  value: Nullable<Date>;
-  onEnter: (newDate: Nullable<Date>) => void;
-  onEscape: (newDate: Nullable<Date>) => void;
+  instanceId: string;
+  value: Nullable<string>;
+  onEnter: (newDate: Nullable<string>) => void;
+  onEscape: (newDate: Nullable<string>) => void;
   onClickOutside: (
     event: MouseEvent | TouchEvent,
-    newDate: Nullable<Date>,
+    newDate: Nullable<string>,
   ) => void;
   clearable?: boolean;
-  onChange?: (newDate: Nullable<Date>) => void;
-  isDateTimeInput?: boolean;
+  onChange?: (newDate: Nullable<string>) => void;
   onClear?: () => void;
+  onSubmit?: (newDate: Nullable<string>) => void;
+  hideHeaderInput?: boolean;
 };
 
 export const DateInput = ({
+  instanceId,
   value,
   onEnter,
   onEscape,
   onClickOutside,
   clearable,
   onChange,
-  isDateTimeInput,
   onClear,
+  onSubmit,
+  hideHeaderInput,
 }: DateInputProps) => {
+  const store = useStore();
+
   const [internalValue, setInternalValue] = useState(value);
 
   const wrapperRef = useRef<HTMLDivElement>(null);
 
-  const handleChange = (newDate: Date | null) => {
+  const handleChange = (newDate: string | null) => {
     setInternalValue(newDate);
     onChange?.(newDate);
   };
@@ -59,43 +50,52 @@ export const DateInput = ({
     onClear?.();
   };
 
-  const { closeDropdown } = useDropdown(MONTH_AND_YEAR_DROPDOWN_ID);
-  const { closeDropdown: closeDropdownMonthSelect } = useDropdown(
-    MONTH_AND_YEAR_DROPDOWN_MONTH_SELECT_ID,
-  );
-  const { closeDropdown: closeDropdownYearSelect } = useDropdown(
-    MONTH_AND_YEAR_DROPDOWN_YEAR_SELECT_ID,
-  );
+  const handleClose = (newDate: string | null) => {
+    setInternalValue(newDate);
+    onSubmit?.(newDate);
+  };
 
-  useListenClickOutsideV2({
-    refs: [wrapperRef],
-    listenerId: 'DateInput',
-    callback: (event) => {
-      event.stopImmediatePropagation();
+  const handleEnter = () => {
+    onEnter(internalValue);
+  };
 
-      closeDropdownYearSelect();
-      closeDropdownMonthSelect();
-      closeDropdown();
-      onClickOutside(event, internalValue);
+  const handleEscape = () => {
+    onEscape(internalValue);
+  };
+
+  const handleClickOutside = useCallback(
+    (event: MouseEvent | TouchEvent) => {
+      const currentFocusId = store.get(currentFocusIdSelector.atom);
+
+      if (currentFocusId === instanceId) {
+        onClickOutside(event, internalValue);
+      }
     },
+    [instanceId, onClickOutside, internalValue, store],
+  );
+
+  useRegisterInputEvents({
+    focusId: instanceId,
+    inputRef: wrapperRef,
+    inputValue: internalValue,
+    onEnter: handleEnter,
+    onEscape: handleEscape,
+    onClickOutside: handleClickOutside,
   });
 
   return (
     <div ref={wrapperRef}>
-      <StyledCalendarContainer>
-        <InternalDatePicker
-          date={internalValue ?? new Date()}
-          onChange={handleChange}
-          onMouseSelect={(newDate: Date | null) => {
-            onEnter(newDate);
-          }}
-          clearable={clearable ? clearable : false}
-          isDateTimeInput={isDateTimeInput}
-          onEnter={onEnter}
-          onEscape={onEscape}
-          onClear={handleClear}
-        />
-      </StyledCalendarContainer>
+      <DatePicker
+        instanceId={instanceId}
+        plainDateString={internalValue ?? null}
+        onChange={handleChange}
+        onClose={handleClose}
+        clearable={clearable ?? false}
+        onEnter={onEnter}
+        onEscape={onEscape}
+        onClear={handleClear}
+        hideHeaderInput={hideHeaderInput}
+      />
     </div>
   );
 };

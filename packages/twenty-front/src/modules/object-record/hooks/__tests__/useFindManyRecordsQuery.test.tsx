@@ -1,41 +1,28 @@
 import { renderHook } from '@testing-library/react';
-import { print } from 'graphql';
-import { RecoilRoot } from 'recoil';
 
+import { PERSON_FRAGMENT_WITH_DEPTH_ZERO_RELATIONS } from '@/object-record/hooks/__mocks__/personFragments';
 import { useFindManyRecordsQuery } from '@/object-record/hooks/useFindManyRecordsQuery';
+import { print } from 'graphql';
+import { getJestMetadataAndApolloMocksWrapper } from '~/testing/jest/getJestMetadataAndApolloMocksWrapper';
 
 const expectedQueryTemplate = `
-  query FindManyPeople($filter: PersonFilterInput, $orderBy: PersonOrderByInput, $lastCursor: String, $limit: Int) {
-    people(filter: $filter, orderBy: $orderBy, first: $limit, after: $lastCursor) {
+  query FindManyPeople($filter: PersonFilterInput, $orderBy: [PersonOrderByInput], $lastCursor: String, $limit: Int, $offset: Int) {
+    people(
+      filter: $filter 
+      orderBy: $orderBy 
+      first: $limit 
+      after: $lastCursor 
+      offset: $offset
+    ) {
       edges {
         node {
-          __typename
-          xLink {
-            label
-            url
-          }
-          id
-          createdAt
-          city
-          email
-          jobTitle
-          name {
-            firstName
-            lastName
-          }
-          phone
-          linkedinLink {
-            label
-            url
-          }
-          updatedAt
-          avatarUrl
-          companyId
+      ${PERSON_FRAGMENT_WITH_DEPTH_ZERO_RELATIONS}
         }
         cursor
       }
       pageInfo {
         hasNextPage
+        hasPreviousPage
         startCursor
         endCursor
       }
@@ -43,6 +30,10 @@ const expectedQueryTemplate = `
     }
   }
 `.replace(/\s/g, '');
+
+const Wrapper = getJestMetadataAndApolloMocksWrapper({
+  apolloMocks: [],
+});
 
 describe('useFindManyRecordsQuery', () => {
   it('should return a valid findManyRecordsQuery', () => {
@@ -56,7 +47,7 @@ describe('useFindManyRecordsQuery', () => {
           computeReferences,
         }),
       {
-        wrapper: RecoilRoot,
+        wrapper: Wrapper,
       },
     );
 

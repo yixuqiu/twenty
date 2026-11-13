@@ -1,5 +1,8 @@
-import { Info } from '@/spreadsheet-import/types';
+import { type SpreadsheetImportInfo } from '@/spreadsheet-import/types';
 
-export type Meta = { __index: string; __errors?: Error | null };
-export type Error = { [key: string]: Info };
+export type ImportedStructuredRowMetadata = {
+  __index: string;
+  __errors?: Error | null;
+};
+export type Error = { [key: string]: SpreadsheetImportInfo };
 export type Errors = { [id: string]: Error };

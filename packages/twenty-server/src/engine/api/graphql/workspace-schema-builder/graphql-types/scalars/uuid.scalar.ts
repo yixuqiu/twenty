@@ -1,12 +1,16 @@
 import { GraphQLScalarType, Kind } from 'graphql';
 import { validate as uuidValidate } from 'uuid';
 
-const checkUUID = (value: any): string => {
+import { ValidationError } from 'src/engine/core-modules/graphql/utils/graphql-errors.util';
+
+const checkUUID = (value: unknown): string => {
   if (typeof value !== 'string') {
-    throw new Error('UUID must be a string');
+    throw new ValidationError('UUID must be a string');
   }
   if (!uuidValidate(value)) {
-    throw new Error('Invalid UUID');
+    throw new ValidationError(`Invalid UUID: '${value}'`, {
+      value,
+    });
   }
 
   return value;
@@ -19,7 +23,7 @@ export const UUIDScalarType = new GraphQLScalarType({
   parseValue: checkUUID,
   parseLiteral(ast): string {
     if (ast.kind !== Kind.STRING) {
-      throw new Error('UUID must be a string');
+      throw new ValidationError('UUID must be a string');
     }
 
     return ast.value;

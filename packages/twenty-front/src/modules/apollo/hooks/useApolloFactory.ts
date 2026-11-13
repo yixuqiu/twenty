@@ -1,84 +1,138 @@
+import { InMemoryCache } from '@apollo/client';
 import { useMemo, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { InMemoryCache, NormalizedCacheObject } from '@apollo/client';
-import { useRecoilState, useRecoilValue } from 'recoil';
 
+import { ApolloFactory, type Options } from '@/apollo/services/ApolloFactory';
+import { ONGOING_USER_CREATION_PATHS } from '@/auth/constants/OngoingUserCreationPaths';
+import { currentUserState } from '@/auth/states/currentUserState';
+import { currentUserWorkspaceState } from '@/auth/states/currentUserWorkspaceState';
+import { currentWorkspaceMemberState } from '@/auth/states/currentWorkspaceMemberState';
 import { currentWorkspaceState } from '@/auth/states/currentWorkspaceState';
-import { previousUrlState } from '@/auth/states/previousUrlState';
-import { tokenPairState } from '@/auth/states/tokenPairState';
-import { isDebugModeState } from '@/client-config/states/isDebugModeState';
-import { AppPath } from '@/types/AppPath';
+import { isCookieAuthActiveState } from '@/auth/states/isCookieAuthActiveState';
+import { returnToPathState } from '@/auth/states/returnToPathState';
+import { clearSessionGeneration } from '@/auth/utils/clearSessionGeneration';
+import { isValidReturnToPath } from '@/auth/utils/isValidReturnToPath';
+import { appVersionState } from '@/client-config/states/appVersionState';
+import { useAtomState } from '@/ui/utilities/state/jotai/hooks/useAtomState';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import { useSetAtomState } from '@/ui/utilities/state/jotai/hooks/useSetAtomState';
+import { AppPath } from 'twenty-shared/types';
+import { isDefined } from 'twenty-shared/utils';
+import { useToast } from 'twenty-ui/components/feedback';
 import { REACT_APP_SERVER_BASE_URL } from '~/config';
-import { useIsMatchingLocation } from '~/hooks/useIsMatchingLocation';
 import { useUpdateEffect } from '~/hooks/useUpdateEffect';
-import { isDefined } from '~/utils/isDefined';
+import { isMatchingLocation } from '~/utils/isMatchingLocation';
 
-import { ApolloFactory, Options } from '../services/apollo.factory';
-
-export const useApolloFactory = (options: Partial<Options<any>> = {}) => {
-  // eslint-disable-next-line @nx/workspace-no-state-useref
-  const apolloRef = useRef<ApolloFactory<NormalizedCacheObject> | null>(null);
-  const currentWorkspace = useRecoilValue(currentWorkspaceState);
-  const [isDebugMode] = useRecoilState(isDebugModeState);
+export const useApolloFactory = (options: Partial<Options> = {}) => {
+  // oxlint-disable-next-line twenty/no-state-useref
+  const apolloRef = useRef<ApolloFactory | null>(null);
 
   const navigate = useNavigate();
-  const isMatchingLocation = useIsMatchingLocation();
-  const [tokenPair, setTokenPair] = useRecoilState(tokenPairState);
-  const [, setPreviousUrl] = useRecoilState(previousUrlState);
+  const setIsCookieAuthActive = useSetAtomState(isCookieAuthActiveState);
+  const [currentWorkspace, setCurrentWorkspace] = useAtomState(
+    currentWorkspaceState,
+  );
+  const appVersion = useAtomStateValue(appVersionState);
+  const [currentWorkspaceMember, setCurrentWorkspaceMember] = useAtomState(
+    currentWorkspaceMemberState,
+  );
+  const setCurrentUser = useSetAtomState(currentUserState);
+  const setCurrentUserWorkspace = useSetAtomState(currentUserWorkspaceState);
+
+  const setReturnToPath = useSetAtomState(returnToPathState);
   const location = useLocation();
+  // oxlint-disable-next-line twenty/no-state-useref
+  const locationRef = useRef(location);
+  locationRef.current = location;
+
+  const { enqueueToast } = useToast();
 
   const apolloClient = useMemo(() => {
     apolloRef.current = new ApolloFactory({
       uri: `${REACT_APP_SERVER_BASE_URL}/graphql`,
-      cache: new InMemoryCache(),
-      headers: {
-        ...(currentWorkspace?.currentCacheVersion && {
-          'X-Schema-Version': currentWorkspace.currentCacheVersion,
-        }),
-      },
+      cache: new InMemoryCache({
+        typePolicies: {
+          RemoteTable: {
+            keyFields: ['name'],
+          },
+        },
+      }),
+
       defaultOptions: {
-        query: {
-          fetchPolicy: 'cache-first',
+        watchQuery: {
+          fetchPolicy: 'cache-and-network',
         },
       },
-      connectToDevTools: isDebugMode,
-      // We don't want to re-create the client on token change or it will cause infinite loop
-      initialTokenPair: tokenPair,
-      onTokenPairChange: (tokenPair) => {
-        setTokenPair(tokenPair);
-      },
+      devtools: { enabled: process.env.IS_DEBUG_MODE === 'true' },
+      currentWorkspaceMember: currentWorkspaceMember,
+      currentWorkspace: currentWorkspace,
+      appVersion,
       onUnauthenticatedError: () => {
-        setTokenPair(null);
+        clearSessionGeneration();
+        setIsCookieAuthActive(false);
+        setCurrentUser(null);
+        setCurrentWorkspaceMember(null);
+        setCurrentWorkspace(null);
+        setCurrentUserWorkspace(null);
         if (
-          !isMatchingLocation(AppPath.Verify) &&
-          !isMatchingLocation(AppPath.SignInUp) &&
-          !isMatchingLocation(AppPath.Invite) &&
-          !isMatchingLocation(AppPath.ResetPassword)
+          ![...ONGOING_USER_CREATION_PATHS, AppPath.ResetPassword].some(
+            (path) => isMatchingLocation(locationRef.current, path),
+          )
         ) {
-          setPreviousUrl(`${location.pathname}${location.search}`);
+          const path = `${locationRef.current.pathname}${locationRef.current.search}${locationRef.current.hash}`;
+
+          if (isValidReturnToPath(path)) {
+            setReturnToPath(path);
+          }
           navigate(AppPath.SignInUp);
         }
       },
+      onAppVersionMismatch: (message) => {
+        enqueueToast({
+          status: 'error',
+          children: message,
+          dedupeKey: 'app-version-mismatch',
+        });
+      },
+      onPayloadTooLarge: (message) => {
+        enqueueToast({
+          status: 'error',
+          children: message,
+          dedupeKey: 'payload-too-large',
+        });
+      },
       extraLinks: [],
-      isDebugMode,
-      // Override options
+      isDebugMode: process.env.IS_DEBUG_MODE === 'true',
       ...options,
     });
 
     return apolloRef.current.getClient();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    setTokenPair,
-    isDebugMode,
-    currentWorkspace?.currentCacheVersion,
-    setPreviousUrl,
+    setCurrentUser,
+    setCurrentWorkspaceMember,
+    setCurrentWorkspace,
+    setReturnToPath,
+    enqueueToast,
   ]);
 
   useUpdateEffect(() => {
     if (isDefined(apolloRef.current)) {
-      apolloRef.current.updateTokenPair(tokenPair);
+      apolloRef.current.updateWorkspaceMember(currentWorkspaceMember);
     }
-  }, [tokenPair]);
+  }, [currentWorkspaceMember]);
+
+  useUpdateEffect(() => {
+    if (isDefined(apolloRef.current)) {
+      apolloRef.current.updateCurrentWorkspace(currentWorkspace);
+    }
+  }, [currentWorkspace]);
+
+  useUpdateEffect(() => {
+    if (isDefined(apolloRef.current)) {
+      apolloRef.current.updateAppVersion(appVersion);
+    }
+  }, [appVersion]);
 
   return apolloClient;
 };

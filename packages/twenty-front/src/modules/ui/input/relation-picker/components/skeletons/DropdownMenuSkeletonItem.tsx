@@ -1,28 +1,37 @@
-import Skeleton, { SkeletonTheme } from 'react-loading-skeleton';
-import { useTheme } from '@emotion/react';
-import styled from '@emotion/styled';
-
+import { SkeletonLine } from '@/ui/feedback/skeleton/components/SkeletonLine';
+import { type CSSWidth } from '@/ui/types/CSSWidth';
+import { styled } from '@linaria/react';
+import { SKELETON_HEIGHT_SIZES } from 'twenty-ui/primitives/feedback';
+import { themeCssVariables } from 'twenty-ui/theme';
 const StyledDropdownMenuSkeletonContainer = styled.div`
-  --horizontal-padding: ${({ theme }) => theme.spacing(1)};
-  --vertical-padding: ${({ theme }) => theme.spacing(2)};
-  align-items: center;
-  border-radius: ${({ theme }) => theme.border.radius.sm};
-  gap: ${({ theme }) => theme.spacing(2)};
-  height: calc(32px - 2 * var(--vertical-padding));
-  padding: var(--vertical-padding) var(--horizontal-padding);
-  width: calc(100% - 2 * var(--horizontal-padding));
+  --horizontal-padding: ${themeCssVariables.spacing[1]};
+
+  border-radius: calc(
+    ${themeCssVariables.border.radius.md} - ${themeCssVariables.spacing[1]}
+  );
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  height: ${themeCssVariables.spacing[8]};
+  justify-content: center;
+  padding-left: var(--horizontal-padding);
+  padding-right: var(--horizontal-padding);
 `;
 
-export const DropdownMenuSkeletonItem = () => {
-  const theme = useTheme();
+export const DropdownMenuSkeletonItem = ({
+  width = '100%',
+}: {
+  width?: CSSWidth;
+}) => {
   return (
     <StyledDropdownMenuSkeletonContainer>
-      <SkeletonTheme
-        baseColor={theme.background.quaternary}
-        highlightColor={theme.background.secondary}
-      >
-        <Skeleton height={16} />
-      </SkeletonTheme>
+      <SkeletonLine
+        height={SKELETON_HEIGHT_SIZES.s}
+        width={width}
+        baseColor={themeCssVariables.background.quaternary}
+        highlightColor={themeCssVariables.background.secondary}
+      />
     </StyledDropdownMenuSkeletonContainer>
   );
 };

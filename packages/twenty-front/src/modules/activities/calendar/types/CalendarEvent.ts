@@ -1,10 +1,12 @@
-import { CalendarEventParticipant } from '@/activities/calendar/types/CalendarEventParticipant';
+import { type CalendarEventCallRecording } from '@/activities/calendar/types/CalendarEventCallRecording';
+import { type CalendarEventParticipant } from '@/activities/calendar/types/CalendarEventParticipant';
+import { type CalendarChannelVisibility } from '~/generated/graphql';
 
 // TODO: use backend CalendarEvent type when ready
 export type CalendarEvent = {
   conferenceLink?: {
-    label: string;
-    url: string;
+    primaryLinkLabel: string;
+    primaryLinkUrl: string;
   };
   description?: string;
   endsAt?: string;
@@ -15,7 +17,8 @@ export type CalendarEvent = {
   location?: string;
   startsAt: string;
   title?: string;
-  visibility: 'METADATA' | 'SHARE_EVERYTHING';
+  visibility: CalendarChannelVisibility;
   calendarEventParticipants?: CalendarEventParticipant[];
+  callRecordings?: CalendarEventCallRecording[];
   __typename: 'CalendarEvent';
 };

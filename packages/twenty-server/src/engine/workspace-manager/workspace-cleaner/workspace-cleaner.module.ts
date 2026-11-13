@@ -1,25 +1,50 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
+import { BillingSubscriptionEntity } from 'src/engine/core-modules/billing/entities/billing-subscription.entity';
+import { WorkspaceDomainsModule } from 'src/engine/core-modules/domain/workspace-domains/workspace-domains.module';
+import { KeyValuePairEntity } from 'src/engine/core-modules/key-value-pair/key-value-pair.entity';
+import { MetricsModule } from 'src/engine/core-modules/metrics/metrics.module';
+import { UserVarsModule } from 'src/engine/core-modules/user/user-vars/user-vars.module';
+import { UserModule } from 'src/engine/core-modules/user/user.module';
+import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
 import { WorkspaceModule } from 'src/engine/core-modules/workspace/workspace.module';
-import { DeleteIncompleteWorkspacesCommand } from 'src/engine/workspace-manager/workspace-cleaner/commands/delete-incomplete-workspaces.command';
-import { Workspace } from 'src/engine/core-modules/workspace/workspace.entity';
-import { CleanInactiveWorkspacesCommand } from 'src/engine/workspace-manager/workspace-cleaner/commands/clean-inactive-workspaces.command';
-import { StartCleanInactiveWorkspacesCronCommand } from 'src/engine/workspace-manager/workspace-cleaner/commands/start-clean-inactive-workspaces.cron.command';
-import { StopCleanInactiveWorkspacesCronCommand } from 'src/engine/workspace-manager/workspace-cleaner/commands/stop-clean-inactive-workspaces.cron.command';
-import { DataSourceModule } from 'src/engine/metadata-modules/data-source/data-source.module';
+import { provideWorkspaceScopedRepository } from 'src/engine/twenty-orm/workspace-scoped-repository/provide-workspace-scoped-repository';
+import { CleanOnboardingWorkspacesCommand } from 'src/engine/workspace-manager/workspace-cleaner/commands/clean-onboarding-workspaces.command';
+import { CleanOnboardingWorkspacesCronCommand } from 'src/engine/workspace-manager/workspace-cleaner/commands/clean-onboarding-workspaces.cron.command';
+import { CleanSuspendedWorkspacesCommand } from 'src/engine/workspace-manager/workspace-cleaner/commands/clean-suspended-workspaces.command';
+import { CleanSuspendedWorkspacesCronCommand } from 'src/engine/workspace-manager/workspace-cleaner/commands/clean-suspended-workspaces.cron.command';
+import { DestroyWorkspaceCommand } from 'src/engine/workspace-manager/workspace-cleaner/commands/destroy-workspace.command';
+import { DestroySoftDeletedWorkspaceJob } from 'src/engine/workspace-manager/workspace-cleaner/jobs/destroy-soft-deleted-workspace.job';
+import { CleanerWorkspaceService } from 'src/engine/workspace-manager/workspace-cleaner/services/cleaner.workspace-service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Workspace], 'core'),
+    TypeOrmModule.forFeature([
+      WorkspaceEntity,
+      BillingSubscriptionEntity,
+      KeyValuePairEntity,
+    ]),
     WorkspaceModule,
-    DataSourceModule,
+    UserVarsModule,
+    UserModule,
+    MetricsModule,
+    WorkspaceDomainsModule,
   ],
   providers: [
-    DeleteIncompleteWorkspacesCommand,
-    CleanInactiveWorkspacesCommand,
-    StartCleanInactiveWorkspacesCronCommand,
-    StopCleanInactiveWorkspacesCronCommand,
+    DestroyWorkspaceCommand,
+    CleanSuspendedWorkspacesCronCommand,
+    CleanSuspendedWorkspacesCommand,
+    CleanOnboardingWorkspacesCommand,
+    CleanOnboardingWorkspacesCronCommand,
+    CleanerWorkspaceService,
+    DestroySoftDeletedWorkspaceJob,
+    provideWorkspaceScopedRepository(BillingSubscriptionEntity),
+  ],
+  exports: [
+    CleanerWorkspaceService,
+    CleanSuspendedWorkspacesCronCommand,
+    CleanOnboardingWorkspacesCronCommand,
   ],
 })
 export class WorkspaceCleanerModule {}

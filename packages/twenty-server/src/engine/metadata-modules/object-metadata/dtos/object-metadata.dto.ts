@@ -1,37 +1,27 @@
-import { ObjectType, Field, HideField } from '@nestjs/graphql';
-
 import {
-  Authorize,
-  BeforeDeleteOne,
-  CursorConnection,
-  FilterableField,
-  IDField,
-  QueryOptions,
-} from '@ptc-org/nestjs-query-graphql';
+  Field,
+  HideField,
+  ObjectType,
+  registerEnumType,
+} from '@nestjs/graphql';
 
+import { ObjectOpenRecordIn } from 'twenty-shared/types';
+import { type DisableableObjectPermissionAction } from 'twenty-shared/application';
+
+import { type AuthoredOverrides } from 'src/engine/metadata-modules/overrides/types/authored-overrides.type';
+import { type WorkspaceEntityDuplicateCriteria } from 'src/engine/api/graphql/workspace-query-builder/types/workspace-entity-duplicate-criteria.type';
 import { UUIDScalarType } from 'src/engine/api/graphql/workspace-schema-builder/graphql-types/scalars';
-import { FieldMetadataDTO } from 'src/engine/metadata-modules/field-metadata/dtos/field-metadata.dto';
-import { BeforeDeleteOneObject } from 'src/engine/metadata-modules/object-metadata/hooks/before-delete-one-object.hook';
+import { type ObjectMetadataOverrides } from 'src/engine/metadata-modules/object-metadata/types/object-metadata-overrides.type';
 
-@ObjectType('object')
-@Authorize({
-  authorize: (context: any) => ({
-    workspaceId: { eq: context?.req?.user?.workspace?.id },
-  }),
-})
-@QueryOptions({
-  defaultResultSize: 10,
-  disableSort: true,
-  maxResultsSize: 1000,
-})
-@BeforeDeleteOne(BeforeDeleteOneObject)
-@CursorConnection('fields', () => FieldMetadataDTO)
+registerEnumType(ObjectOpenRecordIn, { name: 'ObjectOpenRecordIn' });
+
+@ObjectType('Object')
 export class ObjectMetadataDTO {
-  @IDField(() => UUIDScalarType)
+  @Field(() => UUIDScalarType)
   id: string;
 
   @Field()
-  dataSourceId: string;
+  universalIdentifier: string;
 
   @Field()
   nameSingular: string;
@@ -46,25 +36,58 @@ export class ObjectMetadataDTO {
   labelPlural: string;
 
   @Field({ nullable: true })
-  description: string;
+  description?: string;
 
   @Field({ nullable: true })
-  icon: string;
+  icon?: string;
 
-  @FilterableField()
-  isCustom: boolean;
+  @HideField()
+  overrides?: AuthoredOverrides<ObjectMetadataOverrides> | null;
 
-  @FilterableField()
+  @Field({ nullable: true })
+  shortcut?: string;
+
+  @Field({ nullable: true })
+  color?: string;
+
+  @Field()
   isRemote: boolean;
 
-  @FilterableField()
+  @Field()
   isActive: boolean;
 
-  @FilterableField()
+  @Field()
   isSystem: boolean;
+
+  @Field()
+  isAuditLogged: boolean;
+
+  @Field()
+  isUIEditable: boolean;
+
+  @Field()
+  isUICreatable: boolean;
+
+  // Deprecated alias kept for one release so external API consumers are not broken
+  @Field({
+    deprecationReason: 'Use isUIEditable',
+  })
+  isUIReadOnly: boolean;
+
+  @Field()
+  isSearchable: boolean;
+
+  @Field(() => ObjectOpenRecordIn)
+  openRecordIn: ObjectOpenRecordIn;
+
+  @Field(() => [String], { nullable: true })
+  disabledObjectPermissionActions?: DisableableObjectPermissionAction[] | null;
 
   @HideField()
   workspaceId: string;
+
+  @Field(() => UUIDScalarType)
+  applicationId: string;
 
   @Field()
   createdAt: Date;
@@ -72,9 +95,15 @@ export class ObjectMetadataDTO {
   @Field()
   updatedAt: Date;
 
-  @Field({ nullable: true })
-  labelIdentifierFieldMetadataId?: string;
+  @Field(() => UUIDScalarType, { nullable: true })
+  labelIdentifierFieldMetadataId?: string | null;
 
-  @Field({ nullable: true })
-  imageIdentifierFieldMetadataId?: string;
+  @Field(() => UUIDScalarType, { nullable: true })
+  imageIdentifierFieldMetadataId?: string | null;
+
+  @Field()
+  isLabelSyncedWithName: boolean;
+
+  @Field(() => [[String]], { nullable: true })
+  duplicateCriteria?: WorkspaceEntityDuplicateCriteria[];
 }

@@ -1,136 +1,95 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import styled from '@emotion/styled';
+import { SpreadsheetImportStepBody } from '@/spreadsheet-import/components/SpreadsheetImportStepBody';
+import { styled } from '@linaria/react';
+import { useCallback, useMemo, useState } from 'react';
 
-import { ContinueButton } from '@/spreadsheet-import/components/ContinueButton';
-import { Heading } from '@/spreadsheet-import/components/Heading';
+import { StepNavigationButton } from '@/spreadsheet-import/components/StepNavigationButton';
 import { useSpreadsheetImportInternal } from '@/spreadsheet-import/hooks/useSpreadsheetImportInternal';
-import { Field, RawData } from '@/spreadsheet-import/types';
+import {
+  type ImportedRow,
+  type ImportedStructuredRow,
+} from '@/spreadsheet-import/types';
 import { findUnmatchedRequiredFields } from '@/spreadsheet-import/utils/findUnmatchedRequiredFields';
-import { getMatchedColumns } from '@/spreadsheet-import/utils/getMatchedColumns';
 import { normalizeTableData } from '@/spreadsheet-import/utils/normalizeTableData';
 import { setColumn } from '@/spreadsheet-import/utils/setColumn';
 import { setIgnoreColumn } from '@/spreadsheet-import/utils/setIgnoreColumn';
 import { setSubColumn } from '@/spreadsheet-import/utils/setSubColumn';
 import { useDialogManager } from '@/ui/feedback/dialog-manager/hooks/useDialogManager';
-import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
-import { Modal } from '@/ui/layout/modal/components/Modal';
 
-import { ColumnGrid } from './components/ColumnGrid';
-import { TemplateColumn } from './components/TemplateColumn';
-import { UserTableColumn } from './components/UserTableColumn';
-
-const StyledContent = styled(Modal.Content)`
-  align-items: center;
-  padding-left: ${({ theme }) => theme.spacing(6)};
-  padding-right: ${({ theme }) => theme.spacing(6)};
-`;
+import { DO_NOT_IMPORT_OPTION_KEY } from '@/spreadsheet-import/constants/DoNotImportOptionKey';
+import { ColumnGrid } from '@/spreadsheet-import/steps/components/MatchColumnsStep/components/ColumnGrid';
+import { TemplateColumn } from '@/spreadsheet-import/steps/components/MatchColumnsStep/components/TemplateColumn';
+import { UnmatchColumn } from '@/spreadsheet-import/steps/components/MatchColumnsStep/components/UnmatchColumn';
+import { UserTableColumn } from '@/spreadsheet-import/steps/components/MatchColumnsStep/components/UserTableColumn';
+import { initialComputedColumnsSelector } from '@/spreadsheet-import/steps/components/MatchColumnsStep/components/states/initialComputedColumnsState';
+import { type SpreadsheetImportStep } from '@/spreadsheet-import/steps/types/SpreadsheetImportStep';
+import { SpreadsheetImportStepType } from '@/spreadsheet-import/steps/types/SpreadsheetImportStepType';
+import { type SpreadsheetColumn } from '@/spreadsheet-import/types/SpreadsheetColumn';
+import { SpreadsheetColumnType } from '@/spreadsheet-import/types/SpreadsheetColumnType';
+import { type SpreadsheetColumns } from '@/spreadsheet-import/types/SpreadsheetColumns';
+import { type SpreadsheetImportField } from '@/spreadsheet-import/types/SpreadsheetImportField';
+import { useAtomFamilySelectorState } from '@/ui/utilities/state/jotai/hooks/useAtomFamilySelectorState';
+import { ScrollWrapper } from '@/ui/utilities/scroll/components/ScrollWrapper';
+import { Trans, useLingui } from '@lingui/react/macro';
+import { themeCssVariables } from 'twenty-ui/theme';
 
 const StyledColumnsContainer = styled.div`
   align-items: center;
   display: flex;
   flex-direction: column;
-  margin-bottom: ${({ theme }) => theme.spacing(4)};
+  margin-bottom: ${themeCssVariables.spacing[4]};
 `;
 
 const StyledColumns = styled.span`
-  color: ${({ theme }) => theme.font.color.primary};
-  font-size: ${({ theme }) => theme.font.size.sm};
-  font-weight: ${({ theme }) => theme.font.weight.medium};
+  color: ${themeCssVariables.font.color.primary};
+  font-size: ${themeCssVariables.font.size.sm};
+  font-weight: ${themeCssVariables.font.weight.medium};
 `;
 
 const StyledColumn = styled.span`
-  color: ${({ theme }) => theme.font.color.primary};
-  font-size: ${({ theme }) => theme.font.size.sm};
-  font-weight: ${({ theme }) => theme.font.weight.regular};
+  color: ${themeCssVariables.font.color.primary};
+  font-size: ${themeCssVariables.font.size.sm};
+  font-weight: ${themeCssVariables.font.weight.regular};
 `;
 
-export type MatchColumnsStepProps<T extends string> = {
-  data: RawData[];
-  headerValues: RawData;
-  onContinue: (data: any[], rawData: RawData[], columns: Columns<T>) => void;
+export type MatchColumnsStepProps = {
+  data: ImportedRow[];
+  headerValues: ImportedRow;
+  onBack?: () => void;
+  setCurrentStepState: (currentStepState: SpreadsheetImportStep) => void;
+  setPreviousStepState: (currentStepState: SpreadsheetImportStep) => void;
+  currentStepState: SpreadsheetImportStep;
+  nextStep: () => void;
+  onError: (message: string) => void;
 };
 
-export enum ColumnType {
-  empty,
-  ignored,
-  matched,
-  matchedCheckbox,
-  matchedSelect,
-  matchedSelectOptions,
-}
-
-export type MatchedOptions<T> = {
-  entry: string;
-  value: T;
-};
-
-type EmptyColumn = { type: ColumnType.empty; index: number; header: string };
-type IgnoredColumn = {
-  type: ColumnType.ignored;
-  index: number;
-  header: string;
-};
-type MatchedColumn<T> = {
-  type: ColumnType.matched;
-  index: number;
-  header: string;
-  value: T;
-};
-type MatchedSwitchColumn<T> = {
-  type: ColumnType.matchedCheckbox;
-  index: number;
-  header: string;
-  value: T;
-};
-export type MatchedSelectColumn<T> = {
-  type: ColumnType.matchedSelect;
-  index: number;
-  header: string;
-  value: T;
-  matchedOptions: Partial<MatchedOptions<T>>[];
-};
-export type MatchedSelectOptionsColumn<T> = {
-  type: ColumnType.matchedSelectOptions;
-  index: number;
-  header: string;
-  value: T;
-  matchedOptions: MatchedOptions<T>[];
-};
-
-export type Column<T extends string> =
-  | EmptyColumn
-  | IgnoredColumn
-  | MatchedColumn<T>
-  | MatchedSwitchColumn<T>
-  | MatchedSelectColumn<T>
-  | MatchedSelectOptionsColumn<T>;
-
-export type Columns<T extends string> = Column<T>[];
-
-export const MatchColumnsStep = <T extends string>({
+export const MatchColumnsStep = ({
   data,
   headerValues,
-  onContinue,
-}: MatchColumnsStepProps<T>) => {
+  onBack,
+  setCurrentStepState,
+  setPreviousStepState,
+  currentStepState,
+  nextStep,
+  onError,
+}: MatchColumnsStepProps) => {
   const { enqueueDialog } = useDialogManager();
-  const { enqueueSnackBar } = useSnackBar();
   const dataExample = data.slice(0, 2);
-  const { fields, autoMapHeaders, autoMapDistance } =
-    useSpreadsheetImportInternal<T>();
+  const { spreadsheetImportFields: fields } = useSpreadsheetImportInternal();
   const [isLoading, setIsLoading] = useState(false);
-  const [columns, setColumns] = useState<Columns<T>>(
-    // Do not remove spread, it indexes empty array elements, otherwise map() skips over them
-    ([...headerValues] as string[]).map((value, index) => ({
-      type: ColumnType.empty,
-      index,
-      header: value ?? '',
-    })),
+  const [columns, setColumns] = useAtomFamilySelectorState(
+    initialComputedColumnsSelector,
+    headerValues,
   );
+
+  const { matchColumnsStepHook } = useSpreadsheetImportInternal();
+
+  const { t } = useLingui();
+
   const onIgnore = useCallback(
     (columnIndex: number) => {
       setColumns(
         columns.map((column, index) =>
-          columnIndex === index ? setIgnoreColumn<T>(column) : column,
+          columnIndex === index ? setIgnoreColumn(column) : column,
         ),
       );
     },
@@ -149,9 +108,9 @@ export const MatchColumnsStep = <T extends string>({
   );
 
   const onChange = useCallback(
-    (value: T, columnIndex: number) => {
-      if (value === 'do-not-import') {
-        if (columns[columnIndex].type === ColumnType.ignored) {
+    (value: string, columnIndex: number) => {
+      if (value === DO_NOT_IMPORT_OPTION_KEY) {
+        if (columns[columnIndex].type === SpreadsheetColumnType.ignored) {
           onRevertIgnore(columnIndex);
         } else {
           onIgnore(columnIndex);
@@ -159,28 +118,53 @@ export const MatchColumnsStep = <T extends string>({
       } else {
         const field = fields.find(
           (field) => field.key === value,
-        ) as unknown as Field<T>;
+        ) as unknown as SpreadsheetImportField;
         const existingFieldIndex = columns.findIndex(
           (column) => 'value' in column && column.value === field.key,
         );
         setColumns(
-          columns.map<Column<T>>((column, index) => {
+          columns.map<SpreadsheetColumn>((column, index) => {
             if (columnIndex === index) {
               return setColumn(column, field, data);
             } else if (index === existingFieldIndex) {
-              enqueueSnackBar('Columns cannot duplicate', {
-                title: 'Another column unselected',
-                variant: 'error',
-              });
               return setColumn(column);
-            } else {
-              return column;
             }
+            return column;
           }),
         );
       }
     },
-    [columns, onRevertIgnore, onIgnore, fields, data, enqueueSnackBar],
+    [columns, onRevertIgnore, onIgnore, fields, setColumns, data],
+  );
+
+  const handleContinue = useCallback(
+    async (
+      values: ImportedStructuredRow[],
+      rawData: ImportedRow[],
+      columns: SpreadsheetColumns,
+    ) => {
+      try {
+        setIsLoading(true);
+        const data = await matchColumnsStepHook(values, rawData, columns);
+        setCurrentStepState({
+          type: SpreadsheetImportStepType.validateData,
+          data,
+          importedColumns: columns,
+        });
+        setPreviousStepState(currentStepState);
+        nextStep();
+      } catch (e) {
+        onError((e as Error).message);
+      }
+    },
+    [
+      onError,
+      matchColumnsStepHook,
+      nextStep,
+      setPreviousStepState,
+      setCurrentStepState,
+      currentStepState,
+    ],
   );
 
   const onSubChange = useCallback(
@@ -202,37 +186,42 @@ export const MatchColumnsStep = <T extends string>({
 
   const handleAlertOnContinue = useCallback(async () => {
     setIsLoading(true);
-    await onContinue(normalizeTableData(columns, data, fields), data, columns);
+    await handleContinue(
+      normalizeTableData(columns, data, fields),
+      data,
+      columns,
+    );
     setIsLoading(false);
-  }, [onContinue, columns, data, fields]);
+  }, [handleContinue, columns, data, fields]);
 
   const handleOnContinue = useCallback(async () => {
     if (unmatchedRequiredFields.length > 0) {
       enqueueDialog({
-        title: 'Not all columns matched',
-        message:
-          'There are required columns that are not matched or ignored. Do you want to continue?',
+        title: t`Not all columns matched`,
+        message: t`There are required columns that are not matched or ignored. Do you want to continue?`,
         children: (
           <StyledColumnsContainer>
-            <StyledColumns>Columns not matched:</StyledColumns>
+            <StyledColumns>
+              <Trans>Columns not matched:</Trans>
+            </StyledColumns>
             {unmatchedRequiredFields.map((field) => (
               <StyledColumn key={field}>{field}</StyledColumn>
             ))}
           </StyledColumnsContainer>
         ),
         buttons: [
-          { title: 'Cancel' },
+          { title: t`Cancel` },
           {
-            title: 'Continue',
+            title: t`Continue`,
             onClick: handleAlertOnContinue,
-            variant: 'primary',
+            variant: 'outline',
             role: 'confirm',
           },
         ],
       });
     } else {
       setIsLoading(true);
-      await onContinue(
+      await handleContinue(
         normalizeTableData(columns, data, fields),
         data,
         columns,
@@ -243,50 +232,80 @@ export const MatchColumnsStep = <T extends string>({
     unmatchedRequiredFields,
     enqueueDialog,
     handleAlertOnContinue,
-    onContinue,
+    handleContinue,
     columns,
     data,
     fields,
+    t,
   ]);
 
-  useEffect(() => {
-    if (autoMapHeaders) {
-      setColumns(getMatchedColumns(columns, fields, data, autoMapDistance));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const hasMatchedColumns = columns.some(
+    (column) =>
+      ![SpreadsheetColumnType.ignored, SpreadsheetColumnType.empty].includes(
+        column.type,
+      ),
+  );
+
+  const onBackConfirmation = () => {
+    onBack?.();
+    setColumns([]);
+  };
+
+  const openRestartDialog = () => {
+    enqueueDialog({
+      title: t`Restart Import`,
+      message: t`You will lose all your mappings.`,
+      buttons: [
+        { title: t`Cancel` },
+        {
+          title: t`Restart`,
+          onClick: onBackConfirmation,
+          color: 'danger',
+          variant: 'solid',
+          role: 'confirm',
+        },
+      ],
+    });
+  };
 
   return (
     <>
-      <StyledContent>
-        <Heading
-          title="Match Columns"
-          description="Select the correct field for each column you'd like to import."
-        />
-        <ColumnGrid
-          columns={columns}
-          renderUserColumn={(columns, columnIndex) => (
-            <UserTableColumn
-              column={columns[columnIndex]}
-              entries={dataExample.map(
-                (row) => row[columns[columnIndex].index],
-              )}
-            />
-          )}
-          renderTemplateColumn={(columns, columnIndex) => (
-            <TemplateColumn
-              columns={columns}
-              columnIndex={columnIndex}
-              onChange={onChange}
-              onSubChange={onSubChange}
-            />
-          )}
-        />
-      </StyledContent>
-      <ContinueButton
-        isLoading={isLoading}
+      <SpreadsheetImportStepBody isCenteredHorizontally>
+        <ScrollWrapper componentInstanceId="scroll-wrapper-modal-content">
+          <ColumnGrid
+            columns={columns}
+            renderUserColumn={(columns, columnIndex) => (
+              <UserTableColumn
+                column={columns[columnIndex]}
+                importedRow={dataExample.map(
+                  (row) => row[columns[columnIndex].index],
+                )}
+              />
+            )}
+            renderTemplateColumn={(columns, columnIndex) => (
+              <TemplateColumn
+                columns={columns}
+                columnIndex={columnIndex}
+                onChange={onChange}
+              />
+            )}
+            renderUnmatchedColumn={(columns, columnIndex) => (
+              <UnmatchColumn
+                columns={columns}
+                columnIndex={columnIndex}
+                onSubChange={onSubChange}
+              />
+            )}
+          />
+        </ScrollWrapper>
+      </SpreadsheetImportStepBody>
+      <StepNavigationButton
         onContinue={handleOnContinue}
-        title="Next"
+        isLoading={isLoading}
+        continueTitle={t`Next Step`}
+        backTitle={t`Restart Import`}
+        onBack={openRestartDialog}
+        isContinueDisabled={!hasMatchedColumns}
       />
     </>
   );

@@ -1,57 +1,40 @@
 import { useContext } from 'react';
-import { useRecoilState } from 'recoil';
 
-import { FieldContext } from '@/object-record/record-field/contexts/FieldContext';
-import { useRecordFieldInput } from '@/object-record/record-field/hooks/useRecordFieldInput';
-import { usePreviousHotkeyScope } from '@/ui/utilities/hotkey/hooks/usePreviousHotkeyScope';
-import { HotkeyScope } from '@/ui/utilities/hotkey/types/HotkeyScope';
-import { isDefined } from '~/utils/isDefined';
+import { FieldContext } from '@/object-record/record-field/ui/contexts/FieldContext';
 
-import { isInlineCellInEditModeScopedState } from '../states/isInlineCellInEditModeScopedState';
-import { InlineCellHotkeyScope } from '../types/InlineCellHotkeyScope';
+import { useInitDraftValue } from '@/object-record/record-field/ui/hooks/useInitDraftValue';
+import { RecordFieldComponentInstanceContext } from '@/object-record/record-field/ui/states/contexts/RecordFieldComponentInstanceContext';
+import { useRecordInlineCellContext } from '@/object-record/record-inline-cell/components/RecordInlineCellContext';
+import { useAvailableComponentInstanceIdOrThrow } from '@/ui/utilities/state/component-state/hooks/useAvailableComponentInstanceIdOrThrow';
 
-export const useInlineCell = () => {
-  const {
-    recoilScopeId = '',
-    entityId,
-    fieldDefinition,
-  } = useContext(FieldContext);
+export const useInlineCell = (
+  recordFieldComponentInstanceIdFromProps?: string,
+) => {
+  const { recordId, fieldDefinition } = useContext(FieldContext);
 
-  const [isInlineCellInEditMode, setIsInlineCellInEditMode] = useRecoilState(
-    isInlineCellInEditModeScopedState(recoilScopeId),
+  const recordFieldComponentInstanceId = useAvailableComponentInstanceIdOrThrow(
+    RecordFieldComponentInstanceContext,
+    recordFieldComponentInstanceIdFromProps,
   );
 
-  const {
-    setHotkeyScopeAndMemorizePreviousScope,
-    goBackToPreviousHotkeyScope,
-  } = usePreviousHotkeyScope();
+  const { onOpenEditMode, onCloseEditMode } = useRecordInlineCellContext();
 
-  const { initDraftValue: initFieldInputDraftValue } = useRecordFieldInput(
-    `${entityId}-${fieldDefinition?.metadata?.fieldName}`,
-  );
+  const initFieldInputDraftValue = useInitDraftValue();
 
   const closeInlineCell = () => {
-    setIsInlineCellInEditMode(false);
-
-    goBackToPreviousHotkeyScope();
+    onCloseEditMode?.();
   };
 
-  const openInlineCell = (customEditHotkeyScopeForField?: HotkeyScope) => {
-    setIsInlineCellInEditMode(true);
-    initFieldInputDraftValue();
-
-    if (isDefined(customEditHotkeyScopeForField)) {
-      setHotkeyScopeAndMemorizePreviousScope(
-        customEditHotkeyScopeForField.scope,
-        customEditHotkeyScopeForField.customScopes,
-      );
-    } else {
-      setHotkeyScopeAndMemorizePreviousScope(InlineCellHotkeyScope.InlineCell);
-    }
+  const openInlineCell = () => {
+    onOpenEditMode?.();
+    initFieldInputDraftValue({
+      recordId,
+      fieldDefinition,
+      fieldComponentInstanceId: recordFieldComponentInstanceId,
+    });
   };
 
   return {
-    isInlineCellInEditMode,
     closeInlineCell,
     openInlineCell,
   };

@@ -1,55 +1,65 @@
-import { Resolver, Query } from '@nestjs/graphql';
+import { UseFilters, UseGuards, UsePipes } from '@nestjs/common';
+import { Mutation, Query } from '@nestjs/graphql';
 
-import { EnvironmentService } from 'src/engine/integrations/environment/environment.service';
+import { CoreResolver } from 'src/engine/api/graphql/graphql-config/decorators/core-resolver.decorator';
+import { MaintenanceModeService } from 'src/engine/core-modules/admin-panel/maintenance-mode.service';
+import { type AuthContextUser } from 'src/engine/core-modules/auth/types/auth-context.type';
+import { AuthGraphqlApiExceptionFilter } from 'src/engine/core-modules/auth/filters/auth-graphql-api-exception.filter';
+import { PreventNestToAutoLogGraphqlErrorsFilter } from 'src/engine/core-modules/graphql/filters/prevent-nest-to-auto-log-graphql-errors.filter';
+import { ResolverValidationPipe } from 'src/engine/core-modules/graphql/pipes/resolver-validation.pipe';
+import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
+import { AuthUser } from 'src/engine/decorators/auth/auth-user.decorator';
+import { AuthWorkspace } from 'src/engine/decorators/auth/auth-workspace.decorator';
+import { AccessPolicyGuard } from 'src/engine/guards/access-policy.guard';
 
-import { ClientConfig } from './client-config.entity';
-
-@Resolver()
+@UseGuards(
+  AccessPolicyGuard({
+    authPrincipals: {
+      userSession: {
+        standard: true,
+        impersonated: true,
+        playground: true,
+        workspaceAgnostic: false,
+      },
+      apiKey: false,
+      oauthClient: false,
+      application: false,
+    },
+    requiredPermissionFlags: [],
+  }),
+)
+@UsePipes(ResolverValidationPipe)
+@UseFilters(
+  PreventNestToAutoLogGraphqlErrorsFilter,
+  AuthGraphqlApiExceptionFilter,
+)
+@CoreResolver()
 export class ClientConfigResolver {
-  constructor(private environmentService: EnvironmentService) {}
+  constructor(
+    private readonly maintenanceModeService: MaintenanceModeService,
+  ) {}
 
-  @Query(() => ClientConfig)
-  async clientConfig(): Promise<ClientConfig> {
-    const clientConfig: ClientConfig = {
-      authProviders: {
-        google: this.environmentService.get('AUTH_GOOGLE_ENABLED'),
-        magicLink: false,
-        password: this.environmentService.get('AUTH_PASSWORD_ENABLED'),
-        microsoft: this.environmentService.get('AUTH_MICROSOFT_ENABLED'),
-      },
-      telemetry: {
-        enabled: this.environmentService.get('TELEMETRY_ENABLED'),
-        anonymizationEnabled: this.environmentService.get(
-          'TELEMETRY_ANONYMIZATION_ENABLED',
-        ),
-      },
-      billing: {
-        isBillingEnabled: this.environmentService.get('IS_BILLING_ENABLED'),
-        billingUrl: this.environmentService.get('BILLING_PLAN_REQUIRED_LINK'),
-        billingFreeTrialDurationInDays: this.environmentService.get(
-          'BILLING_FREE_TRIAL_DURATION_IN_DAYS',
-        ),
-      },
-      signInPrefilled: this.environmentService.get('SIGN_IN_PREFILLED'),
-      signUpDisabled: this.environmentService.get('IS_SIGN_UP_DISABLED'),
-      debugMode: this.environmentService.get('DEBUG_MODE'),
-      support: {
-        supportDriver: this.environmentService.get('SUPPORT_DRIVER'),
-        supportFrontChatId: this.environmentService.get(
-          'SUPPORT_FRONT_CHAT_ID',
-        ),
-      },
-      sentry: {
-        environment: this.environmentService.get('SENTRY_ENVIRONMENT'),
-        release: this.environmentService.get('SENTRY_RELEASE'),
-        dsn: this.environmentService.get('SENTRY_FRONT_DSN'),
-      },
-      captcha: {
-        provider: this.environmentService.get('CAPTCHA_DRIVER'),
-        siteKey: this.environmentService.get('CAPTCHA_SITE_KEY'),
-      },
-    };
+  @Query(() => Boolean)
+  async isMaintenanceModeBannerDismissed(
+    @AuthUser() user: AuthContextUser,
+    @AuthWorkspace() workspace: WorkspaceEntity,
+  ): Promise<boolean> {
+    return this.maintenanceModeService.isMaintenanceModeBannerDismissed(
+      user.id,
+      workspace.id,
+    );
+  }
 
-    return Promise.resolve(clientConfig);
+  @Mutation(() => Boolean)
+  async dismissMaintenanceModeBanner(
+    @AuthUser() user: AuthContextUser,
+    @AuthWorkspace() workspace: WorkspaceEntity,
+  ): Promise<boolean> {
+    await this.maintenanceModeService.dismissMaintenanceModeBanner(
+      user.id,
+      workspace.id,
+    );
+
+    return true;
   }
 }

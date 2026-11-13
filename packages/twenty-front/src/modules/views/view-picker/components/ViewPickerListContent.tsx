@@ -1,52 +1,85 @@
-import { MouseEvent } from 'react';
-import styled from '@emotion/styled';
-import { useSetRecoilState } from 'recoil';
-import { IconLock, IconPencil, IconPlus, useIcons } from 'twenty-ui';
+import { ListItemButton } from 'twenty-ui/components/navigation';
+import { type DraggableListDropResult } from '@/ui/layout/draggable-list/types/DraggableListDropResult';
+import { type MouseEvent, useCallback } from 'react';
 
+import { useContextStoreObjectMetadataItemOrThrow } from '@/context-store/hooks/useContextStoreObjectMetadataItemOrThrow';
+import { DraggableItem } from '@/ui/layout/draggable-list/components/DraggableItem';
+import { DraggableList } from '@/ui/layout/draggable-list/components/DraggableList';
+import { LegacyDropdownContent } from '@/ui/layout/dropdown/components/LegacyDropdownContent';
 import { DropdownMenuItemsContainer } from '@/ui/layout/dropdown/components/DropdownMenuItemsContainer';
+import { DropdownMenuSectionLabel } from '@/ui/layout/dropdown/components/DropdownMenuSectionLabel';
 import { DropdownMenuSeparator } from '@/ui/layout/dropdown/components/DropdownMenuSeparator';
-import { useDropdown } from '@/ui/layout/dropdown/hooks/useDropdown';
-import { MenuItem } from '@/ui/navigation/menu-item/components/MenuItem';
-import { useGetCurrentView } from '@/views/hooks/useGetCurrentView';
-import { useHandleViews } from '@/views/hooks/useHandleViews';
-import { VIEW_PICKER_DROPDOWN_ID } from '@/views/view-picker/constants/ViewPickerDropdownId';
+import { useCloseDropdown } from '@/ui/layout/dropdown/hooks/useCloseDropdown';
+import { useSetAtomComponentState } from '@/ui/utilities/state/jotai/hooks/useSetAtomComponentState';
+import { useAtomFamilySelectorValue } from '@/ui/utilities/state/jotai/hooks/useAtomFamilySelectorValue';
+import { usePerformViewApiUpdate } from '@/views/hooks/internal/usePerformViewApiUpdate';
+import { useChangeView } from '@/views/hooks/useChangeView';
+import { useGetCurrentViewOnly } from '@/views/hooks/useGetCurrentViewOnly';
+import { useOpenCreateViewDropdown } from '@/views/hooks/useOpenCreateViewDropown';
+import { viewsFromObjectMetadataItemFamilySelector } from '@/views/states/selectors/viewsFromObjectMetadataItemFamilySelector';
+import { ViewPickerOptionDropdown } from '@/views/view-picker/components/ViewPickerOptionDropdown';
 import { useViewPickerMode } from '@/views/view-picker/hooks/useViewPickerMode';
-import { useViewPickerStates } from '@/views/view-picker/hooks/useViewPickerStates';
-import { isDefined } from '~/utils/isDefined';
-
-const StyledBoldDropdownMenuItemsContainer = styled(DropdownMenuItemsContainer)`
-  font-weight: ${({ theme }) => theme.font.weight.regular};
-`;
+import { viewPickerReferenceViewIdComponentState } from '@/views/view-picker/states/viewPickerReferenceViewIdComponentState';
+import { computeViewPickerVisibleViews } from '@/views/view-picker/utils/computeViewPickerVisibleViews';
+import { useLingui } from '@lingui/react/macro';
+import { IconPlus } from 'twenty-ui/icon';
+import { ViewVisibility } from '~/generated-metadata/graphql';
+import { moveArrayItem } from '~/utils/array/moveArrayItem';
 
 export const ViewPickerListContent = () => {
-  const { selectView } = useHandleViews();
+  const { t } = useLingui();
 
-  const { currentViewWithCombinedFiltersAndSorts, viewsOnCurrentObject } =
-    useGetCurrentView();
+  const { objectMetadataItem } = useContextStoreObjectMetadataItemOrThrow();
 
-  const { viewPickerReferenceViewIdState } = useViewPickerStates();
-  const setViewPickerReferenceViewId = useSetRecoilState(
-    viewPickerReferenceViewIdState,
+  const viewsOnCurrentObject = useAtomFamilySelectorValue(
+    viewsFromObjectMetadataItemFamilySelector,
+    { objectMetadataItemId: objectMetadataItem.id },
+  );
+
+  const { currentView } = useGetCurrentViewOnly();
+
+  const visibleViews = computeViewPickerVisibleViews({
+    views: viewsOnCurrentObject,
+    currentViewId: currentView?.id,
+  });
+
+  const workspaceViews = visibleViews.filter(
+    (view) => view.visibility === ViewVisibility.WORKSPACE,
+  );
+
+  const unlistedViews = visibleViews.filter(
+    (view) => view.visibility === ViewVisibility.UNLISTED,
+  );
+
+  const isLastView = visibleViews.length <= 1;
+
+  const shouldShowSectionLabels =
+    workspaceViews.length > 0 && unlistedViews.length > 0;
+
+  const setViewPickerReferenceViewId = useSetAtomComponentState(
+    viewPickerReferenceViewIdComponentState,
   );
 
   const { setViewPickerMode } = useViewPickerMode();
 
-  const { closeDropdown } = useDropdown(VIEW_PICKER_DROPDOWN_ID);
+  const { performViewApiUpdate } = usePerformViewApiUpdate();
+  const { changeView } = useChangeView();
+
+  const { closeDropdown } = useCloseDropdown();
 
   const handleViewSelect = (viewId: string) => {
-    selectView(viewId);
+    changeView(viewId);
     closeDropdown();
   };
 
+  const { openCreateViewDropdown } = useOpenCreateViewDropdown();
+
   const handleAddViewButtonClick = () => {
-    if (isDefined(currentViewWithCombinedFiltersAndSorts?.id)) {
-      setViewPickerReferenceViewId(currentViewWithCombinedFiltersAndSorts.id);
-      setViewPickerMode('create');
-    }
+    openCreateViewDropdown(currentView);
   };
 
   const handleEditViewButtonClick = (
-    event: MouseEvent<HTMLButtonElement>,
+    event: MouseEvent<HTMLElement>,
     viewId: string,
   ) => {
     event.stopPropagation();
@@ -54,40 +87,134 @@ export const ViewPickerListContent = () => {
     setViewPickerMode('edit');
   };
 
-  const { getIcon } = useIcons();
+  const handleWorkspaceDragEnd = useCallback(
+    async (result: DraggableListDropResult) => {
+      if (!result.destination) {
+        return;
+      }
+
+      const viewsReordered = moveArrayItem(workspaceViews, {
+        fromIndex: result.source.index,
+        toIndex: result.destination.index,
+      });
+
+      Promise.all(
+        viewsReordered.map(async (view, index) => {
+          if (view.position !== index) {
+            await performViewApiUpdate({
+              id: view.id,
+              input: { position: index },
+            });
+          }
+        }),
+      );
+    },
+    [performViewApiUpdate, workspaceViews],
+  );
+
+  const handleUnlistedDragEnd = useCallback(
+    async (result: DraggableListDropResult) => {
+      if (!result.destination) {
+        return;
+      }
+
+      const viewsReordered = moveArrayItem(unlistedViews, {
+        fromIndex: result.source.index,
+        toIndex: result.destination.index,
+      });
+
+      Promise.all(
+        viewsReordered.map(async (view, index) => {
+          if (view.position !== index) {
+            await performViewApiUpdate({
+              id: view.id,
+              input: { position: index },
+            });
+          }
+        }),
+      );
+    },
+    [performViewApiUpdate, unlistedViews],
+  );
 
   return (
-    <>
-      <DropdownMenuItemsContainer>
-        {viewsOnCurrentObject.map((view) => (
-          <MenuItem
-            key={view.id}
-            iconButtons={[
-              view.key !== 'INDEX'
-                ? {
-                    Icon: IconPencil,
-                    onClick: (event: MouseEvent<HTMLButtonElement>) =>
-                      handleEditViewButtonClick(event, view.id),
-                  }
-                : {
-                    Icon: IconLock,
-                  },
-            ].filter(isDefined)}
-            isIconDisplayedOnHoverOnly={view.key !== 'INDEX'}
-            onClick={() => handleViewSelect(view.id)}
-            LeftIcon={getIcon(view.icon)}
-            text={view.name}
-          />
-        ))}
-      </DropdownMenuItemsContainer>
+    <LegacyDropdownContent>
+      {workspaceViews.length > 0 && (
+        <>
+          {shouldShowSectionLabels && (
+            <DropdownMenuSectionLabel label={t`Workspace`} />
+          )}
+          <DropdownMenuItemsContainer hasMaxHeight>
+            <DraggableList
+              onDragEnd={handleWorkspaceDragEnd}
+              draggableItems={workspaceViews.map((view, index) => {
+                const isIndexView = view.key === 'INDEX';
+                const isCurrentView = currentView?.id === view.id;
+                return (
+                  <DraggableItem
+                    key={view.id}
+                    draggableId={view.id}
+                    index={index}
+                    isDragDisabled={workspaceViews.length === 1}
+                    itemComponent={
+                      <ViewPickerOptionDropdown
+                        view={view}
+                        handleViewSelect={handleViewSelect}
+                        isIndexView={isIndexView}
+                        isLastView={isLastView}
+                        onEdit={handleEditViewButtonClick}
+                        isCurrentView={isCurrentView}
+                      />
+                    }
+                  />
+                );
+              })}
+            />
+          </DropdownMenuItemsContainer>
+        </>
+      )}
+      {unlistedViews.length > 0 && (
+        <>
+          {shouldShowSectionLabels && <DropdownMenuSeparator />}
+          {shouldShowSectionLabels && (
+            <DropdownMenuSectionLabel label={t`My unlisted views`} />
+          )}
+          <DropdownMenuItemsContainer hasMaxHeight>
+            <DraggableList
+              onDragEnd={handleUnlistedDragEnd}
+              draggableItems={unlistedViews.map((view, index) => {
+                const isIndexView = view.key === 'INDEX';
+                const isCurrentView = currentView?.id === view.id;
+                return (
+                  <DraggableItem
+                    key={view.id}
+                    draggableId={view.id}
+                    index={index}
+                    isDragDisabled={unlistedViews.length === 1}
+                    itemComponent={
+                      <ViewPickerOptionDropdown
+                        view={view}
+                        handleViewSelect={handleViewSelect}
+                        isIndexView={isIndexView}
+                        isLastView={isLastView}
+                        onEdit={handleEditViewButtonClick}
+                        isCurrentView={isCurrentView}
+                      />
+                    }
+                  />
+                );
+              })}
+            />
+          </DropdownMenuItemsContainer>
+        </>
+      )}
       <DropdownMenuSeparator />
-      <StyledBoldDropdownMenuItemsContainer>
-        <MenuItem
+      <DropdownMenuItemsContainer scrollable={false}>
+        <ListItemButton
           onClick={handleAddViewButtonClick}
-          LeftIcon={IconPlus}
-          text="Add view"
-        />
-      </StyledBoldDropdownMenuItemsContainer>
-    </>
+          startIcon={<IconPlus />}
+        >{t`Add view`}</ListItemButton>
+      </DropdownMenuItemsContainer>
+    </LegacyDropdownContent>
   );
 };

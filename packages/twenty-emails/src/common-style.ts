@@ -1,4 +1,4 @@
-/* eslint-disable @nx/workspace-no-hardcoded-colors */
+/* oxlint-disable twenty/no-hardcoded-colors */
 
 const grayScale = {
   gray100: '#000000',
@@ -22,27 +22,39 @@ const grayScale = {
   gray0: '#ffffff',
 };
 
-export const emailTheme = {
+const colors = {
+  blue40: '#5e90f2',
+};
+
+export const canvasTheme = {
   font: {
     colors: {
       highlighted: grayScale.gray60,
       primary: grayScale.gray50,
-      tertiary: grayScale.gray40,
+      tertiary: grayScale.gray35,
       inverted: grayScale.gray0,
+      blue: colors.blue40,
     },
+    family: 'Trebuchet MS', // Google Inter not working, we need to use a web safe font, see https://templates.mailchimp.com/design/typography/
     weight: {
       regular: 400,
       bold: 600,
     },
     size: {
+      sm: '12px',
       md: '13px',
       lg: '16px',
+      xl: '24px',
     },
+    lineHeight: '20px',
+  },
+  border: {
+    radius: { sm: '4px', md: '8px' },
+    color: { highlighted: grayScale.gray20 },
   },
   background: {
     colors: { highlight: grayScale.gray15 },
-    radialGradient: `radial-gradient(50% 62.62% at 50% 0%, #505050 0%, ${grayScale.gray60} 100%)`,
-    radialGradientHover: `radial-gradient(76.32% 95.59% at 50% 0%, #505050 0%, ${grayScale.gray60} 100%)`,
+    button: grayScale.gray60,
     transparent: {
       medium: 'rgba(0, 0, 0, 0.08)',
       light: 'rgba(0, 0, 0, 0.04)',

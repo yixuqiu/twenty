@@ -1,20 +1,22 @@
-import { useRecoilValue } from 'recoil';
-
 import { usePrepareFindManyActivitiesQuery } from '@/activities/hooks/usePrepareFindManyActivitiesQuery';
-import { objectShowPageTargetableObjectState } from '@/activities/timeline/states/objectShowPageTargetableObjectIdState';
-import { Activity } from '@/activities/types/Activity';
-import { isDefined } from '~/utils/isDefined';
+import { objectShowPageTargetableObjectState } from '@/activities/timeline-activities/states/objectShowPageTargetableObjectState';
+import { type StandardObjectNameSingular } from 'twenty-shared/types';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import { isDefined } from 'twenty-shared/utils';
 
-// This hook should only be executed if the normalized cache is up-to-date
-// It will take a targetableObject and prepare the queries for the activities
-// based on the activityTargets of the targetableObject
-export const useRefreshShowPageFindManyActivitiesQueries = () => {
-  const objectShowPageTargetableObject = useRecoilValue(
+// Only run this once the normalized cache is up-to-date.
+export const useRefreshShowPageFindManyActivitiesQueries = ({
+  activityObjectNameSingular,
+}: {
+  activityObjectNameSingular: StandardObjectNameSingular;
+}) => {
+  const objectShowPageTargetableObject = useAtomStateValue(
     objectShowPageTargetableObjectState,
   );
 
-  const { prepareFindManyActivitiesQuery } =
-    usePrepareFindManyActivitiesQuery();
+  const { prepareFindManyActivitiesQuery } = usePrepareFindManyActivitiesQuery({
+    activityObjectNameSingular,
+  });
 
   const refreshShowPageFindManyActivitiesQueries = () => {
     if (isDefined(objectShowPageTargetableObject)) {
@@ -24,21 +26,12 @@ export const useRefreshShowPageFindManyActivitiesQueries = () => {
       prepareFindManyActivitiesQuery({
         targetableObject: objectShowPageTargetableObject,
         additionalFilter: {
-          completedAt: { is: 'NULL' },
-          type: { eq: 'Task' },
-        },
-        shouldActivityBeExcluded: (activity: Activity) => {
-          return activity.type !== 'Task';
+          status: { eq: 'TODO' },
         },
       });
       prepareFindManyActivitiesQuery({
         targetableObject: objectShowPageTargetableObject,
-        additionalFilter: {
-          type: { eq: 'Note' },
-        },
-        shouldActivityBeExcluded: (activity: Activity) => {
-          return activity.type !== 'Note';
-        },
+        additionalFilter: {},
       });
     }
   };

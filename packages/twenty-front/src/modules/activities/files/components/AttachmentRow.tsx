@@ -1,101 +1,253 @@
-import { useMemo } from 'react';
-import { useTheme } from '@emotion/react';
-import styled from '@emotion/styled';
-import { IconCalendar } from 'twenty-ui';
-
+import { ActivityRow } from '@/activities/components/ActivityRow';
 import { AttachmentDropdown } from '@/activities/files/components/AttachmentDropdown';
-import { AttachmentIcon } from '@/activities/files/components/AttachmentIcon';
-import { Attachment } from '@/activities/files/types/Attachment';
 import { downloadFile } from '@/activities/files/utils/downloadFile';
-import { CoreObjectNameSingular } from '@/object-metadata/types/CoreObjectNameSingular';
-import { useDeleteOneRecord } from '@/object-record/hooks/useDeleteOneRecord';
+import { useDestroyOneRecord } from '@/object-record/hooks/useDestroyOneRecord';
+import { useUpdateOneRecord } from '@/object-record/hooks/useUpdateOneRecord';
 import {
   FieldContext,
-  GenericFieldContextType,
-} from '@/object-record/record-field/contexts/FieldContext';
-import { REACT_APP_SERVER_BASE_URL } from '~/config';
-import { formatToHumanReadableDate } from '~/utils';
+  type GenericFieldContextType,
+} from '@/object-record/record-field/ui/contexts/FieldContext';
+import { getFileCategoryFromExtension } from '@/object-record/record-field/ui/utils/getFileCategoryFromExtension';
+import { SettingsTextInput } from '@/ui/input/components/SettingsTextInput';
+import { styled } from '@linaria/react';
+import { useState } from 'react';
+import { getSafeUrl, isDefined } from 'twenty-shared/utils';
 
-const StyledRow = styled.div`
-  align-items: center;
-  align-self: stretch;
-  border-bottom: 1px solid ${({ theme }) => theme.border.color.light};
-  color: ${({ theme }) => theme.font.color.primary};
-  display: flex;
-  justify-content: space-between;
-
-  padding: ${({ theme }) => theme.spacing(2)};
-`;
+import { type AttachmentWithFile } from '@/activities/files/utils/filterAttachmentsWithFile';
+import { FileIcon } from '@/file/components/FileIcon';
+import { useHasPermissionFlag } from '@/settings/roles/hooks/useHasPermissionFlag';
+import { isNavigationModifierPressed } from '@/ui/navigation/utils/isNavigationModifierPressed';
+import { StandardObjectNameSingular } from 'twenty-shared/types';
+import { OverflowingTextWithTooltip } from 'twenty-ui/primitives/typography';
+import { Card } from 'twenty-ui/primitives/surfaces';
+import { IconCalendar } from 'twenty-ui/icon';
+import { useTheme, themeCssVariables } from 'twenty-ui/theme';
+import { PermissionFlagType } from '~/generated-metadata/graphql';
+import { formatToHumanReadableDate } from '~/utils/date-utils';
+import { getFileNameAndExtension } from '~/utils/file/getFileNameAndExtension';
+import { openUrlInNewTab } from '~/utils/openUrlInNewTab';
 
 const StyledLeftContent = styled.div`
   align-items: center;
   display: flex;
-  gap: ${({ theme }) => theme.spacing(3)};
+  flex: 1;
+
+  gap: ${themeCssVariables.spacing[3]};
+  overflow: auto;
+  width: 100%;
 `;
 
 const StyledRightContent = styled.div`
   align-items: center;
   display: flex;
-  gap: ${({ theme }) => theme.spacing(0.5)};
+  gap: ${themeCssVariables.spacing['0.5']};
 `;
 
 const StyledCalendarIconContainer = styled.div`
   align-items: center;
-  color: ${({ theme }) => theme.font.color.light};
+  color: ${themeCssVariables.font.color.light};
   display: flex;
 `;
 
 const StyledLink = styled.a`
   align-items: center;
-  color: ${({ theme }) => theme.font.color.primary};
+  color: ${themeCssVariables.font.color.primary};
+  cursor: pointer;
   display: flex;
   text-decoration: none;
+  width: 100%;
+
   :hover {
-    color: ${({ theme }) => theme.font.color.secondary};
+    color: ${themeCssVariables.font.color.secondary};
   }
 `;
 
-export const AttachmentRow = ({ attachment }: { attachment: Attachment }) => {
+const StyledLinkContainer = styled.div`
+  overflow: auto;
+  width: 100%;
+`;
+
+const StyledTextInputContainer = styled.div`
+  width: 100%;
+`;
+
+type AttachmentRowProps = {
+  attachment: AttachmentWithFile;
+  onPreview?: (attachment: AttachmentWithFile) => void;
+  divider?: boolean;
+};
+
+export const AttachmentRow = ({
+  attachment,
+  onPreview,
+  divider = false,
+}: AttachmentRowProps) => {
   const theme = useTheme();
-  const fieldContext = useMemo(
-    () => ({ recoilScopeId: attachment?.id ?? '' }),
-    [attachment?.id],
+  const [isEditing, setIsEditing] = useState(false);
+
+  const hasDownloadPermission = useHasPermissionFlag(
+    PermissionFlagType.DOWNLOAD_FILE,
   );
 
-  const { deleteOneRecord: deleteOneAttachment } = useDeleteOneRecord({
-    objectNameSingular: CoreObjectNameSingular.Attachment,
+  const { name: originalFileName, extension: attachmentFileExtension } =
+    getFileNameAndExtension(attachment.file.label);
+
+  const [attachmentFileName, setAttachmentFileName] =
+    useState(originalFileName);
+
+  const fileCategory = getFileCategoryFromExtension(attachment.file.extension);
+
+  const fileUrl = attachment.file.url;
+  const safeFileUrl = getSafeUrl(fileUrl);
+
+  const { destroyOneRecord: destroyOneAttachment } = useDestroyOneRecord({
+    objectNameSingular: StandardObjectNameSingular.Attachment,
   });
 
   const handleDelete = () => {
-    deleteOneAttachment(attachment.id);
+    destroyOneAttachment(attachment.id);
+  };
+
+  const { updateOneRecord } = useUpdateOneRecord();
+
+  const handleRename = () => {
+    setIsEditing(true);
+  };
+
+  const saveAttachmentName = () => {
+    setIsEditing(false);
+
+    const newFileName = `${attachmentFileName}${attachmentFileExtension}`;
+
+    updateOneRecord({
+      objectNameSingular: StandardObjectNameSingular.Attachment,
+      idToUpdate: attachment.id,
+      updateOneRecordInput: {
+        name: newFileName,
+        file: [
+          {
+            fileId: attachment.file.fileId,
+            label: newFileName,
+          },
+        ],
+      },
+    });
+  };
+
+  const handleOnBlur = () => {
+    saveAttachmentName();
+  };
+
+  const handleOnChange = (newFileName: string) => {
+    setAttachmentFileName(newFileName);
+  };
+
+  const handleOnKeyDown = (e: React.KeyboardEvent) => {
+    if (e.nativeEvent.isComposing || e.keyCode === 229) {
+      return;
+    }
+    if (e.key === 'Enter') {
+      saveAttachmentName();
+    }
+  };
+
+  const handleDownload = () => {
+    downloadFile(fileUrl, `${attachmentFileName}${attachmentFileExtension}`);
+  };
+
+  const handleRowClick = () => {
+    if (isDefined(onPreview)) {
+      onPreview(attachment);
+      return;
+    }
+
+    if (!isDefined(safeFileUrl)) {
+      return;
+    }
+
+    openUrlInNewTab(safeFileUrl);
+  };
+
+  const handleFileLinkClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    event.stopPropagation();
+
+    // Cmd/Ctrl+click opens new tab, right click opens context menu
+    if (isNavigationModifierPressed(event) === true) {
+      return;
+    }
+
+    if (isDefined(onPreview)) {
+      event.preventDefault();
+      onPreview(attachment);
+    }
   };
 
   return (
-    <FieldContext.Provider value={fieldContext as GenericFieldContextType}>
-      <StyledRow>
+    <FieldContext.Provider
+      value={
+        {
+          recordId: attachment.id,
+        } as GenericFieldContextType
+      }
+    >
+      <ActivityRow
+        onClick={handleRowClick}
+        disabled={isEditing}
+        divider={divider}
+        label={`${attachmentFileName}${attachmentFileExtension}`}
+      >
         <StyledLeftContent>
-          <AttachmentIcon attachmentType={attachment.type} />
-          <StyledLink
-            href={REACT_APP_SERVER_BASE_URL + '/files/' + attachment.fullPath}
-            target="__blank"
-          >
-            {attachment.name}
-          </StyledLink>
+          <FileIcon fileCategory={fileCategory} thumbnailUrl={fileUrl} />
+          {isEditing ? (
+            <Card.Control
+              render={
+                <StyledTextInputContainer
+                  onClick={(event) => event.stopPropagation()}
+                />
+              }
+            >
+              <SettingsTextInput
+                instanceId={`attachment-${attachment.id}-name`}
+                value={attachmentFileName}
+                onChange={handleOnChange}
+                onBlur={handleOnBlur}
+                autoFocus
+                onKeyDown={handleOnKeyDown}
+              />
+            </Card.Control>
+          ) : (
+            <StyledLinkContainer>
+              <Card.Control
+                render={
+                  <StyledLink
+                    onClick={handleFileLinkClick}
+                    href={safeFileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  />
+                }
+              >
+                <OverflowingTextWithTooltip
+                  text={`${attachmentFileName}${attachmentFileExtension}`}
+                />
+              </Card.Control>
+            </StyledLinkContainer>
+          )}
         </StyledLeftContent>
-        <StyledRightContent>
+        <Card.Control render={<StyledRightContent />}>
           <StyledCalendarIconContainer>
             <IconCalendar size={theme.icon.size.md} />
           </StyledCalendarIconContainer>
           {formatToHumanReadableDate(attachment.createdAt)}
           <AttachmentDropdown
-            scopeKey={attachment.id}
+            attachmentId={attachment.id}
             onDelete={handleDelete}
-            onDownload={() => {
-              downloadFile(attachment.fullPath, attachment.name);
-            }}
+            onDownload={handleDownload}
+            onRename={handleRename}
+            hasDownloadPermission={hasDownloadPermission}
           />
-        </StyledRightContent>
-      </StyledRow>
+        </Card.Control>
+      </ActivityRow>
     </FieldContext.Provider>
   );
 };

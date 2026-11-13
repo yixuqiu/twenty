@@ -1,25 +1,39 @@
-import { ActivityTargetableObject } from '@/activities/types/ActivityTargetableEntity';
-import { getActivityTargetObjectFieldIdName } from '@/activities/utils/getActivityTargetObjectFieldIdName';
+import { type ActivityTargetableObject } from '@/activities/types/ActivityTargetableEntity';
+import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/EnrichedObjectMetadataItem';
+import { findTargetFieldInfo } from '@/object-record/record-field/ui/utils/junction/findTargetFieldInfo';
+import { isDefined } from 'twenty-shared/utils';
 
 export const getActivityTargetsFilter = ({
   targetableObjects,
+  activityTargetObjectMetadata,
+  objectMetadataItems,
 }: {
-  targetableObjects: ActivityTargetableObject[];
+  targetableObjects: Pick<
+    ActivityTargetableObject,
+    'id' | 'targetObjectNameSingular'
+  >[];
+  activityTargetObjectMetadata: EnrichedObjectMetadataItem;
+  objectMetadataItems: EnrichedObjectMetadataItem[];
 }) => {
-  const findManyActivitiyTargetsQueryFilter = Object.fromEntries(
-    targetableObjects.map((targetableObject) => {
-      const targetObjectFieldName = getActivityTargetObjectFieldIdName({
-        nameSingular: targetableObject.targetObjectNameSingular,
-      });
+  const targetFilters = targetableObjects
+    .map((targetableObject) => {
+      const targetObjectMetadata = objectMetadataItems.find(
+        (objectMetadataItem) =>
+          objectMetadataItem.nameSingular ===
+          targetableObject.targetObjectNameSingular,
+      );
 
-      return [
-        targetObjectFieldName,
-        {
-          eq: targetableObject.id,
-        },
-      ];
-    }),
-  );
+      const joinColumnName = findTargetFieldInfo(
+        activityTargetObjectMetadata.fields,
+        targetObjectMetadata?.id ?? '',
+        objectMetadataItems,
+      )?.joinColumnName;
 
-  return findManyActivitiyTargetsQueryFilter;
+      return isDefined(joinColumnName)
+        ? { [joinColumnName]: { eq: targetableObject.id } }
+        : undefined;
+    })
+    .filter(isDefined);
+
+  return { or: targetFilters };
 };

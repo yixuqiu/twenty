@@ -1,4 +1,4 @@
-import { RecordGqlEdge } from '@/object-record/graphql/types/RecordGqlEdge';
+import { type RecordGqlEdge } from '@/object-record/graphql/types/RecordGqlEdge';
 
 export const filterUniqueRecordEdgesByCursor = (
   arrayToFilter: RecordGqlEdge[],
@@ -8,8 +8,12 @@ export const filterUniqueRecordEdgesByCursor = (
   return arrayToFilter.filter((item) => {
     const currentCursor = item.cursor;
 
-    return seenCursors.has(currentCursor)
-      ? false
-      : seenCursors.add(currentCursor);
+    if (seenCursors.has(currentCursor)) {
+      return false;
+    }
+
+    seenCursors.add(currentCursor);
+
+    return true;
   });
 };

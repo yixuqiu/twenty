@@ -1,62 +1,93 @@
-import { Bundle, ZObject } from 'zapier-platform-core';
+import { type Bundle, type ZObject } from 'zapier-platform-core';
 
-import { ObjectData } from '../../utils/data.types';
-import handleQueryParams from '../../utils/handleQueryParams';
 import requestDb, {
   requestDbViaRestApi,
   requestSchema,
-} from '../../utils/requestDb';
+} from 'src/utils/requestDb';
+import handleQueryParams from 'src/utils/handleQueryParams';
+import { type InputData } from 'src/utils/data.types';
 
-export enum Operation {
-  create = 'create',
-  update = 'update',
-  delete = 'delete',
+export enum DatabaseEventAction {
+  CREATED = 'created',
+  UPDATED = 'updated',
+  DELETED = 'deleted',
 }
 
-export const subscribe = async (
-  z: ZObject,
-  bundle: Bundle,
-  operation: Operation,
-) => {
-  const data = {
-    targetUrl: bundle.targetUrl,
-    operation: `${operation}.${bundle.inputData.nameSingular}`,
-  };
-  const result = await requestDb(
+const getApiKeyRoleId = async ({
+  z,
+  bundle,
+}: {
+  z: ZObject;
+  bundle: Bundle;
+}): Promise<string> => {
+  const [, payload] = bundle.authData.apiKey.split('.');
+  const { jti: apiKeyId } = JSON.parse(
+    Buffer.from(payload, 'base64url').toString(),
+  );
+  const result = await requestDb({
     z,
     bundle,
-    `mutation createWebhook {createWebhook(data:{${handleQueryParams(
+    query: `query apiKey {apiKey(input: {id: "${apiKeyId}"}) {role {id}}}`,
+    endpoint: 'metadata',
+  });
+  return result.data.apiKey.role.id;
+};
+
+export const performSubscribe = async (z: ZObject, bundle: Bundle) => {
+  const data = {
+    targetUrl: bundle.targetUrl,
+    operations: [
+      `${bundle.inputData.nameSingular}.${bundle.inputData.operation}`,
+    ],
+    secret: '',
+    roleId: await getApiKeyRoleId({ z, bundle }),
+  };
+  const result = await requestDb({
+    z,
+    bundle,
+    query: `mutation createWebhook {createWebhook(input:{${handleQueryParams(
       data,
     )}}) {id}}`,
-  );
+    endpoint: 'metadata',
+  });
   return result.data.createWebhook;
 };
 
-export const performUnsubscribe = async (z: ZObject, bundle: Bundle) => {
+export const performUnsubscribe = async (
+  z: ZObject,
+  bundle: Bundle,
+): Promise<boolean> => {
   const data = { id: bundle.subscribeData?.id };
-  const result = await requestDb(
+  const result = await requestDb({
     z,
     bundle,
-    `mutation deleteWebhook {deleteWebhook(${handleQueryParams(data)}) {id}}`,
-  );
+    query: `mutation deleteWebhook {deleteWebhook(${handleQueryParams(data)}) {id}}`,
+    endpoint: 'metadata',
+  });
   return result.data.deleteWebhook;
 };
 
 export const perform = (z: ZObject, bundle: Bundle) => {
-  const record = bundle.cleanedRequest.record;
-  if (record.createdAt) {
-    record.createdAt = record.createdAt + 'Z';
+  const data = {
+    record: bundle.cleanedRequest.record,
+    ...(bundle.cleanedRequest.updatedFields && {
+      updatedFields: bundle.cleanedRequest.updatedFields,
+    }),
+  };
+  if (data.record.createdAt) {
+    data.record.createdAt = data.record.createdAt + 'Z';
   }
-  if (record.updatedAt) {
-    record.updatedAt = record.updatedAt + 'Z';
+  if (data.record.updatedAt) {
+    data.record.updatedAt = data.record.updatedAt + 'Z';
   }
-  if (record.revokedAt) {
-    record.revokedAt = record.revokedAt + 'Z';
+  if (data.record.revokedAt) {
+    data.record.revokedAt = data.record.revokedAt + 'Z';
   }
-  if (record.expiresAt) {
-    record.expiresAt = record.expiresAt + 'Z';
+  if (data.record.expiresAt) {
+    data.record.expiresAt = data.record.expiresAt + 'Z';
   }
-  return [record];
+
+  return [data];
 };
 
 const getNamePluralFromNameSingular = async (
@@ -73,30 +104,21 @@ const getNamePluralFromNameSingular = async (
   throw new Error(`Unknown Object Name Singular ${nameSingular}`);
 };
 
-export const listSample = async (
+export const performList = async (
   z: ZObject,
-  bundle: Bundle,
-  onlyIds = false,
-): Promise<ObjectData[]> => {
+  bundle: Bundle<InputData>,
+): Promise<{ record: Record<string, any>; updatedFields?: string[] }[]> => {
   const nameSingular = bundle.inputData.nameSingular;
   const namePlural = await getNamePluralFromNameSingular(
     z,
     bundle,
     nameSingular,
   );
-  const result: { [key: string]: string }[] = await requestDbViaRestApi(
-    z,
-    bundle,
-    namePlural,
-  );
-
-  if (onlyIds) {
-    return result.map((res) => {
-      return {
-        id: res.id,
-      };
-    });
-  }
-
-  return result;
+  const results = await requestDbViaRestApi(z, bundle, namePlural);
+  return results.map((result) => ({
+    record: result,
+    ...(bundle.inputData.operation === DatabaseEventAction.UPDATED && {
+      updatedFields: [Object.keys(result).filter((key) => key !== 'id')?.[0]],
+    }),
+  }));
 };

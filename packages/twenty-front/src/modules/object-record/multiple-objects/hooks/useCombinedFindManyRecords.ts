@@ -1,39 +1,61 @@
-import { useQuery } from '@apollo/client';
+import { useQuery } from '@apollo/client/react';
+import { useMemo } from 'react';
 
+import { useApolloCoreClient } from '@/object-metadata/hooks/useApolloCoreClient';
 import { getRecordsFromRecordConnection } from '@/object-record/cache/utils/getRecordsFromRecordConnection';
 import { EMPTY_QUERY } from '@/object-record/constants/EmptyQuery';
-import { RecordGqlOperationSignature } from '@/object-record/graphql/types/RecordGqlOperationSignature';
+import { type RecordGqlOperationSignature } from 'twenty-shared/types';
 import { useGenerateCombinedFindManyRecordsQuery } from '@/object-record/multiple-objects/hooks/useGenerateCombinedFindManyRecordsQuery';
-import { MultiObjectRecordQueryResult } from '@/object-record/relation-picker/hooks/useMultiObjectRecordsQueryResultFormattedAsObjectRecordForSelectArray';
+import { type CombinedFindManyRecordsQueryResult } from '@/object-record/multiple-objects/types/CombinedFindManyRecordsQueryResult';
+import { generateCombinedFindManyRecordsQueryVariables } from '@/object-record/multiple-objects/utils/generateCombinedFindManyRecordsQueryVariables';
 
 export const useCombinedFindManyRecords = ({
   operationSignatures,
   skip = false,
 }: {
   operationSignatures: RecordGqlOperationSignature[];
-  skip: boolean;
+  skip?: boolean;
 }) => {
   const findManyQuery = useGenerateCombinedFindManyRecordsQuery({
     operationSignatures,
   });
 
-  const { data } = useQuery<MultiObjectRecordQueryResult>(
+  const apolloCoreClient = useApolloCoreClient();
+
+  const queryVariables = useMemo(
+    () =>
+      generateCombinedFindManyRecordsQueryVariables({
+        operationSignatures,
+      }),
+    [operationSignatures],
+  );
+
+  const { data, loading } = useQuery<CombinedFindManyRecordsQueryResult>(
     findManyQuery ?? EMPTY_QUERY,
     {
       skip,
+      variables: queryVariables,
+      client: apolloCoreClient,
     },
   );
 
-  const resultWithoutConnection = Object.fromEntries(
-    Object.entries(data ?? {}).map(([namePlural, objectRecordConnection]) => [
-      namePlural,
-      getRecordsFromRecordConnection({
-        recordConnection: objectRecordConnection,
-      }),
-    ]),
+  const resultWithoutConnection = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(data ?? {}).map(
+          ([namePlural, objectRecordConnection]) => [
+            namePlural,
+            getRecordsFromRecordConnection({
+              recordConnection: objectRecordConnection,
+            }),
+          ],
+        ),
+      ),
+    [data],
   );
 
   return {
     result: resultWithoutConnection,
+    loading,
   };
 };

@@ -1,71 +1,53 @@
 import { Module } from '@nestjs/common';
+
+import { ApplicationTranslationCatalogModule } from 'src/engine/metadata-modules/application-translation-catalog/application-translation-catalog.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
-import {
-  NestjsQueryGraphQLModule,
-  PagingStrategies,
-} from '@ptc-org/nestjs-query-graphql';
-import { NestjsQueryTypeOrmModule } from '@ptc-org/nestjs-query-typeorm';
-import { SortDirection } from '@ptc-org/nestjs-query-core';
-
-import { DataSourceModule } from 'src/engine/metadata-modules/data-source/data-source.module';
-import { WorkspaceMigrationRunnerModule } from 'src/engine/workspace-manager/workspace-migration-runner/workspace-migration-runner.module';
-import { WorkspaceMigrationModule } from 'src/engine/metadata-modules/workspace-migration/workspace-migration.module';
-import { JwtAuthGuard } from 'src/engine/guards/jwt.auth.guard';
-import { TypeORMModule } from 'src/database/typeorm/typeorm.module';
-import { FieldMetadataEntity } from 'src/engine/metadata-modules/field-metadata/field-metadata.entity';
-import { RelationMetadataEntity } from 'src/engine/metadata-modules/relation-metadata/relation-metadata.entity';
-import { ObjectMetadataResolver } from 'src/engine/metadata-modules/object-metadata/object-metadata.resolver';
+import { ApplicationModule } from 'src/engine/core-modules/application/application.module';
+import { TokenModule } from 'src/engine/core-modules/auth/token/token.module';
 import { FeatureFlagModule } from 'src/engine/core-modules/feature-flag/feature-flag.module';
-import { FeatureFlagEntity } from 'src/engine/core-modules/feature-flag/feature-flag.entity';
-import { WorkspaceCacheVersionModule } from 'src/engine/metadata-modules/workspace-cache-version/workspace-cache-version.module';
-
-import { ObjectMetadataService } from './object-metadata.service';
-import { ObjectMetadataEntity } from './object-metadata.entity';
-
-import { CreateObjectInput } from './dtos/create-object.input';
-import { UpdateObjectPayload } from './dtos/update-object.input';
-import { ObjectMetadataDTO } from './dtos/object-metadata.dto';
+import { DerivedFieldMetadataIdsModule } from 'src/engine/metadata-modules/derived-field-metadata-ids/derived-field-metadata-ids.module';
+import { FieldMetadataEntity } from 'src/engine/metadata-modules/field-metadata/field-metadata.entity';
+import { WorkspaceManyOrAllFlatEntityMapsCacheModule } from 'src/engine/metadata-modules/flat-entity/services/workspace-many-or-all-flat-entity-maps-cache.module';
+import { IndexMetadataModule } from 'src/engine/metadata-modules/index-metadata/index-metadata.module';
+import { ObjectMetadataController } from 'src/engine/metadata-modules/object-metadata/controllers/object-metadata.controller';
+import { MostlyEmptyFieldsService } from 'src/engine/metadata-modules/object-metadata/mostly-empty-fields.service';
+import { ObjectMetadataEntity } from 'src/engine/metadata-modules/object-metadata/object-metadata.entity';
+import { ObjectMetadataResolver } from 'src/engine/metadata-modules/object-metadata/object-metadata.resolver';
+import { ObjectMetadataService } from 'src/engine/metadata-modules/object-metadata/object-metadata.service';
+import { ObjectRecordCountService } from 'src/engine/metadata-modules/object-metadata/object-record-count.service';
+import { PermissionsModule } from 'src/engine/permissions/permissions.module';
+import { ViewModule } from 'src/engine/metadata-modules/view/view.module';
+import { WorkspaceCacheStorageModule } from 'src/engine/workspace-cache-storage/workspace-cache-storage.module';
+import { WorkspaceCacheModule } from 'src/engine/workspace-cache/workspace-cache.module';
+import { WorkspaceMigrationModule } from 'src/engine/workspace-manager/workspace-migration/workspace-migration.module';
+import { provideWorkspaceScopedRepository } from 'src/engine/twenty-orm/workspace-scoped-repository/provide-workspace-scoped-repository';
 
 @Module({
   imports: [
-    NestjsQueryGraphQLModule.forFeature({
-      imports: [
-        TypeORMModule,
-        NestjsQueryTypeOrmModule.forFeature(
-          [ObjectMetadataEntity, FieldMetadataEntity, RelationMetadataEntity],
-          'metadata',
-        ),
-        TypeOrmModule.forFeature([FeatureFlagEntity], 'core'),
-        DataSourceModule,
-        WorkspaceMigrationModule,
-        WorkspaceMigrationRunnerModule,
-        WorkspaceCacheVersionModule,
-        FeatureFlagModule,
-      ],
-      services: [ObjectMetadataService],
-      resolvers: [
-        {
-          EntityClass: ObjectMetadataEntity,
-          DTOClass: ObjectMetadataDTO,
-          CreateDTOClass: CreateObjectInput,
-          UpdateDTOClass: UpdateObjectPayload,
-          ServiceClass: ObjectMetadataService,
-          pagingStrategy: PagingStrategies.CURSOR,
-          read: {
-            defaultSort: [{ field: 'id', direction: SortDirection.DESC }],
-          },
-          create: {
-            many: { disabled: true },
-          },
-          update: { disabled: true },
-          delete: { disabled: true },
-          guards: [JwtAuthGuard],
-        },
-      ],
-    }),
+    ApplicationTranslationCatalogModule,
+    TypeOrmModule.forFeature([ObjectMetadataEntity, FieldMetadataEntity]),
+    TokenModule,
+    WorkspaceCacheStorageModule,
+    FeatureFlagModule,
+    ApplicationModule,
+    WorkspaceManyOrAllFlatEntityMapsCacheModule,
+    DerivedFieldMetadataIdsModule,
+    IndexMetadataModule,
+    PermissionsModule,
+    WorkspaceMigrationModule,
+    ViewModule,
+    WorkspaceCacheModule,
   ],
-  providers: [ObjectMetadataService, ObjectMetadataResolver],
+  controllers: [ObjectMetadataController],
+  providers: [
+    ObjectMetadataService,
+    ObjectMetadataResolver,
+    ObjectRecordCountService,
+    MostlyEmptyFieldsService,
+    provideWorkspaceScopedRepository(ObjectMetadataEntity),
+    provideWorkspaceScopedRepository(FieldMetadataEntity),
+  ],
   exports: [ObjectMetadataService],
 })
 export class ObjectMetadataModule {}

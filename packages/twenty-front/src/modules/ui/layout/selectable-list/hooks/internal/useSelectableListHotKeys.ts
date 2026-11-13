@@ -1,17 +1,28 @@
 import { isNonEmptyString } from '@sniptt/guards';
-import { useRecoilCallback } from 'recoil';
+import { useStore } from 'jotai';
+import { useCallback } from 'react';
 import { Key } from 'ts-key-enum';
 
-import { useSelectableListStates } from '@/ui/layout/selectable-list/hooks/internal/useSelectableListStates';
-import { useScopedHotkeys } from '@/ui/utilities/hotkey/hooks/useScopedHotkeys';
-import { getSnapshotValue } from '@/ui/utilities/recoil-scope/utils/getSnapshotValue';
+import { isSelectedItemIdComponentFamilyState } from '@/ui/layout/selectable-list/states/isSelectedItemIdComponentFamilyState';
+import { selectableItemIdsComponentState } from '@/ui/layout/selectable-list/states/selectableItemIdsComponentState';
+import { selectedItemIdComponentState } from '@/ui/layout/selectable-list/states/selectedItemIdComponentState';
+import { useHotkeysOnFocusedElement } from '@/ui/utilities/hotkey/hooks/useHotkeysOnFocusedElement';
 
 type Direction = 'up' | 'down' | 'left' | 'right';
 
-export const useSelectableListHotKeys = (
-  scopeId: string,
-  hotkeyScope: string,
-) => {
+export const useSelectableListHotKeys = ({
+  instanceId,
+  focusId,
+  onSelect,
+  onNavigate,
+}: {
+  instanceId: string;
+  focusId: string;
+  onSelect?: (itemId: string) => void;
+  onNavigate?: (itemId: string) => void;
+}) => {
+  const store = useStore();
+
   const findPosition = (
     selectableItemIds: string[][],
     selectedItemId?: string | null,
@@ -28,127 +39,144 @@ export const useSelectableListHotKeys = (
     }
   };
 
-  const {
-    selectedItemIdState,
-    selectableItemIdsState,
-    isSelectedItemIdSelector,
-    selectableListOnEnterState,
-  } = useSelectableListStates({
-    selectableListScopeId: scopeId,
+  const handleSelect = useCallback(
+    (direction: Direction) => {
+      const selectedItemId = store.get(
+        selectedItemIdComponentState.atomFamily({
+          instanceId: instanceId,
+        }),
+      );
+      const selectableItemIds = store.get(
+        selectableItemIdsComponentState.atomFamily({
+          instanceId: instanceId,
+        }),
+      );
+
+      const currentPosition = findPosition(selectableItemIds, selectedItemId);
+
+      const computeNextId = (direction: Direction) => {
+        if (
+          selectableItemIds.length === 0 ||
+          selectableItemIds[0]?.length === 0
+        ) {
+          return;
+        }
+
+        if (!selectedItemId || !currentPosition) {
+          return selectableItemIds[0][0];
+        }
+
+        const { row: currentRow, col: currentCol } = currentPosition;
+
+        const isSingleRow = selectableItemIds.length === 1;
+
+        let nextRow: number;
+        let nextCol: number;
+
+        switch (direction) {
+          case 'up':
+            nextRow = isSingleRow ? currentRow : Math.max(0, currentRow - 1);
+            nextCol = isSingleRow ? Math.max(0, currentCol - 1) : currentCol;
+            break;
+          case 'down':
+            nextRow = isSingleRow
+              ? currentRow
+              : Math.min(selectableItemIds.length - 1, currentRow + 1);
+            nextCol = isSingleRow
+              ? Math.min(
+                  selectableItemIds[currentRow].length - 1,
+                  currentCol + 1,
+                )
+              : currentCol;
+            break;
+          case 'left':
+            nextRow = currentRow;
+            nextCol = Math.max(0, currentCol - 1);
+            break;
+          case 'right':
+            nextRow = currentRow;
+            nextCol = Math.min(
+              selectableItemIds[currentRow].length - 1,
+              currentCol + 1,
+            );
+            break;
+          default:
+            nextRow = currentRow;
+            nextCol = currentCol;
+        }
+
+        return selectableItemIds[nextRow][nextCol];
+      };
+
+      const nextId = computeNextId(direction);
+
+      if (isNonEmptyString(nextId)) {
+        onNavigate?.(nextId);
+      }
+
+      if (selectedItemId !== nextId) {
+        if (isNonEmptyString(nextId)) {
+          store.set(
+            isSelectedItemIdComponentFamilyState.atomFamily({
+              instanceId: instanceId,
+              familyKey: nextId,
+            }),
+            true,
+          );
+          store.set(
+            selectedItemIdComponentState.atomFamily({
+              instanceId: instanceId,
+            }),
+            nextId,
+          );
+          onSelect?.(nextId);
+        }
+
+        if (isNonEmptyString(selectedItemId)) {
+          store.set(
+            isSelectedItemIdComponentFamilyState.atomFamily({
+              instanceId: instanceId,
+              familyKey: selectedItemId,
+            }),
+            false,
+          );
+        }
+      }
+    },
+    [store, instanceId, onSelect, onNavigate],
+  );
+
+  useHotkeysOnFocusedElement({
+    keys: Key.ArrowUp,
+    callback: () => {
+      handleSelect('up');
+    },
+    focusId,
+    dependencies: [handleSelect],
   });
 
-  const handleSelect = useRecoilCallback(
-    ({ snapshot, set }) =>
-      (direction: Direction) => {
-        const selectedItemId = getSnapshotValue(snapshot, selectedItemIdState);
-        const selectableItemIds = getSnapshotValue(
-          snapshot,
-          selectableItemIdsState,
-        );
+  useHotkeysOnFocusedElement({
+    keys: Key.ArrowDown,
+    callback: () => {
+      handleSelect('down');
+    },
+    focusId,
+    dependencies: [handleSelect],
+  });
 
-        const currentPosition = findPosition(selectableItemIds, selectedItemId);
+  useHotkeysOnFocusedElement({
+    keys: Key.ArrowLeft,
+    callback: () => handleSelect('left'),
+    focusId,
+    dependencies: [handleSelect],
+    options: { enableOnFormTags: false },
+  });
 
-        const computeNextId = (direction: Direction) => {
-          if (!selectedItemId || !currentPosition) {
-            return selectableItemIds[0][0];
-          }
-
-          const { row: currentRow, col: currentCol } = currentPosition;
-
-          if (selectableItemIds.length === 0) {
-            return;
-          }
-
-          const isSingleRow = selectableItemIds.length === 1;
-
-          let nextRow: number;
-          let nextCol: number;
-
-          switch (direction) {
-            case 'up':
-              nextRow = isSingleRow ? currentRow : Math.max(0, currentRow - 1);
-              nextCol = isSingleRow ? Math.max(0, currentCol - 1) : currentCol;
-              break;
-            case 'down':
-              nextRow = isSingleRow
-                ? currentRow
-                : Math.min(selectableItemIds.length - 1, currentRow + 1);
-              nextCol = isSingleRow
-                ? Math.min(
-                    selectableItemIds[currentRow].length - 1,
-                    currentCol + 1,
-                  )
-                : currentCol;
-              break;
-            case 'left':
-              nextRow = currentRow;
-              nextCol = Math.max(0, currentCol - 1);
-              break;
-            case 'right':
-              nextRow = currentRow;
-              nextCol = Math.min(
-                selectableItemIds[currentRow].length - 1,
-                currentCol + 1,
-              );
-              break;
-            default:
-              nextRow = currentRow;
-              nextCol = currentCol;
-          }
-
-          return selectableItemIds[nextRow][nextCol];
-        };
-
-        const nextId = computeNextId(direction);
-
-        if (selectedItemId !== nextId) {
-          if (isNonEmptyString(nextId)) {
-            set(isSelectedItemIdSelector(nextId), true);
-            set(selectedItemIdState, nextId);
-          }
-
-          if (isNonEmptyString(selectedItemId)) {
-            set(isSelectedItemIdSelector(selectedItemId), false);
-          }
-        }
-      },
-    [isSelectedItemIdSelector, selectableItemIdsState, selectedItemIdState],
-  );
-
-  useScopedHotkeys(Key.ArrowUp, () => handleSelect('up'), hotkeyScope, []);
-
-  useScopedHotkeys(Key.ArrowDown, () => handleSelect('down'), hotkeyScope, []);
-
-  useScopedHotkeys(Key.ArrowLeft, () => handleSelect('left'), hotkeyScope, []);
-
-  useScopedHotkeys(
-    Key.ArrowRight,
-    () => handleSelect('right'),
-    hotkeyScope,
-    [],
-  );
-
-  useScopedHotkeys(
-    Key.Enter,
-    useRecoilCallback(
-      ({ snapshot }) =>
-        () => {
-          const selectedItemId = getSnapshotValue(
-            snapshot,
-            selectedItemIdState,
-          );
-          const onEnter = getSnapshotValue(
-            snapshot,
-            selectableListOnEnterState,
-          );
-
-          if (isNonEmptyString(selectedItemId)) {
-            onEnter?.(selectedItemId);
-          }
-        },
-      [selectableListOnEnterState, selectedItemIdState],
-    ),
-    hotkeyScope,
-    [],
-  );
+  useHotkeysOnFocusedElement({
+    keys: Key.ArrowRight,
+    callback: () => handleSelect('right'),
+    focusId,
+    dependencies: [handleSelect],
+    options: { enableOnFormTags: false },
+  });
 };

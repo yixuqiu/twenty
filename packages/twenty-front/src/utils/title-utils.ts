@@ -1,28 +1,20 @@
-import { AppBasePath } from '@/types/AppBasePath';
-import { AppPath } from '@/types/AppPath';
-import { SettingsPath } from '@/types/SettingsPath';
-
-export enum SettingsPageTitles {
-  Accounts = 'Account - Settings',
-  Appearance = 'Appearance - Settings',
-  Profile = 'Profile - Settings',
-  Objects = 'Data model - Settings',
-  Members = 'Members - Settings',
-  Developers = 'Developers - Settings',
-  Integration = 'Integrations - Settings',
-  General = 'General - Settings',
-  Default = 'Settings',
-}
+import { t } from '@lingui/core/macro';
+import { AppBasePath, AppPath, SettingsPath } from 'twenty-shared/types';
 
 enum SettingsPathPrefixes {
   Accounts = `${AppBasePath.Settings}/${SettingsPath.Accounts}`,
-  Appearance = `${AppBasePath.Settings}/${SettingsPath.Appearance}`,
+  AppPreferences = `${AppBasePath.Settings}/${SettingsPath.AppPreferences}`,
+  Billing = `${AppBasePath.Settings}/${SettingsPath.Billing}`,
+  Partner = `${AppBasePath.Settings}/${SettingsPath.Partner}`,
+  Experience = `${AppBasePath.Settings}/${SettingsPath.Experience}`,
   Profile = `${AppBasePath.Settings}/${SettingsPath.ProfilePage}`,
   Objects = `${AppBasePath.Settings}/${SettingsPath.Objects}`,
   Members = `${AppBasePath.Settings}/${SettingsPath.WorkspaceMembersPage}`,
   Developers = `${AppBasePath.Settings}/${SettingsPath.Developers}`,
+  LogicFunctions = `${AppBasePath.Settings}/${SettingsPath.LogicFunctions}`,
   Integration = `${AppBasePath.Settings}/${SettingsPath.Integrations}`,
-  General = `${AppBasePath.Settings}/${SettingsPath.Workspace}`,
+  General = `${AppBasePath.Settings}/${SettingsPath.General}`,
+  Community = `${AppBasePath.Settings}/${SettingsPath.Community}`,
 }
 
 const getPathnameOrPrefix = (pathname: string) => {
@@ -38,35 +30,41 @@ export const getPageTitleFromPath = (pathname: string): string => {
   const pathnameOrPrefix = getPathnameOrPrefix(pathname);
   switch (pathnameOrPrefix) {
     case AppPath.Verify:
-      return 'Verify';
+      return t`Verify`;
     case AppPath.SignInUp:
-      return 'Sign in or Create an account';
+      return t`Sign in or Create an account`;
     case AppPath.Invite:
-      return 'Invite';
-    case AppPath.CreateWorkspace:
-      return 'Create Workspace';
+      return t`Invite`;
+    case AppPath.WorkspaceActivation:
+      return t`Create Workspace`;
     case AppPath.CreateProfile:
-      return 'Create Profile';
-    case AppPath.TasksPage:
-      return 'Tasks';
-    case AppPath.OpportunitiesPage:
-      return 'Opportunities';
-    case SettingsPathPrefixes.Appearance:
-      return SettingsPageTitles.Appearance;
+      return t`Create Profile`;
+    case SettingsPathPrefixes.Experience:
+      return t`Experience - Settings`;
     case SettingsPathPrefixes.Accounts:
-      return SettingsPageTitles.Accounts;
+      return t`Account - Settings`;
+    case SettingsPathPrefixes.AppPreferences:
+      return t`Apps preferences - Settings`;
+    case SettingsPathPrefixes.Billing:
+      return t`Billing - Settings`;
+    case SettingsPathPrefixes.Partner:
+      return t`Partner - Settings`;
     case SettingsPathPrefixes.Profile:
-      return SettingsPageTitles.Profile;
+      return t`Profile - Settings`;
     case SettingsPathPrefixes.Members:
-      return SettingsPageTitles.Members;
+      return t`Members - Settings`;
     case SettingsPathPrefixes.Objects:
-      return SettingsPageTitles.Objects;
+      return t`Data model - Settings`;
     case SettingsPathPrefixes.Developers:
-      return SettingsPageTitles.Developers;
+      return t`Developers - Settings`;
+    case SettingsPathPrefixes.LogicFunctions:
+      return t`Functions - Settings`;
     case SettingsPathPrefixes.Integration:
-      return SettingsPageTitles.Integration;
+      return t`Integrations - Settings`;
     case SettingsPathPrefixes.General:
-      return SettingsPageTitles.General;
+      return t`General - Settings`;
+    case SettingsPathPrefixes.Community:
+      return t`Community - Settings`;
     default:
       return 'Twenty';
   }

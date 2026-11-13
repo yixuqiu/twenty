@@ -1,21 +1,27 @@
-import { ReactNode } from 'react';
-import { Link as EmailLink } from '@react-email/components';
+import { type JSX } from 'react';
+import { Link as EmailLink } from 'react-email';
 
-import { emailTheme } from 'src/common-style';
+import { canvasTheme } from 'src/common-style';
 
 const linkStyle = {
-  color: emailTheme.font.colors.tertiary,
   textDecoration: 'underline',
 };
 
 type LinkProps = {
-  value: ReactNode;
+  value: JSX.Element | JSX.Element[] | string;
   href: string;
+  color?: string;
 };
 
-export const Link = ({ value, href }: LinkProps) => {
+export const Link = ({ value, href, color }: LinkProps) => {
   return (
-    <EmailLink href={href} style={linkStyle}>
+    <EmailLink
+      href={href}
+      style={{
+        ...linkStyle,
+        color: color ?? canvasTheme.font.colors.tertiary,
+      }}
+    >
       {value}
     </EmailLink>
   );

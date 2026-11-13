@@ -1,30 +1,33 @@
-import { BadRequestException } from '@nestjs/common';
+import { type FieldMetadataDefaultValueForAnyType } from 'twenty-shared/types';
 
-import { FieldMetadataDefaultSerializableValue } from 'src/engine/metadata-modules/field-metadata/interfaces/field-metadata-default-value.interface';
-
+import {
+  FieldMetadataException,
+  FieldMetadataExceptionCode,
+} from 'src/engine/metadata-modules/field-metadata/field-metadata.exception';
 import { isFunctionDefaultValue } from 'src/engine/metadata-modules/field-metadata/utils/is-function-default-value.util';
 import { serializeFunctionDefaultValue } from 'src/engine/metadata-modules/field-metadata/utils/serialize-function-default-value.util';
 
 export const serializeDefaultValue = (
-  defaultValue?: FieldMetadataDefaultSerializableValue,
+  defaultValue?: FieldMetadataDefaultValueForAnyType,
 ) => {
   if (defaultValue === undefined || defaultValue === null) {
     return null;
   }
 
-  // Function default values
   if (isFunctionDefaultValue(defaultValue)) {
     const serializedTypeDefaultValue =
       serializeFunctionDefaultValue(defaultValue);
 
     if (!serializedTypeDefaultValue) {
-      throw new BadRequestException('Invalid default value');
+      throw new FieldMetadataException(
+        'Invalid default value',
+        FieldMetadataExceptionCode.INVALID_FIELD_INPUT,
+      );
     }
 
     return serializedTypeDefaultValue;
   }
 
-  // Static default values
   if (typeof defaultValue === 'string' && defaultValue.startsWith("'")) {
     return defaultValue;
   }
@@ -51,5 +54,8 @@ export const serializeDefaultValue = (
     return `'${JSON.stringify(defaultValue)}'`;
   }
 
-  throw new BadRequestException(`Invalid default value "${defaultValue}"`);
+  throw new FieldMetadataException(
+    `Invalid default value "${defaultValue}"`,
+    FieldMetadataExceptionCode.INVALID_FIELD_INPUT,
+  );
 };

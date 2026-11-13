@@ -1,23 +1,22 @@
 import { Field, HideField, InputType } from '@nestjs/graphql';
 
-import { BeforeCreateOne } from '@ptc-org/nestjs-query-graphql';
+import { Type } from 'class-transformer';
 import {
   IsBoolean,
   IsNotEmpty,
   IsOptional,
   IsString,
-  IsUUID,
+  ValidateNested,
 } from 'class-validator';
 import GraphQLJSON from 'graphql-type-json';
-
-import { FieldMetadataSettings } from 'src/engine/metadata-modules/field-metadata/interfaces/field-metadata-settings.interface';
+import {
+  type FieldMetadataSettings,
+  type FieldMetadataType,
+} from 'twenty-shared/types';
 
 import { IsValidMetadataName } from 'src/engine/decorators/metadata/is-valid-metadata-name.decorator';
-import { BeforeCreateOneObject } from 'src/engine/metadata-modules/object-metadata/hooks/before-create-one-object.hook';
-import { FieldMetadataType } from 'src/engine/metadata-modules/field-metadata/field-metadata.entity';
 
 @InputType()
-@BeforeCreateOne(BeforeCreateOneObject)
 export class CreateObjectInput {
   @IsString()
   @IsNotEmpty()
@@ -51,21 +50,26 @@ export class CreateObjectInput {
   @Field({ nullable: true })
   icon?: string;
 
-  @HideField()
-  dataSourceId: string;
-
-  @HideField()
-  workspaceId: string;
-
-  @IsUUID()
+  @IsString()
   @IsOptional()
   @Field({ nullable: true })
-  labelIdentifierFieldMetadataId?: string;
+  shortcut?: string;
 
-  @IsUUID()
+  @IsString()
   @IsOptional()
   @Field({ nullable: true })
-  imageIdentifierFieldMetadataId?: string;
+  color?: string;
+
+  @HideField()
+  applicationId?: string;
+
+  @HideField()
+  universalIdentifier?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  @Field({ nullable: true })
+  skipNameField?: boolean;
 
   @IsBoolean()
   @IsOptional()
@@ -78,7 +82,20 @@ export class CreateObjectInput {
 
   @IsOptional()
   @Field(() => GraphQLJSON, { nullable: true })
-  primaryKeyFieldMetadataSettings?: FieldMetadataSettings<
-    FieldMetadataType | 'default'
-  >;
+  primaryKeyFieldMetadataSettings?: FieldMetadataSettings<FieldMetadataType>;
+
+  @IsBoolean()
+  @IsOptional()
+  @Field({ nullable: true })
+  isLabelSyncedWithName?: boolean;
+}
+
+@InputType()
+export class CreateOneObjectInput {
+  @Type(() => CreateObjectInput)
+  @ValidateNested()
+  @Field(() => CreateObjectInput, {
+    description: 'The object to create',
+  })
+  object!: CreateObjectInput;
 }

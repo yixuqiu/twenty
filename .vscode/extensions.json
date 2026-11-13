@@ -1,7 +1,7 @@
 {
   "recommendations": [
     "arcanis.vscode-zipfs",
-    "dbaeumer.vscode-eslint",
+    "oxc.oxc-vscode",
     "esbenp.prettier-vscode",
     "figma.figma-vscode-extension",
     "firsttris.vscode-jest-runner",
@@ -14,6 +14,7 @@
     "styled-components.vscode-styled-components",
     "unifiedjs.vscode-mdx",
     "xyc.vscode-mdx-preview",
-    "yoavbls.pretty-ts-errors"
+    "yoavbls.pretty-ts-errors",
+    "ms-playwright.playwright"
   ]
 }

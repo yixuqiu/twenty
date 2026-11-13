@@ -1,29 +1,33 @@
 import { isNonEmptyString } from '@sniptt/guards';
+import { t } from '@lingui/core/macro';
 import { v4 } from 'uuid';
 
 import {
-  Errors,
-  Meta,
+  type Errors,
+  type ImportedStructuredRowMetadata,
 } from '@/spreadsheet-import/steps/components/ValidationStep/types';
 import {
-  Data,
-  Fields,
-  Info,
-  RowHook,
-  TableHook,
+  type ImportedStructuredRow,
+  type SpreadsheetImportFields,
+  type SpreadsheetImportInfo,
+  type SpreadsheetImportRowHook,
+  type SpreadsheetImportTableHook,
 } from '@/spreadsheet-import/types';
-import { isDefined } from '~/utils/isDefined';
-import { isUndefinedOrNull } from '~/utils/isUndefinedOrNull';
+import { isDefined } from 'twenty-shared/utils';
 
-export const addErrorsAndRunHooks = <T extends string>(
-  data: (Data<T> & Partial<Meta>)[],
-  fields: Fields<T>,
-  rowHook?: RowHook<T>,
-  tableHook?: TableHook<T>,
-): (Data<T> & Meta)[] => {
+export const addErrorsAndRunHooks = (
+  data: (ImportedStructuredRow & Partial<ImportedStructuredRowMetadata>)[],
+  fields: SpreadsheetImportFields,
+  rowHook?: SpreadsheetImportRowHook,
+  tableHook?: SpreadsheetImportTableHook,
+): (ImportedStructuredRow & ImportedStructuredRowMetadata)[] => {
   const errors: Errors = {};
 
-  const addHookError = (rowIndex: number, fieldKey: T, error: Info) => {
+  const addHookError = (
+    rowIndex: number,
+    fieldKey: string,
+    error: SpreadsheetImportInfo,
+  ) => {
     errors[rowIndex] = {
       ...errors[rowIndex],
       [fieldKey]: error,
@@ -41,20 +45,19 @@ export const addErrorsAndRunHooks = <T extends string>(
   }
 
   fields.forEach((field) => {
-    field.validations?.forEach((validation) => {
-      switch (validation.rule) {
+    field.fieldValidationDefinitions?.forEach((fieldValidationDefinition) => {
+      switch (fieldValidationDefinition.rule) {
         case 'unique': {
-          const values = data.map((entry) => entry[field.key as T]);
+          const values = data.map((entry) => entry[field.key]);
 
-          const taken = new Set(); // Set of items used at least once
-          const duplicates = new Set(); // Set of items used multiple times
+          const taken = new Set();
+          const duplicates = new Set();
 
           values.forEach((value) => {
             if (
-              validation.allowEmpty === true &&
-              (isUndefinedOrNull(value) || value === '' || !value)
+              fieldValidationDefinition.allowEmpty &&
+              (!isDefined(value) || value === '' || value === false)
             ) {
-              // If allowEmpty is set, we will not validate falsy fields such as undefined or empty string.
               return;
             }
 
@@ -70,8 +73,10 @@ export const addErrorsAndRunHooks = <T extends string>(
               errors[index] = {
                 ...errors[index],
                 [field.key]: {
-                  level: validation.level || 'error',
-                  message: validation.errorMessage || 'Field must be unique',
+                  level: fieldValidationDefinition.level || 'error',
+                  message:
+                    fieldValidationDefinition.errorMessage ||
+                    t`Field must be unique`,
                 },
               };
             }
@@ -81,15 +86,17 @@ export const addErrorsAndRunHooks = <T extends string>(
         case 'required': {
           data.forEach((entry, index) => {
             if (
-              entry[field.key as T] === null ||
-              entry[field.key as T] === undefined ||
-              entry[field.key as T] === ''
+              entry[field.key] === null ||
+              entry[field.key] === undefined ||
+              entry[field.key] === ''
             ) {
               errors[index] = {
                 ...errors[index],
                 [field.key]: {
-                  level: validation.level || 'error',
-                  message: validation.errorMessage || 'Field is required',
+                  level: fieldValidationDefinition.level || 'error',
+                  message:
+                    fieldValidationDefinition.errorMessage ||
+                    t`Field is required`,
                 },
               };
             }
@@ -97,7 +104,10 @@ export const addErrorsAndRunHooks = <T extends string>(
           break;
         }
         case 'regex': {
-          const regex = new RegExp(validation.value, validation.flags);
+          const regex = new RegExp(
+            fieldValidationDefinition.value,
+            fieldValidationDefinition.flags,
+          );
           data.forEach((entry, index) => {
             const value = entry[field.key]?.toString();
 
@@ -105,10 +115,10 @@ export const addErrorsAndRunHooks = <T extends string>(
               errors[index] = {
                 ...errors[index],
                 [field.key]: {
-                  level: validation.level || 'error',
+                  level: fieldValidationDefinition.level || 'error',
                   message:
-                    validation.errorMessage ||
-                    `Field did not match the regex /${validation.value}/${validation.flags} `,
+                    fieldValidationDefinition.errorMessage ||
+                    t`Field did not match the regex /${fieldValidationDefinition.value}/${fieldValidationDefinition.flags ?? ''} `,
                 },
               };
             }
@@ -119,12 +129,17 @@ export const addErrorsAndRunHooks = <T extends string>(
           data.forEach((entry, index) => {
             const value = entry[field.key]?.toString();
 
-            if (isNonEmptyString(value) && !validation.isValid(value)) {
+            if (
+              isNonEmptyString(value) &&
+              !fieldValidationDefinition.isValid(value)
+            ) {
               errors[index] = {
                 ...errors[index],
                 [field.key]: {
-                  level: validation.level || 'error',
-                  message: validation.errorMessage || 'Field is invalid',
+                  level: fieldValidationDefinition.level || 'error',
+                  message:
+                    fieldValidationDefinition.errorMessage ||
+                    t`Field is invalid`,
                 },
               };
             }
@@ -140,13 +155,17 @@ export const addErrorsAndRunHooks = <T extends string>(
     if (!('__index' in value)) {
       value.__index = v4();
     }
-    const newValue = value as Data<T> & Meta;
+    const newValue = value as ImportedStructuredRow &
+      ImportedStructuredRowMetadata;
 
     if (isDefined(errors[index])) {
-      return { ...newValue, __errors: errors[index] };
+      return { ...newValue, __errors: errors[index] } as ImportedStructuredRow &
+        ImportedStructuredRowMetadata;
     }
-    if (isUndefinedOrNull(errors[index]) && isDefined(value?.__errors)) {
-      return { ...newValue, __errors: null };
+
+    if (!isDefined(errors[index]) && isDefined(value?.__errors)) {
+      return { ...newValue, __errors: null } as ImportedStructuredRow &
+        ImportedStructuredRowMetadata;
     }
     return newValue;
   });

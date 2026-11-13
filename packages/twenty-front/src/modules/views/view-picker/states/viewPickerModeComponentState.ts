@@ -1,8 +1,10 @@
-import { createComponentState } from '@/ui/utilities/state/component-state/utils/createComponentState';
+import { createAtomComponentState } from '@/ui/utilities/state/jotai/utils/createAtomComponentState';
+import { ViewComponentInstanceContext } from '@/views/states/contexts/ViewComponentInstanceContext';
+import { type ViewPickerMode } from '@/views/view-picker/types/ViewPickerMode';
 
-export const viewPickerModeComponentState = createComponentState<
-  'list' | 'edit' | 'create'
->({
-  key: 'viewEditModeComponentState',
-  defaultValue: 'list',
-});
+export const viewPickerModeComponentState =
+  createAtomComponentState<ViewPickerMode>({
+    key: 'viewPickerModeComponentState',
+    defaultValue: 'list',
+    componentInstanceContext: ViewComponentInstanceContext,
+  });

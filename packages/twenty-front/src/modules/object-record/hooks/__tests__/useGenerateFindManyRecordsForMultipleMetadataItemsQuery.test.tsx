@@ -1,16 +1,12 @@
-import { ReactNode } from 'react';
-import { expect } from '@storybook/test';
 import { renderHook } from '@testing-library/react';
-import { RecoilRoot } from 'recoil';
+import { type ReactNode } from 'react';
 
-import { getObjectMetadataItemsMock } from '@/object-metadata/utils/getObjectMetadataItemsMock';
 import { useGenerateCombinedFindManyRecordsQuery } from '@/object-record/multiple-objects/hooks/useGenerateCombinedFindManyRecordsQuery';
 import { JestObjectMetadataItemSetter } from '~/testing/jest/JestObjectMetadataItemSetter';
+import { getTestEnrichedObjectMetadataItemsMock } from '~/testing/utils/getTestEnrichedObjectMetadataItemsMock';
 
 const Wrapper = ({ children }: { children: ReactNode }) => (
-  <RecoilRoot>
-    <JestObjectMetadataItemSetter>{children}</JestObjectMetadataItemSetter>
-  </RecoilRoot>
+  <JestObjectMetadataItemSetter>{children}</JestObjectMetadataItemSetter>
 );
 
 describe('useGenerateFindManyRecordsForMultipleMetadataItemsQuery', () => {
@@ -18,7 +14,7 @@ describe('useGenerateFindManyRecordsForMultipleMetadataItemsQuery', () => {
     const { result } = renderHook(
       () => {
         return useGenerateCombinedFindManyRecordsQuery({
-          operationSignatures: getObjectMetadataItemsMock()
+          operationSignatures: getTestEnrichedObjectMetadataItemsMock()
             .slice(0, 2)
             .map((item) => ({
               objectNameSingular: item.nameSingular,

@@ -1,11 +1,14 @@
-import { useDialogManagerScopedStates } from '../hooks/internal/useDialogManagerScopedStates';
-import { useDialogManager } from '../hooks/useDialogManager';
+import { dialogInternalComponentState } from '@/ui/feedback/dialog-manager/states/dialogInternalComponentState';
+import { useDialogManager } from '@/ui/feedback/dialog-manager/hooks/useDialogManager';
 
+import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
 import { Dialog } from './Dialog';
 import { DialogManagerEffect } from './DialogManagerEffect';
 
 export const DialogManager = ({ children }: React.PropsWithChildren) => {
-  const { dialogInternal } = useDialogManagerScopedStates();
+  const dialogInternal = useAtomComponentStateValue(
+    dialogInternalComponentState,
+  );
   const { closeDialog } = useDialogManager();
 
   return (

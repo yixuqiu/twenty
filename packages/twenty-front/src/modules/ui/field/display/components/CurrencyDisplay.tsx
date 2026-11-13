@@ -1,51 +1,72 @@
-import { useTheme } from '@emotion/react';
-import styled from '@emotion/styled';
+import { useLingui } from '@lingui/react/macro';
+import { isNonEmptyString } from '@sniptt/guards';
+import { formatToShortNumber, isDefined } from 'twenty-shared/utils';
+import { Tooltip } from 'twenty-ui/primitives/surfaces';
 
-import { FieldCurrencyValue } from '@/object-record/record-field/types/FieldMetadata';
-import { SETTINGS_FIELD_CURRENCY_CODES } from '@/settings/data-model/constants/SettingsFieldCurrencyCodes';
-import { formatAmount } from '~/utils/format/formatAmount';
-import { isDefined } from '~/utils/isDefined';
-
-import { EllipsisDisplay } from './EllipsisDisplay';
+import { useNumberFormat } from '@/localization/hooks/useNumberFormat';
+import { getCurrencyLabel } from '@/localization/utils/getCurrencyLabel';
+import { getCurrencyPrefix } from '@/localization/utils/getCurrencyPrefix';
+import { type FieldDefinition } from '@/object-record/record-field/ui/types/FieldDefinition';
+import {
+  type FieldCurrencyMetadata,
+  type FieldCurrencyValue,
+} from '@/object-record/record-field/ui/types/FieldMetadata';
+import { EllipsisDisplay } from '@/ui/field/display/components/internal/EllipsisDisplay/EllipsisDisplay';
+import { TooltipDelay } from '@/ui/layout/tooltip/constants/TooltipDelay';
+import { DEFAULT_DECIMAL_VALUE } from '@/localization/utils/formatNumber';
 
 type CurrencyDisplayProps = {
   currencyValue: FieldCurrencyValue | null | undefined;
+  fieldDefinition: FieldDefinition<FieldCurrencyMetadata>;
 };
 
-const StyledEllipsisDisplay = styled(EllipsisDisplay)`
-  align-items: center;
-  display: flex;
-`;
+export const CurrencyDisplay = ({
+  currencyValue,
+  fieldDefinition,
+}: CurrencyDisplayProps) => {
+  const { i18n } = useLingui();
 
-export const CurrencyDisplay = ({ currencyValue }: CurrencyDisplayProps) => {
-  const theme = useTheme();
+  const currencyCode = currencyValue?.currencyCode;
+  const currencyPrefix = isDefined(currencyCode)
+    ? getCurrencyPrefix(currencyCode)
+    : undefined;
+  const amountToDisplay = !isDefined(currencyValue?.amountMicros)
+    ? null
+    : currencyValue?.amountMicros / 1000000;
 
-  const shouldDisplayCurrency = isDefined(currencyValue?.currencyCode);
+  const format = fieldDefinition.metadata.settings?.format;
+  const decimals = fieldDefinition.metadata.settings?.decimals;
+  const decimalsToUse = decimals ?? DEFAULT_DECIMAL_VALUE;
 
-  const CurrencyIcon = isDefined(currencyValue?.currencyCode)
-    ? SETTINGS_FIELD_CURRENCY_CODES[currencyValue?.currencyCode]?.Icon
-    : null;
-
-  const amountToDisplay = isDefined(currencyValue?.amountMicros)
-    ? currencyValue.amountMicros / 1000000
-    : 0;
-
-  if (!shouldDisplayCurrency) {
-    return <StyledEllipsisDisplay>{0}</StyledEllipsisDisplay>;
-  }
+  const { formatNumber } = useNumberFormat();
+  const currencyLabel = isDefined(currencyCode)
+    ? getCurrencyLabel({ currencyCode, locale: i18n.locale })
+    : undefined;
+  const currencyTooltipContent = isDefined(currencyCode)
+    ? `${currencyCode}${isDefined(currencyLabel) ? ` - ${currencyLabel}` : ''}`
+    : undefined;
+  const shouldShowCurrencyTooltip =
+    isNonEmptyString(currencyPrefix) &&
+    amountToDisplay !== null &&
+    isDefined(currencyTooltipContent);
 
   return (
-    <StyledEllipsisDisplay>
-      {isDefined(CurrencyIcon) && (
-        <>
-          <CurrencyIcon
-            color={theme.font.color.primary}
-            size={theme.icon.size.md}
-            stroke={theme.icon.stroke.sm}
-          />{' '}
-        </>
+    <EllipsisDisplay>
+      {shouldShowCurrencyTooltip && (
+        <Tooltip
+          content={currencyTooltipContent}
+          delay={TooltipDelay.shortDelay}
+          side="top"
+          positionMethod="fixed"
+        >
+          <span>{currencyPrefix}</span>
+        </Tooltip>
       )}
-      {amountToDisplay !== 0 ? formatAmount(amountToDisplay) : ''}
-    </StyledEllipsisDisplay>
+      {amountToDisplay !== null
+        ? !isDefined(format) || format === 'short'
+          ? formatToShortNumber(amountToDisplay)
+          : formatNumber(amountToDisplay, { decimals: decimalsToUse })
+        : null}
+    </EllipsisDisplay>
   );
 };

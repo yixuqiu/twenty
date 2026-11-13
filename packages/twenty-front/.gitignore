@@ -42,3 +42,6 @@ dist-ssr
 
 .vite/
 .nyc_output/
+
+# project structure cache (legacy)
+projectStructure.cache.json

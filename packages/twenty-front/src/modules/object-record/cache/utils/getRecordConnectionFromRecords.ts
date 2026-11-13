@@ -1,10 +1,10 @@
-import { ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
-import { getConnectionTypename } from '@/object-record/cache/utils/getConnectionTypename';
+import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/EnrichedObjectMetadataItem';
 import { getEmptyPageInfo } from '@/object-record/cache/utils/getEmptyPageInfo';
 import { getRecordEdgeFromRecord } from '@/object-record/cache/utils/getRecordEdgeFromRecord';
-import { RecordGqlConnection } from '@/object-record/graphql/types/RecordGqlConnection';
-import { RecordGqlOperationGqlRecordFields } from '@/object-record/graphql/types/RecordGqlOperationGqlRecordFields';
-import { ObjectRecord } from '@/object-record/types/ObjectRecord';
+import { type RecordGqlConnectionEdgesRequired } from '@/object-record/graphql/types/RecordGqlConnectionEdgesRequired';
+import { type ObjectRecord } from '@/object-record/types/ObjectRecord';
+import { type RecordGqlFields } from 'twenty-shared/types';
+import { getConnectionTypename } from 'twenty-shared/utils';
 
 export const getRecordConnectionFromRecords = <T extends ObjectRecord>({
   objectMetadataItems,
@@ -15,13 +15,13 @@ export const getRecordConnectionFromRecords = <T extends ObjectRecord>({
   computeReferences = false,
   isRootLevel = true,
 }: {
-  objectMetadataItems: ObjectMetadataItem[];
+  objectMetadataItems: EnrichedObjectMetadataItem[];
   objectMetadataItem: Pick<
-    ObjectMetadataItem,
+    EnrichedObjectMetadataItem,
     'fields' | 'namePlural' | 'nameSingular'
   >;
   records: T[];
-  recordGqlFields?: RecordGqlOperationGqlRecordFields;
+  recordGqlFields?: RecordGqlFields;
   withPageInfo?: boolean;
   isRootLevel?: boolean;
   computeReferences?: boolean;
@@ -40,5 +40,5 @@ export const getRecordConnectionFromRecords = <T extends ObjectRecord>({
     }),
     ...(withPageInfo && { pageInfo: getEmptyPageInfo() }),
     ...(withPageInfo && { totalCount: records.length }),
-  } as RecordGqlConnection;
+  } as RecordGqlConnectionEdgesRequired;
 };

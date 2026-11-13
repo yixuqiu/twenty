@@ -1,5 +1,5 @@
-import { Activity } from '@/activities/types/Activity';
+import { type Activity } from '@/activities/types/Activity';
 
 export type Note = Activity & {
-  type: 'Note';
+  __typename: 'Note';
 };

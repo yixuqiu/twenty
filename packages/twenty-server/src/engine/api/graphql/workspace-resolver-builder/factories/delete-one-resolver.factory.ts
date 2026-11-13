@@ -1,22 +1,26 @@
 import { Injectable } from '@nestjs/common';
 
-import {
-  DeleteOneResolverArgs,
-  Resolver,
-} from 'src/engine/api/graphql/workspace-resolver-builder/interfaces/workspace-resolvers-builder.interface';
-import { WorkspaceSchemaBuilderContext } from 'src/engine/api/graphql/workspace-schema-builder/interfaces/workspace-schema-builder-context.interface';
-import { WorkspaceResolverBuilderFactoryInterface } from 'src/engine/api/graphql/workspace-resolver-builder/interfaces/workspace-resolver-builder-factory.interface';
+import graphqlFields from 'graphql-fields';
 
-import { WorkspaceQueryRunnerService } from 'src/engine/api/graphql/workspace-query-runner/workspace-query-runner.service';
+import { type WorkspaceResolverBuilderFactoryInterface } from 'src/engine/api/graphql/workspace-resolver-builder/interfaces/workspace-resolver-builder-factory.interface';
+import {
+  type DeleteOneResolverArgs,
+  type Resolver,
+} from 'src/engine/api/graphql/workspace-resolver-builder/interfaces/workspace-resolvers-builder.interface';
+import { type WorkspaceSchemaBuilderContext } from 'src/engine/api/graphql/workspace-schema-builder/interfaces/workspace-schema-builder-context.interface';
+
+import { CommonDeleteOneQueryRunnerService } from 'src/engine/api/common/common-query-runners/common-delete-one-query-runner.service';
+import { ObjectRecordsToGraphqlConnectionHelper } from 'src/engine/api/graphql/graphql-query-runner/helpers/object-records-to-graphql-connection.helper';
+import { workspaceQueryRunnerGraphqlApiExceptionHandler } from 'src/engine/api/graphql/workspace-query-runner/utils/workspace-query-runner-graphql-api-exception-handler.util';
+import { RESOLVER_METHOD_NAMES } from 'src/engine/api/graphql/workspace-resolver-builder/constants/resolver-method-names';
+import { createQueryRunnerContext } from 'src/engine/api/graphql/workspace-resolver-builder/utils/create-query-runner-context.util';
 
 @Injectable()
-export class DeleteOneResolverFactory
-  implements WorkspaceResolverBuilderFactoryInterface
-{
-  public static methodName = 'deleteOne' as const;
+export class DeleteOneResolverFactory implements WorkspaceResolverBuilderFactoryInterface {
+  public static methodName = RESOLVER_METHOD_NAMES.DELETE_ONE;
 
   constructor(
-    private readonly workspaceQueryRunnerService: WorkspaceQueryRunnerService,
+    private readonly commonDeleteOneQueryRunnerService: CommonDeleteOneQueryRunnerService,
   ) {}
 
   create(
@@ -24,15 +28,36 @@ export class DeleteOneResolverFactory
   ): Resolver<DeleteOneResolverArgs> {
     const internalContext = context;
 
-    return (_source, args, context, info) => {
-      return this.workspaceQueryRunnerService.deleteOne(args, {
-        objectMetadataItem: internalContext.objectMetadataItem,
-        workspaceId: internalContext.workspaceId,
-        userId: internalContext.userId,
-        info,
-        fieldMetadataCollection: internalContext.fieldMetadataCollection,
-        objectMetadataCollection: internalContext.objectMetadataCollection,
+    return async (_source, args, _requestContext, info) => {
+      const selectedFields = graphqlFields(info);
+
+      const resolverContext = createQueryRunnerContext({
+        workspaceSchemaBuilderContext: internalContext,
       });
+
+      try {
+        const { results: record } =
+          await this.commonDeleteOneQueryRunnerService.execute(
+            { ...args, selectedFields },
+            resolverContext,
+          );
+
+        const typeORMObjectRecordsParser =
+          new ObjectRecordsToGraphqlConnectionHelper(
+            resolverContext.flatObjectMetadataMaps,
+            resolverContext.flatFieldMetadataMaps,
+            resolverContext.objectIdByNameSingular,
+          );
+
+        return typeORMObjectRecordsParser.processRecord({
+          objectRecord: record,
+          objectName: resolverContext.flatObjectMetadata.nameSingular,
+          take: 1,
+          totalCount: 1,
+        });
+      } catch (error) {
+        workspaceQueryRunnerGraphqlApiExceptionHandler(error);
+      }
     };
   }
 }

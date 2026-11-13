@@ -1,55 +1,67 @@
-import { Ref } from 'react';
-import styled from '@emotion/styled';
+import { RECORD_TABLE_CELL_DISPLAY_CLASS_NAME } from '@/object-record/record-table/constants/RecordTableCellDisplayClassName';
+import { styled } from '@linaria/react';
+import { type Ref } from 'react';
+import { themeCssVariables } from 'twenty-ui/theme';
+import { useLingui } from '@lingui/react/macro';
+
+const StyledOuterContainer = styled.div`
+  align-items: center;
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+  padding-left: 8px;
+  width: 100%;
+`;
+
+const StyledInnerContainer = styled.div`
+  align-items: center;
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  width: 100%;
+`;
+
+const StyledEmptyPlaceholderField = styled.div`
+  color: ${themeCssVariables.font.color.light};
+  padding-left: 4px;
+`;
 
 export type EditableCellDisplayContainerProps = {
-  softFocus?: boolean;
-  onClick?: () => void;
+  focus?: boolean;
+  onClick?: (event: React.MouseEvent<HTMLDivElement, MouseEvent>) => void;
   scrollRef?: Ref<HTMLDivElement>;
   isHovered?: boolean;
+  onContextMenu?: (event: React.MouseEvent<HTMLDivElement, MouseEvent>) => void;
+  placeholderForEmptyCell?: string;
 };
-
-const StyledEditableCellDisplayModeOuterContainer = styled.div<
-  Pick<EditableCellDisplayContainerProps, 'softFocus' | 'isHovered'>
->`
-  align-items: center;
-  display: flex;
-  height: 100%;
-  overflow: hidden;
-  padding-left: ${({ theme }) => theme.spacing(2)};
-  padding-right: ${({ theme }) => theme.spacing(1)};
-  width: 100%;
-  ${(props) =>
-    props.softFocus
-      ? `background: ${props.theme.background.transparent.secondary};
-      border-radius: ${props.theme.border.radius.sm};
-      outline: 1px solid ${props.theme.font.color.extraLight};`
-      : ''}
-`;
-
-const StyledEditableCellDisplayModeInnerContainer = styled.div`
-  align-items: center;
-  display: flex;
-  height: 100%;
-  overflow: hidden;
-  width: 100%;
-`;
 
 export const RecordTableCellDisplayContainer = ({
   children,
-  softFocus,
+  focus,
   onClick,
   scrollRef,
-}: React.PropsWithChildren<EditableCellDisplayContainerProps>) => (
-  <StyledEditableCellDisplayModeOuterContainer
-    data-testid={
-      softFocus ? 'editable-cell-soft-focus-mode' : 'editable-cell-display-mode'
-    }
-    onClick={onClick}
-    softFocus={softFocus}
-    ref={scrollRef}
-  >
-    <StyledEditableCellDisplayModeInnerContainer>
-      {children}
-    </StyledEditableCellDisplayModeInnerContainer>
-  </StyledEditableCellDisplayModeOuterContainer>
-);
+  onContextMenu,
+  placeholderForEmptyCell,
+}: React.PropsWithChildren<EditableCellDisplayContainerProps>) => {
+  const { t } = useLingui();
+  return (
+    <StyledOuterContainer
+      className={RECORD_TABLE_CELL_DISPLAY_CLASS_NAME}
+      data-testid={
+        focus ? 'editable-cell-focus-mode' : 'editable-cell-display-mode'
+      }
+      onClick={onClick}
+      ref={scrollRef}
+      onContextMenu={onContextMenu}
+    >
+      {placeholderForEmptyCell ? (
+        <StyledEmptyPlaceholderField>
+          {t`Set ${placeholderForEmptyCell}`}
+        </StyledEmptyPlaceholderField>
+      ) : (
+        <StyledInnerContainer>{children}</StyledInnerContainer>
+      )}
+    </StyledOuterContainer>
+  );
+};

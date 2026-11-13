@@ -1,43 +1,37 @@
-import { downloadFile } from '../downloadFile';
+import { downloadFile } from '@/activities/files/utils/downloadFile';
+import { saveAs } from 'file-saver';
 
-// Mock fetch
-global.fetch = jest.fn(() =>
-  Promise.resolve({
-    status: 200,
-    blob: jest.fn(),
-  } as unknown as Response),
-);
+jest.mock('file-saver', () => ({
+  saveAs: jest.fn(),
+}));
 
-window.URL.createObjectURL = jest.fn(() => 'mock-url');
-window.URL.revokeObjectURL = jest.fn();
+const mockBlob = new Blob(['test content'], { type: 'application/pdf' });
 
-// FIXME: jest is behaving weirdly here, it's not finding the element
-// Also the document's innerHTML is empty
-// `global.fetch` and `window.fetch` are also undefined
-describe.skip('downloadFile', () => {
-  it('should download a file', () => {
-    // Call downloadFile
-    downloadFile('path/to/file.pdf', 'file.pdf');
+global.fetch = jest.fn().mockResolvedValue({
+  status: 200,
+  blob: () => Promise.resolve(mockBlob),
+});
 
-    // Assert on fetch
-    expect(fetch).toHaveBeenCalledWith(
-      process.env.REACT_APP_SERVER_BASE_URL + '/files/path/to/file.pdf',
-    );
-
-    // Assert on element creation
-    const link = document.querySelector(
-      'a[href="mock-url"][download="file.pdf"]',
-    );
-
-    expect(link).not.toBeNull();
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore
-    expect(link?.style?.display).toBe('none');
-
-    // Assert on element click
-    expect(link).toHaveBeenCalledTimes(1);
-
-    // Clean up mocks
+describe('downloadFile', () => {
+  afterEach(() => {
     jest.clearAllMocks();
+  });
+
+  it('should download a file', async () => {
+    await downloadFile('url/to/file.pdf', 'file.pdf');
+
+    expect(fetch).toHaveBeenCalledWith('url/to/file.pdf');
+    expect(saveAs).toHaveBeenCalledWith(mockBlob, 'file.pdf');
+  });
+
+  it('should reject when fetch fails', async () => {
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      status: 404,
+      blob: () => Promise.resolve(mockBlob),
+    });
+
+    await expect(downloadFile('url/to/file.pdf', 'file.pdf')).rejects.toBe(
+      'Failed downloading file',
+    );
   });
 });

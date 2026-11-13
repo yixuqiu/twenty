@@ -1,75 +1,49 @@
 import { Module } from '@nestjs/common';
 
-import {
-  NestjsQueryGraphQLModule,
-  PagingStrategies,
-} from '@ptc-org/nestjs-query-graphql';
-import { NestjsQueryTypeOrmModule } from '@ptc-org/nestjs-query-typeorm';
-import { SortDirection } from '@ptc-org/nestjs-query-core';
+import { ApplicationTranslationCatalogModule } from 'src/engine/metadata-modules/application-translation-catalog/application-translation-catalog.module';
+import { TypeOrmModule } from '@nestjs/typeorm';
 
-import { WorkspaceMigrationRunnerModule } from 'src/engine/workspace-manager/workspace-migration-runner/workspace-migration-runner.module';
-import { WorkspaceMigrationModule } from 'src/engine/metadata-modules/workspace-migration/workspace-migration.module';
-import { ObjectMetadataModule } from 'src/engine/metadata-modules/object-metadata/object-metadata.module';
-import { JwtAuthGuard } from 'src/engine/guards/jwt.auth.guard';
-import { DataSourceModule } from 'src/engine/metadata-modules/data-source/data-source.module';
-import { TypeORMModule } from 'src/database/typeorm/typeorm.module';
-import { IsFieldMetadataDefaultValue } from 'src/engine/metadata-modules/field-metadata/validators/is-field-metadata-default-value.validator';
+import { ApplicationModule } from 'src/engine/core-modules/application/application.module';
+import { TokenModule } from 'src/engine/core-modules/auth/token/token.module';
+import { FeatureFlagModule } from 'src/engine/core-modules/feature-flag/feature-flag.module';
+import { DerivedFieldMetadataIdsModule } from 'src/engine/metadata-modules/derived-field-metadata-ids/derived-field-metadata-ids.module';
+import { FieldMetadataController } from 'src/engine/metadata-modules/field-metadata/controllers/field-metadata.controller';
 import { FieldMetadataResolver } from 'src/engine/metadata-modules/field-metadata/field-metadata.resolver';
-import { FieldMetadataDTO } from 'src/engine/metadata-modules/field-metadata/dtos/field-metadata.dto';
-import { IsFieldMetadataOptions } from 'src/engine/metadata-modules/field-metadata/validators/is-field-metadata-options.validator';
-import { WorkspaceCacheVersionModule } from 'src/engine/metadata-modules/workspace-cache-version/workspace-cache-version.module';
+import { FieldMetadataService } from 'src/engine/metadata-modules/field-metadata/services/field-metadata.service';
+import { WorkspaceManyOrAllFlatEntityMapsCacheModule } from 'src/engine/metadata-modules/flat-entity/services/workspace-many-or-all-flat-entity-maps-cache.module';
+import { FlatFieldMetadataModule } from 'src/engine/metadata-modules/flat-field-metadata/flat-field-metadata.module';
+import { PermissionsModule } from 'src/engine/permissions/permissions.module';
+import { ViewGroupModule } from 'src/engine/metadata-modules/view-group/view-group.module';
+import { ViewModule } from 'src/engine/metadata-modules/view/view.module';
+import { WorkspaceCacheStorageModule } from 'src/engine/workspace-cache-storage/workspace-cache-storage.module';
+import { WorkspaceMigrationModule } from 'src/engine/workspace-manager/workspace-migration/workspace-migration.module';
+import { WorkspaceCacheModule } from 'src/engine/workspace-cache/workspace-cache.module';
+import { provideWorkspaceScopedRepository } from 'src/engine/twenty-orm/workspace-scoped-repository/provide-workspace-scoped-repository';
 
-import { FieldMetadataService } from './field-metadata.service';
 import { FieldMetadataEntity } from './field-metadata.entity';
-
-import { CreateFieldInput } from './dtos/create-field.input';
-import { UpdateFieldInput } from './dtos/update-field.input';
 
 @Module({
   imports: [
-    NestjsQueryGraphQLModule.forFeature({
-      imports: [
-        NestjsQueryTypeOrmModule.forFeature([FieldMetadataEntity], 'metadata'),
-        WorkspaceMigrationModule,
-        WorkspaceMigrationRunnerModule,
-        WorkspaceCacheVersionModule,
-        ObjectMetadataModule,
-        DataSourceModule,
-        TypeORMModule,
-      ],
-      services: [IsFieldMetadataDefaultValue, FieldMetadataService],
-      resolvers: [
-        {
-          EntityClass: FieldMetadataEntity,
-          DTOClass: FieldMetadataDTO,
-          CreateDTOClass: CreateFieldInput,
-          UpdateDTOClass: UpdateFieldInput,
-          ServiceClass: FieldMetadataService,
-          pagingStrategy: PagingStrategies.CURSOR,
-          read: {
-            defaultSort: [{ field: 'id', direction: SortDirection.DESC }],
-          },
-          create: {
-            // Manually created because of the async validation
-            one: { disabled: true },
-            many: { disabled: true },
-          },
-          update: {
-            // Manually created because of the async validation
-            one: { disabled: true },
-            many: { disabled: true },
-          },
-          delete: { disabled: true },
-          guards: [JwtAuthGuard],
-        },
-      ],
-    }),
+    ApplicationTranslationCatalogModule,
+    TypeOrmModule.forFeature([FieldMetadataEntity]),
+    ApplicationModule,
+    TokenModule,
+    WorkspaceCacheStorageModule,
+    FeatureFlagModule,
+    WorkspaceManyOrAllFlatEntityMapsCacheModule,
+    ViewModule,
+    ViewGroupModule,
+    PermissionsModule,
+    WorkspaceMigrationModule,
+    FlatFieldMetadataModule,
+    DerivedFieldMetadataIdsModule,
+    WorkspaceCacheModule,
   ],
+  controllers: [FieldMetadataController],
   providers: [
-    IsFieldMetadataDefaultValue,
-    IsFieldMetadataOptions,
     FieldMetadataService,
     FieldMetadataResolver,
+    provideWorkspaceScopedRepository(FieldMetadataEntity),
   ],
   exports: [FieldMetadataService],
 })

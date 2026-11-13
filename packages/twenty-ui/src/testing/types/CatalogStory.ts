@@ -1,9 +1,9 @@
-import { ElementType } from 'react';
-import { StoryObj } from '@storybook/react';
+import { type StoryObj } from '@storybook/react-vite';
+import { type ElementType } from 'react';
 
 import {
-  CatalogDimension,
-  CatalogOptions,
+  type CatalogDimension,
+  type CatalogOptions,
 } from '../decorators/CatalogDecorator';
 
 export type CatalogStory<
@@ -12,8 +12,10 @@ export type CatalogStory<
 > = {
   args?: StoryType['args'];
   argTypes?: StoryType['argTypes'];
+  globals?: StoryType['globals'];
   play?: StoryType['play'];
   render?: StoryType['render'];
+  tags?: StoryType['tags'];
   parameters: StoryType['parameters'] & {
     catalog: {
       dimensions: CatalogDimension<ComponentType>[];

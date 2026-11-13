@@ -1,15 +1,19 @@
-import { useLazyQuery } from '@apollo/client';
+import { type WatchQueryFetchPolicy } from '@apollo/client';
+import { useLazyQuery } from '@apollo/client/react';
 
-import { useObjectMetadataItem } from '@/object-metadata/hooks/useObjectMetadataItem';
-import { ObjectMetadataItemIdentifier } from '@/object-metadata/types/ObjectMetadataItemIdentifier';
+import { useApolloCoreClient } from '@/object-metadata/hooks/useApolloCoreClient';
+import { type ObjectMetadataItemIdentifier } from '@/object-metadata/types/ObjectMetadataItemIdentifier';
 import { getRecordFromRecordNode } from '@/object-record/cache/utils/getRecordFromRecordNode';
-import { RecordGqlOperationGqlRecordFields } from '@/object-record/graphql/types/RecordGqlOperationGqlRecordFields';
-import { generateDepthOneRecordGqlFields } from '@/object-record/graphql/utils/generateDepthOneRecordGqlFields';
+import { useGenerateDepthRecordGqlFieldsFromObject } from '@/object-record/graphql/record-gql-fields/hooks/useGenerateDepthRecordGqlFieldsFromObject';
+import { type RecordGqlNode } from '@/object-record/graphql/types/RecordGqlNode';
+import { type RecordGqlFields } from 'twenty-shared/types';
 import { useFindOneRecordQuery } from '@/object-record/hooks/useFindOneRecordQuery';
-import { ObjectRecord } from '@/object-record/types/ObjectRecord';
+import { type ObjectRecord } from '@/object-record/types/ObjectRecord';
 
 type UseLazyFindOneRecordParams = ObjectMetadataItemIdentifier & {
-  recordGqlFields?: RecordGqlOperationGqlRecordFields;
+  recordGqlFields?: RecordGqlFields;
+  withSoftDeleted?: boolean;
+  fetchPolicy?: WatchQueryFetchPolicy;
 };
 
 type FindOneRecordParams<T extends ObjectRecord> = {
@@ -20,35 +24,54 @@ type FindOneRecordParams<T extends ObjectRecord> = {
 export const useLazyFindOneRecord = <T extends ObjectRecord = ObjectRecord>({
   objectNameSingular,
   recordGqlFields,
+  withSoftDeleted = false,
+  fetchPolicy = 'cache-first',
 }: UseLazyFindOneRecordParams) => {
-  const { objectMetadataItem } = useObjectMetadataItem({
-    objectNameSingular,
-  });
+  const apolloCoreClient = useApolloCoreClient();
+
+  const { recordGqlFields: depthOneRecordGqlFields } =
+    useGenerateDepthRecordGqlFieldsFromObject({
+      objectNameSingular,
+      depth: 1,
+    });
 
   const { findOneRecordQuery } = useFindOneRecordQuery({
     objectNameSingular,
-    recordGqlFields:
-      recordGqlFields ??
-      generateDepthOneRecordGqlFields({ objectMetadataItem }),
+    recordGqlFields: recordGqlFields ?? depthOneRecordGqlFields,
+    withSoftDeleted,
   });
 
-  const [findOneRecord, { loading, error, data, called }] =
-    useLazyQuery(findOneRecordQuery);
+  const [findOneRecord, { loading, error, data, called }] = useLazyQuery(
+    findOneRecordQuery,
+    {
+      client: apolloCoreClient,
+      fetchPolicy,
+    },
+  );
 
   return {
-    findOneRecord: ({ objectRecordId, onCompleted }: FindOneRecordParams<T>) =>
-      findOneRecord({
+    findOneRecord: async ({
+      objectRecordId,
+      onCompleted,
+    }: FindOneRecordParams<T>) => {
+      const result = await findOneRecord({
         variables: { objectRecordId },
-        onCompleted: (data) => {
-          const record = getRecordFromRecordNode<T>({
-            recordNode: data[objectNameSingular],
-          });
-          onCompleted?.(record);
-        },
-      }),
+      }).retain();
+      if (result.data) {
+        const record = getRecordFromRecordNode<T>({
+          recordNode: (result.data as Record<string, RecordGqlNode>)[
+            objectNameSingular
+          ],
+        });
+        onCompleted?.(record);
+      }
+    },
     called,
     error,
     loading,
-    record: data?.[objectNameSingular] || undefined,
+    record:
+      (data as Record<string, RecordGqlNode> | undefined)?.[
+        objectNameSingular
+      ] || undefined,
   };
 };

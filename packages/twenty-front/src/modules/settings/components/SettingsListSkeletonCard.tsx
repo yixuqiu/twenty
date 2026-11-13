@@ -1,10 +1,14 @@
-import styled from '@emotion/styled';
+import { styled } from '@linaria/react';
+import { Card } from 'twenty-ui/primitives/surfaces';
+import { themeCssVariables } from 'twenty-ui/theme';
 
-import { Card } from '@/ui/layout/card/components/Card';
-
-const StyledCard = styled(Card)`
-  background-color: ${({ theme }) => theme.background.secondary};
+const StyledSkeletonCard = styled.div`
   height: 40px;
 `;
 
-export { StyledCard as SettingsListSkeletonCard };
+export const SettingsListSkeletonCard = () => (
+  <Card.Root
+    backgroundColor={themeCssVariables.background.secondary}
+    render={<StyledSkeletonCard />}
+  />
+);

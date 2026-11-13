@@ -1,63 +1,131 @@
-import { useTheme } from '@emotion/react';
-import styled from '@emotion/styled';
-import { IconComponent, IconX } from 'twenty-ui';
+import { styled } from '@linaria/react';
+import { type ReactNode } from 'react';
+import { type IconComponent, IconX } from 'twenty-ui/icon';
+import { useTheme, themeCssVariables } from 'twenty-ui/theme';
+import { isDefined } from 'twenty-shared/utils';
 
-const StyledChip = styled.div`
+const StyledChip = styled.div<{ variant: SortOrFilterChipVariant }>`
   align-items: center;
-  background-color: ${({ theme }) => theme.accent.quaternary};
-  border: 1px solid ${({ theme }) => theme.accent.tertiary};
-  border-radius: 4px;
-  color: ${({ theme }) => theme.color.blue};
+  background-color: ${({ variant }) => {
+    switch (variant) {
+      case 'danger':
+        return themeCssVariables.background.danger;
+      case 'default':
+      default:
+        return themeCssVariables.accent.quaternary;
+    }
+  }};
+  border: 1px solid
+    ${({ variant }) => {
+      switch (variant) {
+        case 'danger':
+          return themeCssVariables.border.color.danger;
+        case 'default':
+        default:
+          return themeCssVariables.accent.tertiary;
+      }
+    }};
+  border-radius: ${themeCssVariables.border.radius.smRound};
+  box-sizing: border-box;
+  color: ${({ variant }) => {
+    switch (variant) {
+      case 'danger':
+        return themeCssVariables.color.red;
+      case 'default':
+      default:
+        return themeCssVariables.color.blue;
+    }
+  }};
+  column-gap: ${themeCssVariables.spacing[1]};
+  corner-shape: round;
   cursor: pointer;
   display: flex;
   flex-direction: row;
   flex-shrink: 0;
-  font-size: ${({ theme }) => theme.font.size.sm};
-  font-weight: ${({ theme }) => theme.font.weight.medium};
-  padding: ${({ theme }) => theme.spacing(1) + ' ' + theme.spacing(2)};
+  font-size: ${themeCssVariables.font.size.sm};
+  font-weight: ${themeCssVariables.font.weight.medium};
+  height: 24px;
+  padding: ${themeCssVariables.spacing[0.5]};
+  padding-left: ${themeCssVariables.spacing[1]};
   user-select: none;
+  white-space: nowrap;
 `;
 
 const StyledIcon = styled.div`
   align-items: center;
   display: flex;
-  margin-right: ${({ theme }) => theme.spacing(1)};
 `;
 
-const StyledDelete = styled.div`
+const StyledDelete = styled.button`
   align-items: center;
+  background: none;
+  border: none;
+  box-sizing: border-box;
+  color: inherit;
+  corner-shape: round;
   cursor: pointer;
   display: flex;
-  font-size: ${({ theme }) => theme.font.size.sm};
-  margin-left: ${({ theme }) => theme.spacing(2)};
-  margin-top: 1px;
+  font-size: ${themeCssVariables.font.size.sm};
+  height: 20px;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
   user-select: none;
-  &:hover {
-    background-color: ${({ theme }) => theme.accent.secondary};
-    border-radius: ${({ theme }) => theme.border.radius.sm};
-  }
+  width: 20px;
 `;
 
 const StyledLabelKey = styled.div`
-  font-weight: ${({ theme }) => theme.font.weight.medium};
+  font-weight: ${themeCssVariables.font.weight.medium};
 `;
+
+const StyledFilterValue = styled.span`
+  font-weight: ${themeCssVariables.font.weight.regular};
+`;
+
+const StyledSortValue = styled.span`
+  font-weight: ${themeCssVariables.font.weight.medium};
+`;
+
+const StyledSubFieldSeparator = styled.span`
+  font-weight: ${themeCssVariables.font.weight.regular};
+  opacity: 0.6;
+  padding: 0 ${themeCssVariables.spacing[1]};
+`;
+
+const StyledSubFieldValue = styled.span`
+  font-weight: ${themeCssVariables.font.weight.regular};
+`;
+
+const StyledKeyLabelContainer = styled.div`
+  display: flex;
+`;
+
+export type SortOrFilterChipVariant = 'default' | 'danger';
+
+export type SortOrFilterChipType = 'sort' | 'filter';
 
 type SortOrFilterChipProps = {
   labelKey?: string;
   labelValue: string;
+  labelSubField?: ReactNode;
+  variant?: SortOrFilterChipVariant;
   Icon?: IconComponent;
   onRemove: () => void;
   onClick?: () => void;
   testId?: string;
+  type: SortOrFilterChipType;
 };
 
 export const SortOrFilterChip = ({
   labelKey,
   labelValue,
+  labelSubField,
+  variant = 'default',
   Icon,
   onRemove,
   testId,
   onClick,
+  type,
 }: SortOrFilterChipProps) => {
   const theme = useTheme();
 
@@ -67,14 +135,26 @@ export const SortOrFilterChip = ({
   };
 
   return (
-    <StyledChip onClick={onClick}>
+    <StyledChip onClick={onClick} variant={variant}>
       {Icon && (
         <StyledIcon>
           <Icon size={theme.icon.size.sm} />
         </StyledIcon>
       )}
-      {labelKey && <StyledLabelKey>{labelKey}</StyledLabelKey>}
-      {labelValue}
+      <StyledKeyLabelContainer>
+        {labelKey && <StyledLabelKey>{labelKey}</StyledLabelKey>}
+        {type === 'sort' ? (
+          <StyledSortValue>{labelValue}</StyledSortValue>
+        ) : (
+          <StyledFilterValue>{labelValue}</StyledFilterValue>
+        )}
+        {isDefined(labelSubField) && (
+          <>
+            <StyledSubFieldSeparator>·</StyledSubFieldSeparator>
+            <StyledSubFieldValue>{labelSubField}</StyledSubFieldValue>
+          </>
+        )}
+      </StyledKeyLabelContainer>
       <StyledDelete
         onClick={handleDeleteClick}
         data-testid={'remove-icon-' + testId}

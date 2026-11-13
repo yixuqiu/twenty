@@ -1,37 +1,61 @@
-import { FieldMetadataItem } from '@/object-metadata/types/FieldMetadataItem';
+import { type FieldMetadataItem } from '@/object-metadata/types/FieldMetadataItem';
+import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/EnrichedObjectMetadataItem';
+import { isHiddenSystemField } from '@/object-metadata/utils/isHiddenSystemField';
 import { isObjectMetadataAvailableForRelation } from '@/object-metadata/utils/isObjectMetadataAvailableForRelation';
-import {
-  FieldMetadataType,
-  RelationMetadataType,
-} from '~/generated-metadata/graphql';
+import { isUsableJunctionConfig } from '@/object-record/record-field/ui/utils/junction/isUsableJunctionConfig';
+import { resolveJunctionConfig } from '@/object-record/record-field/ui/utils/junction/resolveJunctionConfig';
+import { isDefined } from 'twenty-shared/utils';
+import { FieldMetadataType } from '~/generated-metadata/graphql';
 
-export const isFieldCellSupported = (fieldMetadataItem: FieldMetadataItem) => {
-  if (
-    [FieldMetadataType.Uuid, FieldMetadataType.Position].includes(
-      fieldMetadataItem.type,
-    )
-  ) {
+type IsFieldCellSupportedOptions = {
+  includeSystemObjectRelations?: boolean;
+};
+
+export const isFieldCellSupported = (
+  fieldMetadataItem: FieldMetadataItem,
+  objectMetadataItems: EnrichedObjectMetadataItem[],
+  options: IsFieldCellSupportedOptions = {},
+) => {
+  if (fieldMetadataItem.type === FieldMetadataType.POSITION) {
     return false;
   }
 
-  if (fieldMetadataItem.type === FieldMetadataType.Relation) {
-    const relationMetadata =
-      fieldMetadataItem.fromRelationMetadata ??
-      fieldMetadataItem.toRelationMetadata;
-    const relationObjectMetadataItem =
-      fieldMetadataItem.fromRelationMetadata?.toObjectMetadata ??
-      fieldMetadataItem.toRelationMetadata?.fromObjectMetadata;
+  if (fieldMetadataItem.type === FieldMetadataType.RELATION) {
+    const relationObjectMetadataItemId =
+      fieldMetadataItem.relation?.targetObjectMetadata.id;
+
+    const relationObjectMetadataItem = objectMetadataItems.find(
+      (item) => item.id === relationObjectMetadataItemId,
+    );
+
+    // Junction objects are system objects by design, so their relation stays cell-supported.
+    const junctionConfig = resolveJunctionConfig({
+      settings: fieldMetadataItem.settings,
+      relationObjectMetadataId: relationObjectMetadataItemId ?? '',
+      relationTargetFieldMetadataId:
+        fieldMetadataItem.relation?.targetFieldMetadata.id,
+      sourceObjectMetadataId:
+        fieldMetadataItem.relation?.sourceObjectMetadata.id,
+      objectMetadataItems,
+    });
+
+    if (isDefined(junctionConfig)) {
+      return isUsableJunctionConfig(junctionConfig);
+    }
+
+    if (!fieldMetadataItem.relation || !relationObjectMetadataItem) {
+      return false;
+    }
 
     if (
-      !relationMetadata ||
-      // TODO: Many to many relations are not supported yet.
-      relationMetadata.relationType === RelationMetadataType.ManyToMany ||
-      !relationObjectMetadataItem ||
+      !options.includeSystemObjectRelations &&
       !isObjectMetadataAvailableForRelation(relationObjectMetadataItem)
     ) {
       return false;
     }
   }
 
-  return !fieldMetadataItem.isSystem && !!fieldMetadataItem.isActive;
+  return (
+    !isHiddenSystemField(fieldMetadataItem) && !!fieldMetadataItem.isActive
+  );
 };

@@ -1,36 +1,96 @@
-import { ApolloClient, useMutation } from '@apollo/client';
-import { getOperationName } from '@apollo/client/utilities';
+import { useMutation } from '@apollo/client/react';
+import { DeleteOneFieldMetadataItemDocument } from '~/generated-metadata/graphql';
 
-import {
-  DeleteOneFieldMetadataItemMutation,
-  DeleteOneFieldMetadataItemMutationVariables,
-} from '~/generated-metadata/graphql';
-
-import { DELETE_ONE_FIELD_METADATA_ITEM } from '../graphql/mutations';
-import { FIND_MANY_OBJECT_METADATA_ITEMS } from '../graphql/queries';
-
-import { useApolloMetadataClient } from './useApolloMetadataClient';
+import { MAIN_CONTEXT_STORE_INSTANCE_ID } from '@/context-store/constants/MainContextStoreInstanceId';
+import { useMetadataErrorHandler } from '@/metadata-error-handler/hooks/useMetadataErrorHandler';
+import { useUpdateMetadataStoreDraft } from '@/metadata-store/hooks/useUpdateMetadataStoreDraft';
+import { type MetadataRequestResult } from '@/object-metadata/types/MetadataRequestResult';
+import { recordIndexGroupAggregateFieldMetadataItemComponentState } from '@/object-record/record-index/states/recordIndexGroupAggregateFieldMetadataItemComponentState';
+import { recordIndexGroupAggregateOperationComponentState } from '@/object-record/record-index/states/recordIndexGroupAggregateOperationComponentState';
+import { AggregateOperations } from '@/object-record/record-table/constants/AggregateOperations';
+import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
+import { useSetAtomComponentState } from '@/ui/utilities/state/jotai/hooks/useSetAtomComponentState';
+import { CombinedGraphQLErrors } from '@apollo/client/errors';
+import { CrudOperationType } from 'twenty-shared/types';
+import { useToast } from 'twenty-ui/components/feedback';
+import { useLingui } from '@lingui/react/macro';
 
 export const useDeleteOneFieldMetadataItem = () => {
-  const apolloMetadataClient = useApolloMetadataClient();
+  const { t } = useLingui();
+  const [deleteOneFieldMetadataItemMutation] = useMutation(
+    DeleteOneFieldMetadataItemDocument,
+  );
 
-  const [mutate] = useMutation<
-    DeleteOneFieldMetadataItemMutation,
-    DeleteOneFieldMetadataItemMutationVariables
-  >(DELETE_ONE_FIELD_METADATA_ITEM, {
-    client: apolloMetadataClient ?? ({} as ApolloClient<any>),
-  });
+  const { handleMetadataError } = useMetadataErrorHandler();
+  const { enqueueToast } = useToast();
+  const { removeFromDraft, applyChanges } = useUpdateMetadataStoreDraft();
 
-  const deleteOneFieldMetadataItem = async (
-    idToDelete: DeleteOneFieldMetadataItemMutationVariables['idToDelete'],
+  const setRecordIndexGroupAggregateOperation = useSetAtomComponentState(
+    recordIndexGroupAggregateOperationComponentState,
+    MAIN_CONTEXT_STORE_INSTANCE_ID,
+  );
+
+  const recordIndexGroupAggregateFieldMetadataItem = useAtomComponentStateValue(
+    recordIndexGroupAggregateFieldMetadataItemComponentState,
+    MAIN_CONTEXT_STORE_INSTANCE_ID,
+  );
+
+  const setRecordIndexGroupAggregateFieldMetadataItem =
+    useSetAtomComponentState(
+      recordIndexGroupAggregateFieldMetadataItemComponentState,
+      MAIN_CONTEXT_STORE_INSTANCE_ID,
+    );
+
+  const resetRecordIndexKanbanAggregateOperation = async (
+    idToDelete: string,
   ) => {
-    return await mutate({
-      variables: {
-        idToDelete,
-      },
-      awaitRefetchQueries: true,
-      refetchQueries: [getOperationName(FIND_MANY_OBJECT_METADATA_ITEMS) ?? ''],
-    });
+    if (recordIndexGroupAggregateFieldMetadataItem?.id === idToDelete) {
+      setRecordIndexGroupAggregateOperation(AggregateOperations.COUNT);
+      setRecordIndexGroupAggregateFieldMetadataItem(null);
+    }
+  };
+
+  const deleteOneFieldMetadataItem = async ({
+    idToDelete,
+  }: {
+    idToDelete: string;
+  }): Promise<
+    MetadataRequestResult<
+      Awaited<ReturnType<typeof deleteOneFieldMetadataItemMutation>>
+    >
+  > => {
+    try {
+      const response = await deleteOneFieldMetadataItemMutation({
+        variables: {
+          idToDelete,
+        },
+      });
+
+      removeFromDraft({ key: 'fieldMetadataItems', itemIds: [idToDelete] });
+      applyChanges();
+
+      // TODO: see if we can remove this line altogether
+      await resetRecordIndexKanbanAggregateOperation(idToDelete);
+
+      return {
+        status: 'successful',
+        response,
+      };
+    } catch (error) {
+      if (CombinedGraphQLErrors.is(error)) {
+        handleMetadataError(error, {
+          primaryMetadataName: 'fieldMetadata',
+          operationType: CrudOperationType.DELETE,
+        });
+      } else {
+        enqueueToast({ status: 'error', children: t`An error occurred.` });
+      }
+
+      return {
+        status: 'failed',
+        error,
+      };
+    }
   };
 
   return {

@@ -1,66 +1,71 @@
-import { MouseEventHandler, useMemo } from 'react';
-import styled from '@emotion/styled';
+import { useLingui } from '@lingui/react/macro';
+import React, { useMemo } from 'react';
 
-import { FieldLinksValue } from '@/object-record/record-field/types/FieldMetadata';
-import { EllipsisDisplay } from '@/ui/field/display/components/EllipsisDisplay';
-import { RoundedLink } from '@/ui/navigation/link/components/RoundedLink';
+import { getFieldLinkDefinedLinks } from '@/object-record/record-field/ui/meta-types/input/utils/getFieldLinkDefinedLinks';
+import { type FieldLinksValue } from '@/object-record/record-field/ui/types/FieldMetadata';
+import { SocialLink } from '@/ui/field/display/components/SocialLink/SocialLink';
+import { OverflowingList } from 'twenty-ui/components/layout';
 import {
-  LinkType,
-  SocialLink,
-} from '@/ui/navigation/link/components/SocialLink';
-import { checkUrlType } from '~/utils/checkUrlType';
-import { isDefined } from '~/utils/isDefined';
-import { getAbsoluteUrl } from '~/utils/url/getAbsoluteUrl';
-import { getUrlHostName } from '~/utils/url/getUrlHostName';
-
-const StyledContainer = styled(EllipsisDisplay)`
-  display: flex;
-  gap: ${({ theme }) => theme.spacing(1)};
-`;
+  getAbsoluteUrlOrThrow,
+  getUrlHostnameOrThrow,
+  isDefined,
+} from 'twenty-shared/utils';
+import { RoundedLink } from '@/ui/navigation/link/components/RoundedLink/RoundedLink';
+import { checkUrlType } from '@/ui/field/display/utils/checkUrlType';
+import { isSocialLinkType } from '@/ui/field/display/utils/isSocialLinkType';
 
 type LinksDisplayProps = {
   value?: FieldLinksValue;
+  onLinkClick?: (url: string, event: React.MouseEvent<HTMLElement>) => void;
 };
 
-export const LinksDisplay = ({ value }: LinksDisplayProps) => {
-  const links = useMemo(
-    () =>
-      [
-        value?.primaryLinkUrl
-          ? {
-              url: value.primaryLinkUrl,
-              label: value.primaryLinkLabel,
-            }
-          : null,
-        ...(value?.secondaryLinks ?? []),
-      ]
-        .filter(isDefined)
-        .map(({ url, label }) => {
-          const absoluteUrl = getAbsoluteUrl(url);
-          return {
-            url: absoluteUrl,
-            label: label || getUrlHostName(absoluteUrl),
-            type: checkUrlType(absoluteUrl),
-          };
-        }),
-    [value?.primaryLinkLabel, value?.primaryLinkUrl, value?.secondaryLinks],
-  );
+export const LinksDisplay = ({ value, onLinkClick }: LinksDisplayProps) => {
+  const { t } = useLingui();
 
-  const handleClick: MouseEventHandler = (event) => event.stopPropagation();
+  const links = useMemo(() => {
+    if (!isDefined(value)) {
+      return [];
+    }
+
+    return getFieldLinkDefinedLinks(value).map(({ url, label }) => {
+      let absoluteUrl = '';
+      let hostname = '';
+      try {
+        absoluteUrl = getAbsoluteUrlOrThrow(url);
+        hostname = getUrlHostnameOrThrow(absoluteUrl);
+      } catch {
+        absoluteUrl = '';
+        hostname = '';
+      }
+      return {
+        url: absoluteUrl,
+        label,
+        displayLabel: label || hostname,
+        type: checkUrlType(absoluteUrl),
+      };
+    });
+  }, [value]);
 
   return (
-    <StyledContainer>
-      {links.map(({ url, label, type }, index) =>
-        type === LinkType.LinkedIn || type === LinkType.Twitter ? (
-          <SocialLink key={index} href={url} onClick={handleClick} type={type}>
-            {label}
-          </SocialLink>
+    <OverflowingList overflowLabel={t`Show all items`}>
+      {links.map(({ url, label, displayLabel, type }, index) =>
+        isSocialLinkType(type) ? (
+          <SocialLink
+            key={index}
+            href={url}
+            type={type}
+            label={label}
+            onClick={(event) => onLinkClick?.(url, event)}
+          />
         ) : (
-          <RoundedLink key={index} href={url} onClick={handleClick}>
-            {label}
-          </RoundedLink>
+          <RoundedLink
+            key={index}
+            href={url}
+            label={displayLabel}
+            onClick={(event) => onLinkClick?.(url, event)}
+          />
         ),
       )}
-    </StyledContainer>
+    </OverflowingList>
   );
 };

@@ -1,8 +1,9 @@
-import { ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
-import { getEdgeTypename } from '@/object-record/cache/utils/getEdgeTypename';
+import { type RecordGqlFields } from 'twenty-shared/types';
+import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/EnrichedObjectMetadataItem';
+import { getEdgeTypename } from 'twenty-shared/utils';
 import { getRecordNodeFromRecord } from '@/object-record/cache/utils/getRecordNodeFromRecord';
-import { RecordGqlEdge } from '@/object-record/graphql/types/RecordGqlEdge';
-import { ObjectRecord } from '@/object-record/types/ObjectRecord';
+import { type RecordGqlEdge } from '@/object-record/graphql/types/RecordGqlEdge';
+import { type ObjectRecord } from '@/object-record/types/ObjectRecord';
 
 export const getRecordEdgeFromRecord = <T extends ObjectRecord>({
   objectMetadataItems,
@@ -12,12 +13,12 @@ export const getRecordEdgeFromRecord = <T extends ObjectRecord>({
   computeReferences = false,
   isRootLevel = false,
 }: {
-  objectMetadataItems: ObjectMetadataItem[];
+  objectMetadataItems: EnrichedObjectMetadataItem[];
   objectMetadataItem: Pick<
-    ObjectMetadataItem,
+    EnrichedObjectMetadataItem,
     'fields' | 'namePlural' | 'nameSingular'
   >;
-  recordGqlFields?: Record<string, any>;
+  recordGqlFields?: RecordGqlFields;
   computeReferences?: boolean;
   isRootLevel?: boolean;
   record: T;

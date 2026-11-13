@@ -1,48 +1,74 @@
-import { useCallback, useMemo, useState } from 'react';
-// @ts-expect-error Todo: remove usage of react-data-grid
-import { RowsChangeData } from 'react-data-grid';
-import styled from '@emotion/styled';
-import { IconTrash } from 'twenty-ui';
-
-import { ContinueButton } from '@/spreadsheet-import/components/ContinueButton';
-import { Heading } from '@/spreadsheet-import/components/Heading';
-import { Table } from '@/spreadsheet-import/components/Table';
+import { SpreadsheetImportStepBody } from '@/spreadsheet-import/components/SpreadsheetImportStepBody';
+import { SpreadsheetImportTable } from '@/spreadsheet-import/components/SpreadsheetImportTable';
+import { StepNavigationButton } from '@/spreadsheet-import/components/StepNavigationButton';
+import { useHideStepBar } from '@/spreadsheet-import/hooks/useHideStepBar';
 import { useSpreadsheetImportInternal } from '@/spreadsheet-import/hooks/useSpreadsheetImportInternal';
-import { Data } from '@/spreadsheet-import/types';
+import { spreadsheetImportCreatedRecordsProgressState } from '@/spreadsheet-import/states/spreadsheetImportCreatedRecordsProgressState';
+import { spreadsheetImportDialogState } from '@/spreadsheet-import/states/spreadsheetImportDialogState';
+import { type SpreadsheetImportStep } from '@/spreadsheet-import/steps/types/SpreadsheetImportStep';
+import { SpreadsheetImportStepType } from '@/spreadsheet-import/steps/types/SpreadsheetImportStepType';
+import {
+  type ImportedStructuredRow,
+  type SpreadsheetImportImportValidationResult,
+} from '@/spreadsheet-import/types';
+import { type SpreadsheetColumns } from '@/spreadsheet-import/types/SpreadsheetColumns';
+import { SpreadsheetColumnType } from '@/spreadsheet-import/types/SpreadsheetColumnType';
 import { addErrorsAndRunHooks } from '@/spreadsheet-import/utils/dataMutations';
 import { useDialogManager } from '@/ui/feedback/dialog-manager/hooks/useDialogManager';
-import { Button } from '@/ui/input/button/components/Button';
-import { Toggle } from '@/ui/input/components/Toggle';
-import { Modal } from '@/ui/layout/modal/components/Modal';
-import { isDefined } from '~/utils/isDefined';
-
+import { styled } from '@linaria/react';
+import { useStore } from 'jotai';
+import { Trans, useLingui } from '@lingui/react/macro';
+import {
+  type Dispatch,
+  type SetStateAction,
+  useCallback,
+  useMemo,
+  useState,
+} from 'react';
+import { themeCssVariables } from 'twenty-ui/theme';
+import { type RowsChangeData } from 'react-data-grid';
+import { isDefined } from 'twenty-shared/utils';
+import { IconTrash } from 'twenty-ui/icon';
+import { Button, Switch } from 'twenty-ui/primitives/input';
 import { generateColumns } from './components/columns';
-import { Meta } from './types';
+import { type ImportedStructuredRowMetadata } from './types';
 
-const StyledContent = styled(Modal.Content)`
-  padding-left: ${({ theme }) => theme.spacing(6)};
-  padding-right: ${({ theme }) => theme.spacing(6)};
+const StyledContentWrapper = styled.div`
+  display: flex;
+  flex: 1 1 0%;
+  flex-direction: column;
+  position: relative;
 `;
 
 const StyledToolbar = styled.div`
+  align-items: center;
+  background-color: ${themeCssVariables.background.secondary};
+  border: 1px solid ${themeCssVariables.border.color.medium};
+  border-radius: ${themeCssVariables.border.radius.md};
+  bottom: ${themeCssVariables.spacing[3]};
+  box-shadow: ${themeCssVariables.boxShadow.strong};
   display: flex;
   flex-direction: row;
   justify-content: space-between;
-  margin-bottom: ${({ theme }) => theme.spacing(4)};
-  margin-top: ${({ theme }) => theme.spacing(8)};
+  left: 50%;
+  padding: ${themeCssVariables.spacing[3]};
+  position: absolute;
+  transform: translateX(-50%);
+  width: 400px;
+  z-index: 1;
 `;
 
-const StyledErrorToggle = styled.div`
+const StyledErrorSwitch = styled.div`
   align-items: center;
   display: flex;
   flex-direction: row;
 `;
 
-const StyledErrorToggleDescription = styled.span`
-  color: ${({ theme }) => theme.font.color.primary};
-  font-size: ${({ theme }) => theme.font.size.sm};
-  font-weight: ${({ theme }) => theme.font.weight.regular};
-  margin-left: ${({ theme }) => theme.spacing(2)};
+const StyledErrorSwitchDescription = styled.span`
+  color: ${themeCssVariables.font.color.secondary};
+  font-size: ${themeCssVariables.font.size.md};
+  font-weight: ${themeCssVariables.font.weight.regular};
+  margin-left: ${themeCssVariables.spacing[2]};
 `;
 
 const StyledScrollContainer = styled.div`
@@ -50,6 +76,7 @@ const StyledScrollContainer = styled.div`
   flex-direction: column;
   flex-grow: 1;
   height: 0px;
+  overflow: auto;
   width: 100%;
 `;
 
@@ -57,39 +84,59 @@ const StyledNoRowsContainer = styled.div`
   display: flex;
   grid-column: 1/-1;
   justify-content: center;
-  margin-top: ${({ theme }) => theme.spacing(8)};
+  margin-top: ${themeCssVariables.spacing[8]};
 `;
 
-type ValidationStepProps<T extends string> = {
-  initialData: Data<T>[];
+const StyledNoRowsWithErrorsContainer = styled.div`
+  color: ${themeCssVariables.font.color.tertiary};
+  display: flex;
+  justify-content: center;
+  margin: auto 0;
+`;
+
+type ValidationStepProps = {
+  initialData: ImportedStructuredRow[];
+  importedColumns: SpreadsheetColumns;
   file: File;
-  onSubmitStart?: () => void;
+  onBack: () => void;
+  setCurrentStepState: Dispatch<SetStateAction<SpreadsheetImportStep>>;
 };
 
-export const ValidationStep = <T extends string>({
+export const ValidationStep = ({
   initialData,
+  importedColumns,
   file,
-  onSubmitStart,
-}: ValidationStepProps<T>) => {
+  setCurrentStepState,
+  onBack,
+}: ValidationStepProps) => {
+  const store = useStore();
+  const hideStepBar = useHideStepBar();
   const { enqueueDialog } = useDialogManager();
-  const { fields, onClose, onSubmit, rowHook, tableHook } =
-    useSpreadsheetImportInternal<T>();
+  const {
+    spreadsheetImportFields: fields,
+    onClose,
+    onSubmit,
+    rowHook,
+    tableHook,
+  } = useSpreadsheetImportInternal();
 
-  const [data, setData] = useState<(Data<T> & Meta)[]>(
+  const [data, setData] = useState<
+    (ImportedStructuredRow & ImportedStructuredRowMetadata)[]
+  >(
     useMemo(
-      () => addErrorsAndRunHooks<T>(initialData, fields, rowHook, tableHook),
-      // eslint-disable-next-line react-hooks/exhaustive-deps
+      () => addErrorsAndRunHooks(initialData, fields, rowHook, tableHook),
+      // oxlint-disable-next-line react-hooks/exhaustive-deps
       [],
     ),
   );
-  const [selectedRows, setSelectedRows] = useState<
-    ReadonlySet<number | string>
-  >(new Set());
+  const [selectedRows, setSelectedRows] = useState<ReadonlySet<string>>(
+    new Set(),
+  );
   const [filterByErrors, setFilterByErrors] = useState(false);
 
   const updateData = useCallback(
     (rows: typeof data) => {
-      setData(addErrorsAndRunHooks<T>(rows, fields, rowHook, tableHook));
+      setData(addErrorsAndRunHooks(rows, fields, rowHook, tableHook));
     },
     [setData, rowHook, tableHook, fields],
   );
@@ -101,6 +148,8 @@ export const ValidationStep = <T extends string>({
       setSelectedRows(new Set());
     }
   };
+
+  const { t } = useLingui();
 
   const updateRow = useCallback(
     (
@@ -125,15 +174,43 @@ export const ValidationStep = <T extends string>({
     [data, updateData],
   );
 
-  const columns = useMemo(() => generateColumns(fields), [fields]);
+  const columns = useMemo(
+    () =>
+      generateColumns(fields)
+        .map((column) => {
+          const hasBeenImported =
+            importedColumns.filter(
+              (importColumn) =>
+                (importColumn.type === SpreadsheetColumnType.matched &&
+                  importColumn.value === column.key) ||
+                (importColumn.type === SpreadsheetColumnType.matchedSelect &&
+                  importColumn.value === column.key) ||
+                (importColumn.type ===
+                  SpreadsheetColumnType.matchedSelectOptions &&
+                  importColumn.value === column.key) ||
+                (importColumn.type === SpreadsheetColumnType.matchedCheckbox &&
+                  importColumn.value === column.key) ||
+                column.key === 'select-row',
+            ).length > 0;
+
+          if (!hasBeenImported) {
+            return null;
+          }
+          return column;
+        })
+        .filter(isDefined),
+    [fields, importedColumns],
+  );
 
   const tableData = useMemo(() => {
     if (filterByErrors) {
       return data.filter((value) => {
         if (isDefined(value?.__errors)) {
-          return Object.values(value.__errors)?.filter(
-            (err) => err.level === 'error',
-          ).length;
+          return (
+            (Object.values(value.__errors)?.filter(
+              (err) => err.level === 'error',
+            ).length ?? 0) > 0
+          );
         }
         return false;
       });
@@ -141,7 +218,10 @@ export const ValidationStep = <T extends string>({
     return data;
   }, [data, filterByErrors]);
 
-  const rowKeyGetter = useCallback((row: Data<T> & Meta) => row.__index, []);
+  const rowKeyGetter = useCallback(
+    (row: ImportedStructuredRow & ImportedStructuredRowMetadata) => row.__index,
+    [],
+  );
 
   const submitData = async () => {
     const calculatedData = data.reduce(
@@ -150,19 +230,61 @@ export const ValidationStep = <T extends string>({
         if (isDefined(__errors)) {
           for (const key in __errors) {
             if (__errors[key].level === 'error') {
-              acc.invalidData.push(values as unknown as Data<T>);
+              acc.invalidStructuredRows.push(
+                values as unknown as ImportedStructuredRow,
+              );
               return acc;
             }
           }
         }
-        acc.validData.push(values as unknown as Data<T>);
+        acc.validStructuredRows.push(
+          values as unknown as ImportedStructuredRow,
+        );
         return acc;
       },
-      { validData: [] as Data<T>[], invalidData: [] as Data<T>[], all: data },
+      {
+        validStructuredRows: [] as ImportedStructuredRow[],
+        invalidStructuredRows: [] as ImportedStructuredRow[],
+        allStructuredRows: data,
+      } satisfies SpreadsheetImportImportValidationResult,
     );
-    onSubmitStart?.();
-    await onSubmit(calculatedData, file);
-    onClose();
+
+    setCurrentStepState({
+      type: SpreadsheetImportStepType.importData,
+      recordsToImportCount: calculatedData.validStructuredRows.length,
+    });
+    hideStepBar();
+
+    try {
+      await onSubmit(calculatedData, file);
+      onClose();
+    } catch {
+      const importedRecordsCount = store.get(
+        spreadsheetImportCreatedRecordsProgressState.atom,
+      );
+      const importedRows = new Set(
+        data
+          .filter(
+            (row) =>
+              !Object.values(row.__errors ?? {}).some(
+                (rowError) => rowError.level === 'error',
+              ),
+          )
+          .slice(0, importedRecordsCount),
+      );
+      const remainingRows = data.filter((row) => !importedRows.has(row));
+
+      updateData(remainingRows);
+      setCurrentStepState({
+        type: SpreadsheetImportStepType.validateData,
+        data: remainingRows,
+        importedColumns,
+      });
+      store.set(spreadsheetImportDialogState.atom, (state) => ({
+        ...state,
+        isStepBarVisible: true,
+      }));
+    }
   };
   const onContinue = () => {
     const invalidData = data.find((value) => {
@@ -177,14 +299,13 @@ export const ValidationStep = <T extends string>({
       submitData();
     } else {
       enqueueDialog({
-        title: 'Finish flow with errors',
-        message:
-          'There are still some rows that contain errors. Rows with errors will be ignored when submitting.',
+        title: t`Finish flow with errors`,
+        message: t`There are still some rows that contain errors. Rows with errors will be ignored when submitting.`,
         buttons: [
-          { title: 'Cancel' },
+          { title: t`Cancel` },
           {
-            title: 'Submit',
-            variant: 'primary',
+            title: t`Submit`,
+            variant: 'outline',
             onClick: submitData,
             role: 'confirm',
           },
@@ -195,50 +316,60 @@ export const ValidationStep = <T extends string>({
 
   return (
     <>
-      <StyledContent>
-        <Heading
-          title="Review your import"
-          description="Correct the issues and fill the missing data."
-        />
-        <StyledToolbar>
-          <StyledErrorToggle>
-            <Toggle
-              value={filterByErrors}
-              onChange={() => setFilterByErrors(!filterByErrors)}
-            />
-            <StyledErrorToggleDescription>
-              Show only rows with errors
-            </StyledErrorToggleDescription>
-          </StyledErrorToggle>
-          <Button
-            Icon={IconTrash}
-            title="Remove"
-            accent="danger"
-            onClick={deleteSelectedRows}
-            disabled={selectedRows.size === 0}
-          />
-        </StyledToolbar>
-        <StyledScrollContainer>
-          <Table
-            rowKeyGetter={rowKeyGetter}
-            rows={tableData}
-            onRowsChange={updateRow}
-            columns={columns}
-            selectedRows={selectedRows}
-            onSelectedRowsChange={setSelectedRows as any} // TODO: replace 'any'
-            components={{
-              noRowsFallback: (
-                <StyledNoRowsContainer>
-                  {filterByErrors
-                    ? 'No data containing errors'
-                    : 'No data found'}
-                </StyledNoRowsContainer>
-              ),
-            }}
-          />
-        </StyledScrollContainer>
-      </StyledContent>
-      <ContinueButton onContinue={onContinue} title="Confirm" />
+      <SpreadsheetImportStepBody>
+        <StyledContentWrapper>
+          {filterByErrors && tableData.length === 0 ? (
+            <StyledNoRowsWithErrorsContainer>
+              <Trans>No rows with errors</Trans>
+            </StyledNoRowsWithErrorsContainer>
+          ) : (
+            <StyledScrollContainer>
+              <SpreadsheetImportTable
+                headerRowHeight={32}
+                rowKeyGetter={rowKeyGetter}
+                rows={tableData}
+                onRowsChange={updateRow}
+                columns={columns}
+                selectedRows={selectedRows}
+                onSelectedRowsChange={setSelectedRows}
+                renderers={{
+                  noRowsFallback: (
+                    <StyledNoRowsContainer>
+                      {filterByErrors
+                        ? t`No data containing errors`
+                        : t`No data found`}
+                    </StyledNoRowsContainer>
+                  ),
+                }}
+              />
+            </StyledScrollContainer>
+          )}
+          <StyledToolbar>
+            <StyledErrorSwitch>
+              <Switch
+                aria-label={t`Show only rows with errors`}
+                checked={filterByErrors}
+                onCheckedChange={() => setFilterByErrors(!filterByErrors)}
+                size="sm"
+              />
+              <StyledErrorSwitchDescription>
+                <Trans>Show only rows with errors</Trans>
+              </StyledErrorSwitchDescription>
+            </StyledErrorSwitch>
+            <Button
+              startIcon={<IconTrash />}
+              size="sm"
+              onClick={deleteSelectedRows}
+              disabled={selectedRows.size === 0}
+            >{t`Remove`}</Button>
+          </StyledToolbar>
+        </StyledContentWrapper>
+      </SpreadsheetImportStepBody>
+      <StepNavigationButton
+        onContinue={onContinue}
+        onBack={onBack}
+        continueTitle={t`Confirm`}
+      />
     </>
   );
 };

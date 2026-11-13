@@ -1,54 +1,65 @@
-import { useState } from 'react';
-import { Controller, useForm } from 'react-hook-form';
-import Skeleton, { SkeletonTheme } from 'react-loading-skeleton';
-import { useNavigate, useParams } from 'react-router-dom';
-import { useTheme } from '@emotion/react';
-import styled from '@emotion/styled';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { isNonEmptyString } from '@sniptt/guards';
-import { motion } from 'framer-motion';
-import { z } from 'zod';
-
+import { SkeletonLine } from '@/ui/feedback/skeleton/components/SkeletonLine';
 import { Logo } from '@/auth/components/Logo';
+import { StyledAuthContent } from '@/auth/components/StyledAuthContent';
+import { StyledOnboardingContentContainer } from '@/auth/components/StyledOnboardingContentContainer';
 import { Title } from '@/auth/components/Title';
+import { AnimatedEaseIn } from '@/auth/components/internal/AnimatedEaseIn/AnimatedEaseIn';
 import { useAuth } from '@/auth/hooks/useAuth';
 import { useIsLogged } from '@/auth/hooks/useIsLogged';
-import { useNavigateAfterSignInUp } from '@/auth/sign-in-up/hooks/useNavigateAfterSignInUp';
+import { currentUserState } from '@/auth/states/currentUserState';
+import { workspacePublicDataState } from '@/auth/states/workspacePublicDataState';
 import { PASSWORD_REGEX } from '@/auth/utils/passwordRegex';
-import { AppPath } from '@/types/AppPath';
-import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
-import { MainButton } from '@/ui/input/button/components/MainButton';
-import { TextInputV2 } from '@/ui/input/components/TextInputV2';
-import { AnimatedEaseIn } from '@/ui/utilities/animation/components/AnimatedEaseIn';
+import { useReadCaptchaToken } from '@/captcha/hooks/useReadCaptchaToken';
+import { useCaptcha } from '@/client-config/hooks/useCaptcha';
+import { useIsCurrentLocationOnAWorkspace } from '@/domain-manager/hooks/useIsCurrentLocationOnAWorkspace';
+import { useRedirect } from '@/domain-manager/hooks/useRedirect';
+import { getToastOptionsFromError } from '@/error-handler/utils/getToastOptionsFromError';
+import { TextInput } from '@/ui/input/components/TextInput';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import { useSetAtomState } from '@/ui/utilities/state/jotai/hooks/useSetAtomState';
+import { useMutation, useQuery } from '@apollo/client/react';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { styled } from '@linaria/react';
+import { i18n } from '@lingui/core';
+import { msg } from '@lingui/core/macro';
+import { useLingui } from '@lingui/react/macro';
+import { isNonEmptyString } from '@sniptt/guards';
+import { motion } from 'framer-motion';
+import { useEffect, useState } from 'react';
+import { Controller, useForm } from 'react-hook-form';
+import { SKELETON_HEIGHT_SIZES } from 'twenty-ui/primitives/feedback';
+import { useParams } from 'react-router-dom';
+import { AppPath } from 'twenty-shared/types';
+import { useToast } from 'twenty-ui/components/feedback';
+import { MainButton } from 'twenty-ui/components/input';
+import { themeCssVariables } from 'twenty-ui/theme';
+import { z } from 'zod';
 import {
-  useUpdatePasswordViaResetTokenMutation,
-  useValidatePasswordResetTokenQuery,
-} from '~/generated/graphql';
+  UpdatePasswordViaResetTokenDocument,
+  ValidatePasswordResetTokenDocument,
+} from '~/generated-metadata/graphql';
+import { useNavigateApp } from '~/hooks/useNavigateApp';
 import { logError } from '~/utils/logError';
+
+const passwordLengthMessage = msg`Password must be between 8 and 50 characters`;
 
 const validationSchema = z
   .object({
     passwordResetToken: z.string(),
     newPassword: z
       .string()
-      .regex(PASSWORD_REGEX, 'Password must contain at least 8 characters'),
+      .regex(PASSWORD_REGEX, i18n._(passwordLengthMessage)),
   })
   .required();
 
 type Form = z.infer<typeof validationSchema>;
 
 const StyledMainContainer = styled.div`
-  display: flex;
-  justify-content: flex-start;
   align-items: center;
+  display: flex;
   flex-direction: column;
+  justify-content: flex-start;
   width: 100%;
-`;
-
-const StyledContentContainer = styled.div`
-  margin-bottom: ${({ theme }) => theme.spacing(8)};
-  margin-top: ${({ theme }) => theme.spacing(4)};
-  width: 200px;
 `;
 
 const StyledForm = styled.form`
@@ -58,26 +69,34 @@ const StyledForm = styled.form`
   width: 100%;
 `;
 
-const StyledFullWidthMotionDiv = styled(motion.div)`
+const StyledFullWidthContainer = styled.div`
   width: 100%;
 `;
 
 const StyledInputContainer = styled.div`
-  margin-bottom: ${({ theme }) => theme.spacing(3)};
+  margin-bottom: ${themeCssVariables.spacing[3]};
+`;
+
+const StyledMainButtonContainer = styled.div`
+  margin-top: ${themeCssVariables.spacing[2]};
 `;
 
 export const PasswordReset = () => {
-  const { enqueueSnackBar } = useSnackBar();
+  const { t } = useLingui();
+  const { enqueueToast } = useToast();
 
-  const navigate = useNavigate();
+  const workspacePublicData = useAtomStateValue(workspacePublicDataState);
+  const setCurrentUser = useSetAtomState(currentUserState);
+
+  const navigate = useNavigateApp();
+  const { redirect } = useRedirect();
 
   const [email, setEmail] = useState('');
-
-  const theme = useTheme();
-
+  const [isTokenValid, setIsTokenValid] = useState(false);
+  const [isTargetUserPasswordSet, setIsTargetUserPasswordSet] = useState(false);
   const passwordResetToken = useParams().passwordResetToken;
 
-  const isLoggedIn = useIsLogged();
+  const isLogged = useIsLogged();
 
   const { control, handleSubmit } = useForm<Form>({
     mode: 'onChange',
@@ -88,34 +107,44 @@ export const PasswordReset = () => {
     resolver: zodResolver(validationSchema),
   });
 
-  const { loading: isValidatingToken } = useValidatePasswordResetTokenQuery({
-    variables: {
-      token: passwordResetToken ?? '',
+  const { data: tokenValidationData, error: tokenValidationError } = useQuery(
+    ValidatePasswordResetTokenDocument,
+    {
+      variables: {
+        token: passwordResetToken ?? '',
+      },
+      skip: !passwordResetToken || isTokenValid,
     },
-    skip: !passwordResetToken,
-    onError: (error) => {
-      enqueueSnackBar(error?.message ?? 'Token Invalid', {
-        variant: 'error',
-      });
-      if (!isLoggedIn) {
-        navigate(AppPath.SignInUp);
-      } else {
-        navigate(AppPath.Index);
+  );
+
+  useEffect(() => {
+    if (tokenValidationError) {
+      enqueueToast(getToastOptionsFromError({ error: tokenValidationError }));
+      navigate(AppPath.Index);
+    }
+  }, [tokenValidationError, enqueueToast, navigate]);
+
+  useEffect(() => {
+    if (tokenValidationData) {
+      setIsTokenValid(true);
+      const validationResult = tokenValidationData?.validatePasswordResetToken;
+      if (isNonEmptyString(validationResult?.email)) {
+        setEmail(validationResult.email);
       }
-    },
-    onCompleted: (data) => {
-      if (isNonEmptyString(data?.validatePasswordResetToken?.email)) {
-        setEmail(data.validatePasswordResetToken.email);
+      if (validationResult?.hasPassword) {
+        setIsTargetUserPasswordSet(validationResult.hasPassword);
       }
-    },
-  });
+    }
+  }, [tokenValidationData]);
 
-  const [updatePasswordViaToken, { loading: isUpdatingPassword }] =
-    useUpdatePasswordViaResetTokenMutation();
+  const [updatePasswordViaToken, { loading: isUpdatingPassword }] = useMutation(
+    UpdatePasswordViaResetTokenDocument,
+  );
 
-  const { signInWithCredentials } = useAuth();
-
-  const { navigateAfterSignInUp } = useNavigateAfterSignInUp();
+  const { signInWithCredentialsInWorkspace, signInWithCredentials } = useAuth();
+  const { isOnAWorkspace } = useIsCurrentLocationOnAWorkspace();
+  const { readCaptchaToken } = useReadCaptchaToken();
+  const { isCaptchaReady } = useCaptcha();
 
   const onSubmit = async (formData: Form) => {
     try {
@@ -127,121 +156,150 @@ export const PasswordReset = () => {
       });
 
       if (!data?.updatePasswordViaResetToken.success) {
-        enqueueSnackBar('There was an error while updating password.', {
-          variant: 'error',
+        enqueueToast({
+          status: 'error',
+          children: t`There was an error while updating password.`,
         });
         return;
       }
 
-      if (isLoggedIn) {
-        enqueueSnackBar('Password has been updated', {
-          variant: 'success',
-        });
+      const successMessage =
+        isTargetUserPasswordSet === false
+          ? t`Password has been set`
+          : t`Password has been updated`;
+
+      setCurrentUser((currentUser) =>
+        currentUser ? { ...currentUser, hasPassword: true } : currentUser,
+      );
+
+      if (isLogged) {
+        enqueueToast({ status: 'success', children: successMessage });
         navigate(AppPath.Index);
         return;
       }
 
-      const {
-        workspace: currentWorkspace,
-        workspaceMember: currentWorkspaceMember,
-      } = await signInWithCredentials(email || '', formData.newPassword);
+      if (!isCaptchaReady) {
+        enqueueToast({
+          status: 'error',
+          children: t`Captcha (anti-bot check) is still loading, try again`,
+        });
+        return;
+      }
 
-      navigateAfterSignInUp(currentWorkspace, currentWorkspaceMember);
+      const token = readCaptchaToken();
+
+      if (isOnAWorkspace) {
+        await signInWithCredentialsInWorkspace(
+          email || '',
+          formData.newPassword,
+          token,
+        );
+      } else {
+        await signInWithCredentials(email || '', formData.newPassword, token);
+      }
+
+      redirect(AppPath.Index);
     } catch (err) {
       logError(err);
-      enqueueSnackBar(
-        (err as Error)?.message || 'An error occurred while updating password',
-        {
-          variant: 'error',
-        },
-      );
+      enqueueToast(getToastOptionsFromError({ error: err }));
     }
   };
 
-  return (
-    <StyledMainContainer>
-      <AnimatedEaseIn>
-        <Logo />
-      </AnimatedEaseIn>
-      <Title animate>Reset Password</Title>
-      <StyledContentContainer>
-        {isValidatingToken && (
-          <SkeletonTheme
-            baseColor={theme.background.quaternary}
-            highlightColor={theme.background.secondary}
-          >
-            <Skeleton
-              height={32}
-              count={2}
-              style={{
-                marginBottom: theme.spacing(2),
-              }}
-            />
-          </SkeletonTheme>
-        )}
-        {email && (
-          <StyledForm onSubmit={handleSubmit(onSubmit)}>
-            <StyledFullWidthMotionDiv
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              transition={{
-                type: 'spring',
-                stiffness: 800,
-                damping: 35,
-              }}
-            >
-              <StyledInputContainer>
-                <TextInputV2
-                  autoFocus
-                  value={email}
-                  placeholder="Email"
-                  fullWidth
-                  disabled
-                />
-              </StyledInputContainer>
-            </StyledFullWidthMotionDiv>
-            <StyledFullWidthMotionDiv
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              transition={{
-                type: 'spring',
-                stiffness: 800,
-                damping: 35,
-              }}
-            >
-              <Controller
-                name="newPassword"
-                control={control}
-                render={({
-                  field: { onChange, onBlur, value },
-                  fieldState: { error },
-                }) => (
-                  <StyledInputContainer>
-                    <TextInputV2
-                      autoFocus
-                      value={value}
-                      type="password"
-                      placeholder="New Password"
-                      onBlur={onBlur}
-                      onChange={onChange}
-                      error={error?.message}
-                      fullWidth
-                    />
-                  </StyledInputContainer>
-                )}
-              />
-            </StyledFullWidthMotionDiv>
+  const passwordActionLabel =
+    isTargetUserPasswordSet === true ? t`Change Password` : t`Set Password`;
 
-            <MainButton
-              variant="secondary"
-              title="Change Password"
-              type="submit"
-              fullWidth
-              disabled={isUpdatingPassword}
+  return (
+    isTokenValid && (
+      <StyledAuthContent>
+        <StyledMainContainer>
+          <AnimatedEaseIn>
+            <Logo
+              secondaryLogo={workspacePublicData?.logo}
+              placeholder={workspacePublicData?.displayName}
             />
-          </StyledForm>
-        )}
-      </StyledContentContainer>
-    </StyledMainContainer>
+          </AnimatedEaseIn>
+          <Title animate>{passwordActionLabel}</Title>
+          <StyledOnboardingContentContainer>
+            {!email ? (
+              <SkeletonLine
+                height={SKELETON_HEIGHT_SIZES.m}
+                count={2}
+                gap={themeCssVariables.spacing[2]}
+                baseColor={themeCssVariables.background.quaternary}
+                highlightColor={themeCssVariables.background.secondary}
+              />
+            ) : (
+              <StyledForm onSubmit={handleSubmit(onSubmit)}>
+                <StyledFullWidthContainer>
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    transition={{
+                      type: 'spring',
+                      stiffness: 800,
+                      damping: 35,
+                    }}
+                  >
+                    <StyledInputContainer>
+                      <TextInput
+                        autoFocus
+                        value={email}
+                        placeholder={t`Email`}
+                        fullWidth
+                        disabled
+                      />
+                    </StyledInputContainer>
+                  </motion.div>
+                </StyledFullWidthContainer>
+                <StyledFullWidthContainer>
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    transition={{
+                      type: 'spring',
+                      stiffness: 800,
+                      damping: 35,
+                    }}
+                  >
+                    <Controller
+                      name="newPassword"
+                      control={control}
+                      render={({
+                        field: { onChange, onBlur, value },
+                        fieldState: { error },
+                      }) => (
+                        <StyledInputContainer>
+                          <TextInput
+                            autoFocus
+                            value={value}
+                            type="password"
+                            placeholder={t`New Password`}
+                            onBlur={onBlur}
+                            onChange={onChange}
+                            error={error?.message}
+                            fullWidth
+                          />
+                        </StyledInputContainer>
+                      )}
+                    />
+                  </motion.div>
+                </StyledFullWidthContainer>
+
+                <StyledMainButtonContainer>
+                  <MainButton
+                    type="submit"
+                    fullWidth
+                    disabled={isUpdatingPassword}
+                    variant="outline"
+                  >
+                    {passwordActionLabel}
+                  </MainButton>
+                </StyledMainButtonContainer>
+              </StyledForm>
+            )}
+          </StyledOnboardingContentContainer>
+        </StyledMainContainer>
+      </StyledAuthContent>
+    )
   );
 };

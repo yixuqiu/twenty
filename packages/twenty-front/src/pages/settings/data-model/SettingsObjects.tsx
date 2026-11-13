@@ -1,131 +1,99 @@
-import { useNavigate } from 'react-router-dom';
-import { useTheme } from '@emotion/react';
-import styled from '@emotion/styled';
-import { IconChevronRight, IconPlus, IconSettings } from 'twenty-ui';
+import { NavigationButton } from '@/ui/input/components/NavigationButton';
 
-import { useDeleteOneObjectMetadataItem } from '@/object-metadata/hooks/useDeleteOneObjectMetadataItem';
+import { isDDLLockedState } from '@/client-config/states/isDDLLockedState';
 import { useFilteredObjectMetadataItems } from '@/object-metadata/hooks/useFilteredObjectMetadataItems';
-import { useUpdateOneObjectMetadataItem } from '@/object-metadata/hooks/useUpdateOneObjectMetadataItem';
-import { getObjectSlug } from '@/object-metadata/utils/getObjectSlug';
-import { SettingsHeaderContainer } from '@/settings/components/SettingsHeaderContainer';
+import { SettingsPageLayout } from '@/settings/components/layout/SettingsPageLayout';
+import { SettingsDiscoveryHeroCard } from '@/settings/components/SettingsDiscoveryHeroCard';
 import { SettingsPageContainer } from '@/settings/components/SettingsPageContainer';
-import {
-  SettingsObjectItemTableRow,
-  StyledObjectTableRow,
-} from '@/settings/data-model/object-details/components/SettingsObjectItemTableRow';
-import { SettingsObjectCoverImage } from '@/settings/data-model/objects/SettingsObjectCoverImage';
-import { SettingsObjectInactiveMenuDropDown } from '@/settings/data-model/objects/SettingsObjectInactiveMenuDropDown';
-import { getSettingsPagePath } from '@/settings/utils/getSettingsPagePath';
-import { SettingsPath } from '@/types/SettingsPath';
-import { H1Title } from '@/ui/display/typography/components/H1Title';
-import { H2Title } from '@/ui/display/typography/components/H2Title';
-import { Button } from '@/ui/input/button/components/Button';
-import { SubMenuTopBarContainer } from '@/ui/layout/page/SubMenuTopBarContainer';
-import { Section } from '@/ui/layout/section/components/Section';
-import { Table } from '@/ui/layout/table/components/Table';
-import { TableHeader } from '@/ui/layout/table/components/TableHeader';
-import { TableSection } from '@/ui/layout/table/components/TableSection';
+import DarkCoverImage from '@/settings/data-model/assets/cover-dark.png';
+import LightCoverImage from '@/settings/data-model/assets/cover-light.png';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import { useLingui } from '@lingui/react/macro';
+import { SettingsPath } from 'twenty-shared/types';
+import { getSettingsPath } from 'twenty-shared/utils';
+import { Section } from 'twenty-ui/components/layout';
+import { IconEye, IconPlus, IconSparkle2 } from 'twenty-ui/icon';
+import { Button } from 'twenty-ui/primitives/input';
+import { SettingsObjectTable } from '~/pages/settings/data-model/SettingsObjectTable';
 
-const StyledIconChevronRight = styled(IconChevronRight)`
-  color: ${({ theme }) => theme.font.color.tertiary};
-`;
-
-const StyledH1Title = styled(H1Title)`
-  margin-bottom: 0;
-`;
+const SETTINGS_DATA_MODEL_HERO_INSTANCE_ID_PREFIX = 'settings-data-model-hero';
 
 export const SettingsObjects = () => {
-  const theme = useTheme();
-  const navigate = useNavigate();
+  const { t } = useLingui();
 
-  const { activeObjectMetadataItems, inactiveObjectMetadataItems } =
-    useFilteredObjectMetadataItems();
-  const { deleteOneObjectMetadataItem } = useDeleteOneObjectMetadataItem();
-  const { updateOneObjectMetadataItem } = useUpdateOneObjectMetadataItem();
+  const { objectMetadataItems } = useFilteredObjectMetadataItems();
+  const isDDLLocked = useAtomStateValue(isDDLLockedState);
+
+  const heroTabs = [
+    {
+      id: 'data_model_walkthrough',
+      title: t`Walkthrough`,
+      Icon: IconSparkle2,
+      vimeoId: '1217964359',
+      hasSound: true,
+    },
+  ];
 
   return (
-    <SubMenuTopBarContainer Icon={IconSettings} title="Settings">
-      <SettingsPageContainer>
-        <SettingsHeaderContainer>
-          <StyledH1Title title="Objects" />
+    <SettingsPageLayout
+      title={t`Data model`}
+      actionButton={
+        isDDLLocked ? (
           <Button
-            Icon={IconPlus}
-            title="Add object"
-            accent="blue"
-            size="small"
-            onClick={() =>
-              navigate(getSettingsPagePath(SettingsPath.NewObject))
-            }
+            startIcon={<IconPlus />}
+            size="sm"
+            disabled
+            variant="solid"
+            color="accent"
+          >{t`Add object`}</Button>
+        ) : (
+          <NavigationButton
+            to={getSettingsPath(SettingsPath.NewObject)}
+            startIcon={<IconPlus />}
+            size="sm"
+            variant="solid"
+            color="accent"
+          >{t`Add object`}</NavigationButton>
+        )
+      }
+      links={[
+        {
+          children: t`Workspace`,
+          href: getSettingsPath(SettingsPath.General),
+        },
+        { children: t`Objects` },
+      ]}
+    >
+      <SettingsPageContainer>
+        <Section.Root>
+          <SettingsDiscoveryHeroCard
+            lightSrc={LightCoverImage}
+            darkSrc={DarkCoverImage}
+            instanceIdPrefix={SETTINGS_DATA_MODEL_HERO_INSTANCE_ID_PREFIX}
+            tabs={heroTabs}
+            playButtonAriaLabel={t`Watch data model demo`}
           />
-        </SettingsHeaderContainer>
-        <div>
-          <SettingsObjectCoverImage />
-          <Section>
-            <H2Title title="Existing objects" />
-            <Table>
-              <StyledObjectTableRow>
-                <TableHeader>Name</TableHeader>
-                <TableHeader>Type</TableHeader>
-                <TableHeader align="right">Fields</TableHeader>
-                <TableHeader align="right">Instances</TableHeader>
-                <TableHeader></TableHeader>
-              </StyledObjectTableRow>
-              {!!activeObjectMetadataItems.length && (
-                <TableSection title="Active">
-                  {activeObjectMetadataItems.map((activeObjectMetadataItem) => (
-                    <SettingsObjectItemTableRow
-                      key={activeObjectMetadataItem.namePlural}
-                      objectItem={activeObjectMetadataItem}
-                      action={
-                        <StyledIconChevronRight
-                          size={theme.icon.size.md}
-                          stroke={theme.icon.stroke.sm}
-                        />
-                      }
-                      onClick={() =>
-                        navigate(
-                          `/settings/objects/${getObjectSlug(
-                            activeObjectMetadataItem,
-                          )}`,
-                        )
-                      }
-                    />
-                  ))}
-                </TableSection>
-              )}
-              {!!inactiveObjectMetadataItems.length && (
-                <TableSection title="Inactive">
-                  {inactiveObjectMetadataItems.map(
-                    (inactiveObjectMetadataItem) => (
-                      <SettingsObjectItemTableRow
-                        key={inactiveObjectMetadataItem.namePlural}
-                        objectItem={inactiveObjectMetadataItem}
-                        action={
-                          <SettingsObjectInactiveMenuDropDown
-                            isCustomObject={inactiveObjectMetadataItem.isCustom}
-                            scopeKey={inactiveObjectMetadataItem.namePlural}
-                            onActivate={() =>
-                              updateOneObjectMetadataItem({
-                                idToUpdate: inactiveObjectMetadataItem.id,
-                                updatePayload: { isActive: true },
-                              })
-                            }
-                            onErase={() =>
-                              deleteOneObjectMetadataItem(
-                                inactiveObjectMetadataItem.id,
-                              )
-                            }
-                          />
-                        }
-                      />
-                    ),
-                  )}
-                </TableSection>
-              )}
-            </Table>
-          </Section>
-        </div>
+        </Section.Root>
+        <Section.Root>
+          <Section.Header
+            title={t`Objects`}
+            description={t`Manage objects, fields and relationships`}
+          />
+          <SettingsObjectTable objectMetadataItems={objectMetadataItems} />
+        </Section.Root>
+        <Section.Root>
+          <Section.Header
+            title={t`Visualize data model`}
+            description={t`See your data structure as an interactive diagram`}
+          />
+          <NavigationButton
+            to={getSettingsPath(SettingsPath.ObjectOverview)}
+            size="md"
+            startIcon={<IconEye />}
+            variant="outline"
+          >{t`Visualize`}</NavigationButton>
+        </Section.Root>
       </SettingsPageContainer>
-    </SubMenuTopBarContainer>
+    </SettingsPageLayout>
   );
 };

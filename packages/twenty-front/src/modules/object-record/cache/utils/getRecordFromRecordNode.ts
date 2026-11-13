@@ -1,26 +1,23 @@
 import { getRecordsFromRecordConnection } from '@/object-record/cache/utils/getRecordsFromRecordConnection';
-import { RecordGqlNode } from '@/object-record/graphql/types/RecordGqlNode';
-import { ObjectRecord } from '@/object-record/types/ObjectRecord';
-import { isDefined } from '~/utils/isDefined';
-import { isUndefinedOrNull } from '~/utils/isUndefinedOrNull';
+import { type RecordGqlNode } from '@/object-record/graphql/types/RecordGqlNode';
+import { type ObjectRecord } from '@/object-record/types/ObjectRecord';
+import { isDefined } from 'twenty-shared/utils';
 
 export const getRecordFromRecordNode = <T extends ObjectRecord>({
   recordNode,
 }: {
   recordNode: RecordGqlNode;
 }): T => {
+  const { id, __typename } = recordNode;
+
   return {
     ...Object.fromEntries(
       Object.entries(recordNode).map(([fieldName, value]) => {
-        if (isUndefinedOrNull(value)) {
-          return [fieldName, value];
-        }
-
-        if (Array.isArray(value)) {
-          return [fieldName, value];
-        }
-
-        if (typeof value !== 'object') {
+        if (
+          !isDefined(value) ||
+          Array.isArray(value) ||
+          typeof value !== 'object'
+        ) {
           return [fieldName, value];
         }
 
@@ -32,7 +29,11 @@ export const getRecordFromRecordNode = <T extends ObjectRecord>({
           : [fieldName, getRecordFromRecordNode<T>({ recordNode: value })];
       }),
     ),
-    id: recordNode.id,
-    __typename: recordNode.__typename,
+    // Only adds `id` and `__typename` if they exist.
+    // RawJson field value passes through this method and does not have `id` or `__typename`.
+    // This prevents adding an undefined `id` and `__typename` to the RawJson field value,
+    // which is invalid JSON.
+    ...(isDefined(id) ? { id } : {}),
+    ...(isDefined(__typename) ? { __typename } : {}),
   } as T;
 };

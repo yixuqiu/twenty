@@ -1,19 +1,15 @@
-import { act } from 'react-dom/test-utils';
+import { act, fireEvent, renderHook } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router-dom';
-import { fireEvent, renderHook } from '@testing-library/react';
-import { RecoilRoot } from 'recoil';
 
-import { useSetHotkeyScope } from '@/ui/utilities/hotkey/hooks/useSetHotkeyScope';
-import { AppHotkeyScope } from '@/ui/utilities/hotkey/types/AppHotkeyScope';
-
-import { useGoToHotkeys } from '../useGoToHotkeys';
+import { useGoToHotkeys } from '@/ui/utilities/hotkey/hooks/useGoToHotkeys';
 
 const Wrapper = ({ children }: { children: React.ReactNode }) => (
   <MemoryRouter
     initialEntries={['/one', '/two', { pathname: '/three' }]}
     initialIndex={1}
   >
-    <RecoilRoot>{children}</RecoilRoot>
+    {children}
   </MemoryRouter>
 );
 const renderHookConfig = {
@@ -23,11 +19,7 @@ const renderHookConfig = {
 describe('useGoToHotkeys', () => {
   it('should navigate on hotkey trigger', () => {
     const { result } = renderHook(() => {
-      useGoToHotkeys('a', '/three');
-
-      const setHotkeyScope = useSetHotkeyScope();
-
-      setHotkeyScope(AppHotkeyScope.App, { goto: true });
+      useGoToHotkeys({ key: 'a', location: '/three' });
 
       const location = useLocation();
 
@@ -47,5 +39,34 @@ describe('useGoToHotkeys', () => {
     });
 
     expect(result.current.pathname).toBe('/three');
+  });
+  it('blocks navigation and side effects while disabled and restores them when enabled', async () => {
+    const preNavigateFunction = jest.fn();
+    const user = userEvent.setup();
+    const { result, rerender } = renderHook(
+      ({ isEnabled }) => {
+        useGoToHotkeys({
+          key: 's',
+          location: '/three',
+          isEnabled,
+          preNavigateFunction,
+        });
+
+        return useLocation();
+      },
+      { ...renderHookConfig, initialProps: { isEnabled: false } },
+    );
+
+    await user.keyboard('gs');
+
+    expect(result.current.pathname).toBe('/two');
+    expect(preNavigateFunction).not.toHaveBeenCalled();
+
+    rerender({ isEnabled: true });
+    await user.keyboard('gs');
+
+    expect(result.current.pathname).toBe('/three');
+    expect(preNavigateFunction).toHaveBeenCalledTimes(1);
+    expect(preNavigateFunction).toHaveBeenCalledWith();
   });
 });

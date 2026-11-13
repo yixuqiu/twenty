@@ -1,54 +1,63 @@
-import { useRecoilCallback } from 'recoil';
+import { useCallback } from 'react';
 import { v4 } from 'uuid';
 
-import { usePreviousHotkeyScope } from '@/ui/utilities/hotkey/hooks/usePreviousHotkeyScope';
-import { useAvailableScopeIdOrThrow } from '@/ui/utilities/recoil-scope/scopes-internal/hooks/useAvailableScopeId';
+import { DIALOG_FOCUS_ID } from '@/ui/feedback/dialog-manager/constants/DialogFocusId';
+import { useRemoveFocusItemFromFocusStackById } from '@/ui/utilities/focus/hooks/useRemoveFocusItemFromFocusStackById';
 
-import { DialogManagerScopeInternalContext } from '../scopes/scope-internal-context/DialogManagerScopeInternalContext';
-import { dialogInternalScopedState } from '../states/dialogInternalScopedState';
-import { DialogOptions } from '../types/DialogOptions';
+import { DialogComponentInstanceContext } from '@/ui/feedback/dialog-manager/contexts/DialogComponentInstanceContext';
+import { useAvailableComponentInstanceIdOrThrow } from '@/ui/utilities/state/component-state/hooks/useAvailableComponentInstanceIdOrThrow';
+import { dialogInternalComponentState } from '@/ui/feedback/dialog-manager/states/dialogInternalComponentState';
+import { type DialogOptions } from '@/ui/feedback/dialog-manager/types/DialogOptions';
+import { useStore } from 'jotai';
 
-type useDialogManagerProps = {
-  dialogManagerScopeId?: string;
-};
-
-export const useDialogManager = (props?: useDialogManagerProps) => {
-  const scopeId = useAvailableScopeIdOrThrow(
-    DialogManagerScopeInternalContext,
-    props?.dialogManagerScopeId,
+export const useDialogManager = () => {
+  const componentInstanceId = useAvailableComponentInstanceIdOrThrow(
+    DialogComponentInstanceContext,
   );
 
-  const { goBackToPreviousHotkeyScope } = usePreviousHotkeyScope();
+  const store = useStore();
 
-  const closeDialog = useRecoilCallback(
-    ({ set }) =>
-      (id: string) => {
-        set(dialogInternalScopedState({ scopeId: scopeId }), (prevState) => ({
+  const { removeFocusItemFromFocusStackById } =
+    useRemoveFocusItemFromFocusStackById();
+
+  const closeDialog = useCallback(
+    (id: string) => {
+      store.set(
+        dialogInternalComponentState.atomFamily({
+          instanceId: componentInstanceId,
+        }),
+        (prevState) => ({
           ...prevState,
-          queue: prevState.queue.filter((snackBar) => snackBar.id !== id),
-        }));
-        goBackToPreviousHotkeyScope();
-      },
-    [goBackToPreviousHotkeyScope, scopeId],
+          queue: prevState.queue.filter((dialog) => dialog.id !== id),
+        }),
+      );
+
+      removeFocusItemFromFocusStackById({ focusId: DIALOG_FOCUS_ID });
+    },
+    [componentInstanceId, removeFocusItemFromFocusStackById, store],
   );
 
-  const setDialogQueue = useRecoilCallback(
-    ({ set }) =>
-      (newValue) =>
-        set(dialogInternalScopedState({ scopeId: scopeId }), (prev) => {
+  const setDialogQueue = useCallback(
+    (newValue: DialogOptions) =>
+      store.set(
+        dialogInternalComponentState.atomFamily({
+          instanceId: componentInstanceId,
+        }),
+        (prev) => {
           if (prev.queue.length >= prev.maxQueue) {
             return {
               ...prev,
-              queue: [...prev.queue.slice(1), newValue] as DialogOptions[],
+              queue: [...prev.queue.slice(1), newValue],
             };
           }
 
           return {
             ...prev,
-            queue: [...prev.queue, newValue] as DialogOptions[],
+            queue: [...prev.queue, newValue],
           };
-        }),
-    [scopeId],
+        },
+      ),
+    [componentInstanceId, store],
   );
 
   const enqueueDialog = (options?: Omit<DialogOptions, 'id'>) => {

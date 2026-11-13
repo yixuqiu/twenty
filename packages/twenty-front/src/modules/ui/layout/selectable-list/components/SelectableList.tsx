@@ -1,57 +1,79 @@
-import { ReactNode, useEffect } from 'react';
+import { type ReactNode, useCallback, useState } from 'react';
+import { isDefined } from 'twenty-shared/utils';
 
 import { useSelectableListHotKeys } from '@/ui/layout/selectable-list/hooks/internal/useSelectableListHotKeys';
-import { useSelectableList } from '@/ui/layout/selectable-list/hooks/useSelectableList';
-import { SelectableListScope } from '@/ui/layout/selectable-list/scopes/SelectableListScope';
-import { arrayToChunks } from '~/utils/array/arrayToChunks';
-import { isDefined } from '~/utils/isDefined';
+import { useSyncSelectableListItems } from '@/ui/layout/selectable-list/hooks/internal/useSyncSelectableListItems';
+import { SelectableListNativeItemRefsContext } from '@/ui/layout/selectable-list/states/contexts/SelectableListNativeItemRefsContext';
+import { SelectableListComponentInstanceContext } from '@/ui/layout/selectable-list/states/contexts/SelectableListComponentInstanceContext';
+import { SelectableListContextProvider } from '@/ui/layout/selectable-list/states/contexts/SelectableListContext';
 
 type SelectableListProps = {
   children: ReactNode;
-  selectableListId: string;
   selectableItemIdArray?: string[];
   selectableItemIdMatrix?: string[][];
   onSelect?: (selected: string) => void;
-  hotkeyScope: string;
-  onEnter?: (itemId: string) => void;
+  selectableListInstanceId: string;
+  focusId: string;
+  shouldPreselectFirstItem?: boolean;
 };
 
 export const SelectableList = ({
   children,
-  selectableListId,
-  hotkeyScope,
   selectableItemIdArray,
   selectableItemIdMatrix,
-  onEnter,
+  selectableListInstanceId,
+  onSelect,
+  focusId,
+  shouldPreselectFirstItem = true,
 }: SelectableListProps) => {
-  useSelectableListHotKeys(selectableListId, hotkeyScope);
+  const [nativeItemRefs] = useState(() => new Map<string, HTMLElement>());
 
-  const { setSelectableItemIds, setSelectableListOnEnter } =
-    useSelectableList(selectableListId);
+  const focusNativeItem = useCallback(
+    (itemId: string) => {
+      for (const nativeItem of nativeItemRefs.values()) {
+        if (nativeItem !== document.activeElement) {
+          continue;
+        }
 
-  useEffect(() => {
-    setSelectableListOnEnter(() => onEnter);
-  }, [onEnter, setSelectableListOnEnter]);
+        const nextNativeItem = nativeItemRefs.get(itemId);
 
-  useEffect(() => {
-    if (!selectableItemIdArray && !selectableItemIdMatrix) {
-      throw new Error(
-        'Either selectableItemIdArray or selectableItemIdsMatrix must be provided',
-      );
-    }
+        if (!isDefined(nextNativeItem)) {
+          nativeItem.blur();
+          return;
+        }
 
-    if (isDefined(selectableItemIdMatrix)) {
-      setSelectableItemIds(selectableItemIdMatrix);
-    }
+        nextNativeItem.focus();
+        return;
+      }
+    },
+    [nativeItemRefs],
+  );
 
-    if (isDefined(selectableItemIdArray)) {
-      setSelectableItemIds(arrayToChunks(selectableItemIdArray, 1));
-    }
-  }, [selectableItemIdArray, selectableItemIdMatrix, setSelectableItemIds]);
+  useSelectableListHotKeys({
+    instanceId: selectableListInstanceId,
+    focusId,
+    onSelect,
+    onNavigate: focusNativeItem,
+  });
+
+  useSyncSelectableListItems({
+    selectableListInstanceId,
+    selectableItemIdArray,
+    selectableItemIdMatrix,
+    shouldPreselectFirstItem,
+  });
 
   return (
-    <SelectableListScope selectableListScopeId={selectableListId}>
-      {children}
-    </SelectableListScope>
+    <SelectableListComponentInstanceContext.Provider
+      value={{
+        instanceId: selectableListInstanceId,
+      }}
+    >
+      <SelectableListNativeItemRefsContext.Provider value={nativeItemRefs}>
+        <SelectableListContextProvider value={{ focusId }}>
+          {children}
+        </SelectableListContextProvider>
+      </SelectableListNativeItemRefsContext.Provider>
+    </SelectableListComponentInstanceContext.Provider>
   );
 };

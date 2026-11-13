@@ -1,13 +1,23 @@
-export enum CalendarChannelVisibility {
-  Everything = 'SHARE_EVERYTHING',
-  Metadata = 'METADATA',
-}
+import {
+  type CalendarChannelContactAutoCreationPolicy,
+  type CalendarChannelSyncStage,
+  type CalendarChannelSyncStatus,
+} from 'twenty-shared/types';
+import { type CalendarChannelVisibility } from '~/generated-metadata/graphql';
 
 export type CalendarChannel = {
   id: string;
   handle: string;
-  isContactAutoCreationEnabled?: boolean;
-  isSyncEnabled?: boolean;
   visibility: CalendarChannelVisibility;
+  isContactAutoCreationEnabled: boolean;
+  contactAutoCreationPolicy: CalendarChannelContactAutoCreationPolicy;
+  excludePrivateEvents: boolean;
+  isSyncEnabled: boolean;
+  syncStatus: CalendarChannelSyncStatus;
+  syncStage: CalendarChannelSyncStage;
+  syncStageStartedAt: string | null;
+  connectedAccountId: string;
+  createdAt: string;
+  updatedAt: string;
   __typename: 'CalendarChannel';
 };

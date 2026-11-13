@@ -1,38 +1,34 @@
+import { styled } from '@linaria/react';
+import { useLingui } from '@lingui/react/macro';
 import { useEffect, useState } from 'react';
-import styled from '@emotion/styled';
-import { useRecoilState, useRecoilValue } from 'recoil';
 import { useDebouncedCallback } from 'use-debounce';
 
 import { currentUserState } from '@/auth/states/currentUserState';
 import { currentWorkspaceMemberState } from '@/auth/states/currentWorkspaceMemberState';
-import { CoreObjectNameSingular } from '@/object-metadata/types/CoreObjectNameSingular';
-import { useUpdateOneRecord } from '@/object-record/hooks/useUpdateOneRecord';
-import { TextInput } from '@/ui/input/components/TextInput';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import { useCanEditProfileField } from '@/settings/profile/hooks/useCanEditProfileField';
+import { useUpdateWorkspaceMemberSettings } from '@/workspace-member/hooks/useUpdateWorkspaceMemberSettings';
+import { SettingsTextInput } from '@/ui/input/components/SettingsTextInput';
+import { themeCssVariables } from 'twenty-ui/theme';
 import { logError } from '~/utils/logError';
+import { doNotTranslate } from 'twenty-shared/i18n';
 
 const StyledComboInputContainer = styled.div`
   display: flex;
   flex-direction: row;
-  > * + * {
-    margin-left: ${({ theme }) => theme.spacing(4)};
-  }
+  gap: ${themeCssVariables.spacing[4]};
 `;
 
 type NameFieldsProps = {
   autoSave?: boolean;
-  onFirstNameUpdate?: (firstName: string) => void;
-  onLastNameUpdate?: (lastName: string) => void;
 };
 
-export const NameFields = ({
-  autoSave = true,
-  onFirstNameUpdate,
-  onLastNameUpdate,
-}: NameFieldsProps) => {
-  const currentUser = useRecoilValue(currentUserState);
-  const [currentWorkspaceMember, setCurrentWorkspaceMember] = useRecoilState(
-    currentWorkspaceMemberState,
-  );
+export const NameFields = ({ autoSave = true }: NameFieldsProps) => {
+  const { t } = useLingui();
+  const currentUser = useAtomStateValue(currentUserState);
+  const currentWorkspaceMember = useAtomStateValue(currentWorkspaceMemberState);
+  const { canEdit: canEditFirstName } = useCanEditProfileField('firstName');
+  const { canEdit: canEditLastName } = useCanEditProfileField('lastName');
 
   const [firstName, setFirstName] = useState(
     currentWorkspaceMember?.name?.firstName ?? '',
@@ -41,36 +37,23 @@ export const NameFields = ({
     currentWorkspaceMember?.name?.lastName ?? '',
   );
 
-  const { updateOneRecord } = useUpdateOneRecord({
-    objectNameSingular: CoreObjectNameSingular.WorkspaceMember,
-  });
+  const { updateWorkspaceMemberSettings } = useUpdateWorkspaceMemberSettings();
 
   // TODO: Enhance this with react-web-hook-form (https://www.react-hook-form.com)
   const debouncedUpdate = useDebouncedCallback(async () => {
-    onFirstNameUpdate?.(firstName);
-    onLastNameUpdate?.(lastName);
-
     try {
       if (!currentWorkspaceMember?.id) {
-        throw new Error('User is not logged in');
+        throw new Error(doNotTranslate('User is not logged in'));
       }
 
       if (autoSave) {
-        await updateOneRecord({
-          idToUpdate: currentWorkspaceMember?.id,
-          updateOneRecordInput: {
+        await updateWorkspaceMemberSettings({
+          workspaceMemberId: currentWorkspaceMember.id,
+          update: {
             name: {
               firstName: firstName,
               lastName: lastName,
             },
-          },
-        });
-
-        setCurrentWorkspaceMember({
-          ...currentWorkspaceMember,
-          name: {
-            firstName,
-            lastName,
           },
         });
       }
@@ -105,23 +88,32 @@ export const NameFields = ({
     debouncedUpdate,
     autoSave,
     currentWorkspaceMember,
+    canEditFirstName,
+    canEditLastName,
   ]);
+
+  const firstNameTextInputId = `${currentWorkspaceMember?.id}-first-name`;
+  const lastNameTextInputId = `${currentWorkspaceMember?.id}-last-name`;
 
   return (
     <StyledComboInputContainer>
-      <TextInput
-        label="First Name"
+      <SettingsTextInput
+        instanceId={firstNameTextInputId}
+        label={t`First Name`}
         value={firstName}
         onChange={setFirstName}
-        placeholder="Tim"
+        placeholder={t`Tim`}
         fullWidth
+        disabled={!canEditFirstName}
       />
-      <TextInput
-        label="Last Name"
+      <SettingsTextInput
+        instanceId={lastNameTextInputId}
+        label={t`Last Name`}
         value={lastName}
         onChange={setLastName}
-        placeholder="Cook"
+        placeholder={t`Cook`}
         fullWidth
+        disabled={!canEditLastName}
       />
     </StyledComboInputContainer>
   );

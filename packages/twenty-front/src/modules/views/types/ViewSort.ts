@@ -1,8 +1,11 @@
-import { SortDirection } from '@/object-record/object-sort-dropdown/types/SortDirection';
+import { type ViewSortDirection } from '~/generated-metadata/graphql';
 
 export type ViewSort = {
-  __typename: 'ViewSort';
   id: string;
   fieldMetadataId: string;
-  direction: SortDirection;
+  createdAt?: string;
+  updatedAt?: string;
+  direction: ViewSortDirection;
+  subFieldName?: string | null;
+  viewId?: string;
 };

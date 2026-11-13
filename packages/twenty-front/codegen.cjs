@@ -1,31 +1,45 @@
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
 module.exports = {
-  schema: process.env.REACT_APP_SERVER_BASE_URL + '/graphql',
+  schema:
+    (process.env.REACT_APP_SERVER_BASE_URL ?? 'http://localhost:3000') +
+    '/graphql',
   documents: [
-    '!./src/modules/databases/**',
-    '!./src/modules/object-metadata/**',
-    '!./src/modules/object-record/**',
-    './src/modules/**/*.tsx',
-    './src/modules/**/*.ts',
-    '!./src/**/*.test.tsx',
+    './src/modules/workflow/**/graphql/**/*.{ts,tsx}',
+    './src/modules/object-core/**/graphql/**/*.{ts,tsx}',
+    './src/modules/activities/emails/graphql/queries/**/*.{ts,tsx}',
+    './src/modules/activities/emails/graphql/operation-signatures/**/*.{ts,tsx}',
+    './src/modules/activities/calendar/graphql/queries/**/*.{ts,tsx}',
+    './src/modules/command-menu/graphql/**/*.{ts,tsx}',
+    './src/modules/ai/graphql/mutations/answerToolCall.ts',
+
+    '!./src/**/*.test.{ts,tsx}',
+    '!./src/**/*.stories.{ts,tsx}',
     '!./src/**/__mocks__/*.ts',
-    '!./src/modules/users/graphql/queries/getCurrentUserAndViews.ts',
   ],
   overwrite: true,
+  config: {
+    defaultScalarType: 'any',
+    scalars: {
+      DateTime: 'string',
+    },
+    namingConvention: { enumValues: 'keep' },
+    enumType: 'native',
+  },
   generates: {
-    './src/generated/graphql.tsx': {
+    './src/generated/schema.ts': {
+      plugins: ['typescript'],
+    },
+    './src/generated/graphql.ts': {
       plugins: [
-        'typescript',
+        { add: { content: "export * from './schema';" } },
         'typescript-operations',
-        'typescript-react-apollo',
+        'typed-document-node',
       ],
       config: {
-        skipTypename: false,
-        withHooks: true,
-        withHOC: false,
-        withComponent: false,
-        scalars: {
-          DateTime: 'string',
-        },
+        importSchemaTypesFrom: './src/generated/schema',
+        nonOptionalTypename: true,
+        skipTypeNameForRoot: true,
       },
     },
   },

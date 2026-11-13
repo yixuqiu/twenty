@@ -1,24 +1,30 @@
-import { act, renderHook } from '@testing-library/react';
-import { RecoilRoot, useRecoilState } from 'recoil';
+import { renderHook } from '@testing-library/react';
+import { Provider as JotaiProvider } from 'jotai';
+import React, { act } from 'react';
 
-import { useSpreadsheetImport } from '@/spreadsheet-import/hooks/useSpreadsheetImport';
-import { spreadsheetImportState } from '@/spreadsheet-import/states/spreadsheetImportState';
-import { StepType } from '@/spreadsheet-import/steps/components/UploadFlow';
-import { RawData, SpreadsheetOptions } from '@/spreadsheet-import/types';
+import { useOpenSpreadsheetImportDialog } from '@/spreadsheet-import/hooks/useOpenSpreadsheetImportDialog';
+import { spreadsheetImportDialogState } from '@/spreadsheet-import/states/spreadsheetImportDialogState';
+import { SpreadsheetImportStepType } from '@/spreadsheet-import/steps/types/SpreadsheetImportStepType';
+import {
+  type ImportedRow,
+  type SpreadsheetImportDialogOptions,
+} from '@/spreadsheet-import/types';
+import { jotaiStore } from '@/ui/utilities/state/jotai/jotaiStore';
 
 const Wrapper = ({ children }: { children: React.ReactNode }) => (
-  <RecoilRoot>{children}</RecoilRoot>
+  <JotaiProvider store={jotaiStore}>{children}</JotaiProvider>
 );
-type SpreadsheetKey = 'spreadsheet_key';
 
-export const mockedSpreadsheetOptions: SpreadsheetOptions<SpreadsheetKey> = {
-  isOpen: true,
+export const mockedSpreadsheetOptions: SpreadsheetImportDialogOptions = {
   onClose: () => {},
-  fields: [],
+  spreadsheetImportFields: [],
   uploadStepHook: async () => [],
-  selectHeaderStepHook: async (headerValues: RawData, data: RawData[]) => ({
-    headerValues,
-    data,
+  selectHeaderStepHook: async (
+    headerValues: ImportedRow,
+    data: ImportedRow[],
+  ) => ({
+    headerRow: headerValues,
+    importedRows: data,
   }),
   matchColumnsStepHook: async () => [],
   rowHook: () => ({ spreadsheet_key: 'rowHook' }),
@@ -31,36 +37,38 @@ export const mockedSpreadsheetOptions: SpreadsheetOptions<SpreadsheetKey> = {
   autoMapHeaders: true,
   autoMapDistance: 1,
   initialStepState: {
-    type: StepType.upload,
+    type: SpreadsheetImportStepType.upload,
   },
   dateFormat: 'MM/DD/YY',
   parseRaw: true,
   rtl: false,
   selectHeader: true,
+  availableFieldMetadataItems: [],
 };
 
 describe('useSpreadsheetImport', () => {
-  it('should set isOpen to true, and update the options in the Recoil state', async () => {
+  it('should set isOpen to true, and update the options in state', async () => {
     const { result } = renderHook(
       () => ({
-        useSpreadsheetImport: useSpreadsheetImport<SpreadsheetKey>(),
-        spreadsheetImportState: useRecoilState(spreadsheetImportState)[0],
+        useSpreadsheetImport: useOpenSpreadsheetImportDialog(),
       }),
       {
         wrapper: Wrapper,
       },
     );
-    expect(result.current.spreadsheetImportState).toStrictEqual({
+    expect(jotaiStore.get(spreadsheetImportDialogState.atom)).toStrictEqual({
       isOpen: false,
+      isStepBarVisible: true,
       options: null,
     });
     act(() => {
-      result.current.useSpreadsheetImport.openSpreadsheetImport(
+      result.current.useSpreadsheetImport.openSpreadsheetImportDialog(
         mockedSpreadsheetOptions,
       );
     });
-    expect(result.current.spreadsheetImportState).toStrictEqual({
+    expect(jotaiStore.get(spreadsheetImportDialogState.atom)).toStrictEqual({
       isOpen: true,
+      isStepBarVisible: true,
       options: mockedSpreadsheetOptions,
     });
   });

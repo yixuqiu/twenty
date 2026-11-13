@@ -1,34 +1,22 @@
-import { ReactNode } from 'react';
-import { Column } from '@react-email/components';
-import { Row } from '@react-email/row';
-import { Text } from '@react-email/text';
+import { Text } from 'react-email';
+import { type JSX } from 'react';
 
-import { emailTheme } from 'src/common-style';
-
-const rowStyle = {
-  display: 'flex',
-};
+import { canvasTheme } from 'src/common-style';
 
 const highlightedStyle = {
-  borderRadius: '4px',
-  background: emailTheme.background.colors.highlight,
+  borderRadius: canvasTheme.border.radius.sm,
+  background: canvasTheme.background.colors.highlight,
   padding: '4px 8px',
-  margin: 0,
-  fontSize: emailTheme.font.size.lg,
-  fontWeight: emailTheme.font.weight.bold,
-  color: emailTheme.font.colors.highlighted,
+  fontSize: canvasTheme.font.size.lg,
+  fontWeight: canvasTheme.font.weight.bold,
+  color: canvasTheme.font.colors.highlighted,
 };
 
 type HighlightedTextProps = {
-  value: ReactNode;
+  value: JSX.Element | JSX.Element[] | string | undefined;
+  centered?: boolean;
 };
 
 export const HighlightedText = ({ value }: HighlightedTextProps) => {
-  return (
-    <Row style={rowStyle}>
-      <Column>
-        <Text style={highlightedStyle}>{value}</Text>
-      </Column>
-    </Row>
-  );
+  return <Text style={highlightedStyle}>{value}</Text>;
 };

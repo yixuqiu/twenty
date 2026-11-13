@@ -1,50 +1,54 @@
-import { useRecoilState, useRecoilValue, useSetRecoilState } from 'recoil';
-
 import { useCreateActivityInDB } from '@/activities/hooks/useCreateActivityInDB';
 import { useRefreshShowPageFindManyActivitiesQueries } from '@/activities/hooks/useRefreshShowPageFindManyActivitiesQueries';
-import { activityIdInDrawerState } from '@/activities/states/activityIdInDrawerState';
 import { isActivityInCreateModeState } from '@/activities/states/isActivityInCreateModeState';
 import { isUpsertingActivityInDBState } from '@/activities/states/isCreatingActivityInDBState';
-import { objectShowPageTargetableObjectState } from '@/activities/timeline/states/objectShowPageTargetableObjectIdState';
-import { Activity } from '@/activities/types/Activity';
-import { CoreObjectNameSingular } from '@/object-metadata/types/CoreObjectNameSingular';
+import { objectShowPageTargetableObjectState } from '@/activities/timeline-activities/states/objectShowPageTargetableObjectState';
+import { type Note } from '@/activities/types/Note';
+import { type Task } from '@/activities/types/Task';
+import { type StandardObjectNameSingular } from 'twenty-shared/types';
 import { useUpdateOneRecord } from '@/object-record/hooks/useUpdateOneRecord';
-import { isDefined } from '~/utils/isDefined';
+import { isDefined } from 'twenty-shared/utils';
+import { useAtomState } from '@/ui/utilities/state/jotai/hooks/useAtomState';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
 
-export const useUpsertActivity = () => {
-  const [isActivityInCreateMode, setIsActivityInCreateMode] = useRecoilState(
-    isActivityInCreateModeState,
-  );
+export const useUpsertActivity = ({
+  activityObjectNameSingular,
+}: {
+  activityObjectNameSingular:
+    | StandardObjectNameSingular.Task
+    | StandardObjectNameSingular.Note;
+}) => {
+  const [isActivityInCreateMode] = useAtomState(isActivityInCreateModeState);
 
-  const { updateOneRecord: updateOneActivity } = useUpdateOneRecord<Activity>({
-    objectNameSingular: CoreObjectNameSingular.Activity,
+  const { updateOneRecord: updateOneActivity } = useUpdateOneRecord();
+
+  const { createActivityInDB } = useCreateActivityInDB({
+    activityObjectNameSingular,
   });
 
-  const { createActivityInDB } = useCreateActivityInDB();
-
-  const [, setIsUpsertingActivityInDB] = useRecoilState(
+  const [, setIsUpsertingActivityInDB] = useAtomState(
     isUpsertingActivityInDBState,
   );
 
-  const setActivityIdInDrawer = useSetRecoilState(activityIdInDrawerState);
-
-  const objectShowPageTargetableObject = useRecoilValue(
+  const objectShowPageTargetableObject = useAtomStateValue(
     objectShowPageTargetableObjectState,
   );
 
   const { refreshShowPageFindManyActivitiesQueries } =
-    useRefreshShowPageFindManyActivitiesQueries();
+    useRefreshShowPageFindManyActivitiesQueries({
+      activityObjectNameSingular,
+    });
 
   const upsertActivity = async ({
     activity,
     input,
   }: {
-    activity: Activity;
-    input: Partial<Activity>;
+    activity: Task | Note;
+    input: Partial<Task | Note>;
   }) => {
     setIsUpsertingActivityInDB(true);
     if (isActivityInCreateMode) {
-      const activityToCreate: Activity = {
+      const activityToCreate: Partial<Task | Note> = {
         ...activity,
         ...input,
       };
@@ -54,11 +58,9 @@ export const useUpsertActivity = () => {
       }
 
       await createActivityInDB(activityToCreate);
-
-      setActivityIdInDrawer(activityToCreate.id);
-      setIsActivityInCreateMode(false);
     } else {
       await updateOneActivity?.({
+        objectNameSingular: activityObjectNameSingular,
         idToUpdate: activity.id,
         updateOneRecordInput: input,
       });

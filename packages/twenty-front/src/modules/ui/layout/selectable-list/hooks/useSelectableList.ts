@@ -1,35 +1,81 @@
-import { useResetRecoilState, useSetRecoilState } from 'recoil';
+import { useCallback } from 'react';
+import { useStore } from 'jotai';
 
-import { useSelectableListStates } from '@/ui/layout/selectable-list/hooks/internal/useSelectableListStates';
+import { SelectableListComponentInstanceContext } from '@/ui/layout/selectable-list/states/contexts/SelectableListComponentInstanceContext';
+import { selectedItemIdComponentState } from '@/ui/layout/selectable-list/states/selectedItemIdComponentState';
+import { isSelectedItemIdComponentFamilyState } from '@/ui/layout/selectable-list/states/isSelectedItemIdComponentFamilyState';
+import { useAvailableComponentInstanceIdOrThrow } from '@/ui/utilities/state/component-state/hooks/useAvailableComponentInstanceIdOrThrow';
+import { isDefined } from 'twenty-shared/utils';
 
-export const useSelectableList = (selectableListId?: string) => {
-  const {
-    scopeId,
-    selectableItemIdsState,
-    selectableListOnEnterState,
-    isSelectedItemIdSelector,
-    selectedItemIdState,
-  } = useSelectableListStates({
-    selectableListScopeId: selectableListId,
-  });
-
-  const setSelectableItemIds = useSetRecoilState(selectableItemIdsState);
-  const setSelectableListOnEnter = useSetRecoilState(
-    selectableListOnEnterState,
+export const useSelectableList = (instanceId?: string) => {
+  const selectableListInstanceId = useAvailableComponentInstanceIdOrThrow(
+    SelectableListComponentInstanceContext,
+    instanceId,
   );
 
-  const resetSelectedItemIdState = useResetRecoilState(selectedItemIdState);
+  const store = useStore();
 
-  const resetSelectedItem = () => {
-    resetSelectedItemIdState();
-  };
+  const resetSelectedItem = useCallback(() => {
+    const selectedItemId = store.get(
+      selectedItemIdComponentState.atomFamily({
+        instanceId: selectableListInstanceId,
+      }),
+    );
+
+    if (isDefined(selectedItemId)) {
+      store.set(
+        selectedItemIdComponentState.atomFamily({
+          instanceId: selectableListInstanceId,
+        }),
+        null,
+      );
+      store.set(
+        isSelectedItemIdComponentFamilyState.atomFamily({
+          instanceId: selectableListInstanceId,
+          familyKey: selectedItemId,
+        }),
+        false,
+      );
+    }
+  }, [store, selectableListInstanceId]);
+
+  const setSelectedItemId = useCallback(
+    (itemId: string) => {
+      const selectedItemId = store.get(
+        selectedItemIdComponentState.atomFamily({
+          instanceId: selectableListInstanceId,
+        }),
+      );
+
+      if (isDefined(selectedItemId)) {
+        store.set(
+          isSelectedItemIdComponentFamilyState.atomFamily({
+            instanceId: selectableListInstanceId,
+            familyKey: selectedItemId,
+          }),
+          false,
+        );
+      }
+
+      store.set(
+        selectedItemIdComponentState.atomFamily({
+          instanceId: selectableListInstanceId,
+        }),
+        itemId,
+      );
+      store.set(
+        isSelectedItemIdComponentFamilyState.atomFamily({
+          instanceId: selectableListInstanceId,
+          familyKey: itemId,
+        }),
+        true,
+      );
+    },
+    [store, selectableListInstanceId],
+  );
 
   return {
-    selectableListId: scopeId,
-
-    setSelectableItemIds,
-    isSelectedItemIdSelector,
-    setSelectableListOnEnter,
     resetSelectedItem,
+    setSelectedItemId,
   };
 };

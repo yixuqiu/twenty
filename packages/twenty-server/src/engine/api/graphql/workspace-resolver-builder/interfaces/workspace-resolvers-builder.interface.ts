@@ -1,31 +1,27 @@
-import { GraphQLFieldResolver } from 'graphql';
+import { type GraphQLFieldResolver } from 'graphql';
+import {
+  type ObjectRecord,
+  type OrderByWithGroupBy,
+} from 'twenty-shared/types';
 
 import {
-  Record,
-  RecordFilter,
-  RecordOrderBy,
-} from 'src/engine/api/graphql/workspace-query-builder/interfaces/record.interface';
+  type ObjectRecordFilter,
+  type ObjectRecordGroupBy,
+  type ObjectRecordOrderBy,
+} from 'src/engine/api/graphql/workspace-query-builder/interfaces/object-record.interface';
 
-import { workspaceResolverBuilderMethodNames } from 'src/engine/api/graphql/workspace-resolver-builder/factories/factories';
+import { type ShareWithInput } from 'src/engine/permissions/record-share/types/share-with-input.type';
+import { RESOLVER_METHOD_NAMES } from 'src/engine/api/graphql/workspace-resolver-builder/constants/resolver-method-names';
+import { type workspaceResolverBuilderMethodNames } from 'src/engine/api/graphql/workspace-resolver-builder/factories/factories';
 
+// oxlint-disable-next-line typescript/no-explicit-any
 export type Resolver<Args = any> = GraphQLFieldResolver<any, any, Args>;
 
-export enum ResolverArgsType {
-  FindMany = 'FindMany',
-  FindOne = 'FindOne',
-  FindDuplicates = 'FindDuplicates',
-  CreateOne = 'CreateOne',
-  CreateMany = 'CreateMany',
-  UpdateOne = 'UpdateOne',
-  UpdateMany = 'UpdateMany',
-  DeleteOne = 'DeleteOne',
-  DeleteMany = 'DeleteMany',
-  ExecuteQuickActionOnOne = 'ExecuteQuickActionOnOne',
-}
+export const ResolverArgsType = RESOLVER_METHOD_NAMES;
 
 export interface FindManyResolverArgs<
-  Filter extends RecordFilter = RecordFilter,
-  OrderBy extends RecordOrderBy = RecordOrderBy,
+  Filter extends ObjectRecordFilter = ObjectRecordFilter,
+  OrderBy extends ObjectRecordOrderBy = ObjectRecordOrderBy,
 > {
   first?: number;
   last?: number;
@@ -33,32 +29,56 @@ export interface FindManyResolverArgs<
   after?: string;
   filter?: Filter;
   orderBy?: OrderBy;
+  offset?: number;
 }
 
-export interface FindOneResolverArgs<Filter = any> {
+export interface FindOneResolverArgs<Filter = ObjectRecordFilter> {
   filter?: Filter;
 }
 
-export interface FindDuplicatesResolverArgs<Data extends Record = Record> {
-  id?: string;
-  data?: Data;
+export interface FindDuplicatesResolverArgs<
+  Data extends Partial<ObjectRecord> = Partial<ObjectRecord>,
+> {
+  ids?: string[];
+  data?: Data[];
 }
 
-export interface CreateOneResolverArgs<Data extends Record = Record> {
+export interface CreateOneResolverArgs<
+  Data extends Partial<ObjectRecord> = Partial<ObjectRecord>,
+> {
   data: Data;
+  upsert?: boolean;
+  shareWith?: ShareWithInput[];
 }
 
-export interface CreateManyResolverArgs<Data extends Record = Record> {
+export interface CreateManyResolverArgs<
+  Data extends Partial<ObjectRecord> = Partial<ObjectRecord>,
+> {
   data: Data[];
+  upsert?: boolean;
+  shareWith?: ShareWithInput[];
 }
 
-export interface UpdateOneResolverArgs<Data extends Record = Record> {
+export interface GroupByResolverArgs<Filter = ObjectRecordFilter> {
+  filter?: Filter;
+  groupBy: ObjectRecordGroupBy;
+  viewId?: string;
+  orderBy?: OrderByWithGroupBy;
+  orderByForRecords?: ObjectRecordOrderBy;
+  offsetForRecords?: number;
+  limit?: number;
+}
+
+export interface UpdateOneResolverArgs<
+  Data extends Partial<ObjectRecord> = Partial<ObjectRecord>,
+> {
   id: string;
   data: Data;
 }
 
 export interface UpdateManyResolverArgs<
-  Data extends Record = Record,
+  Data extends Partial<ObjectRecord> = Partial<ObjectRecord>,
+  // oxlint-disable-next-line typescript/no-explicit-any
   Filter = any,
 > {
   filter: Filter;
@@ -69,11 +89,32 @@ export interface DeleteOneResolverArgs {
   id: string;
 }
 
-export interface ExecuteQuickActionOnOneResolverArgs {
+// oxlint-disable-next-line typescript/no-explicit-any
+export interface DeleteManyResolverArgs<Filter = any> {
+  filter: Filter;
+}
+
+export interface RestoreOneResolverArgs {
   id: string;
 }
 
-export interface DeleteManyResolverArgs<Filter = any> {
+// oxlint-disable-next-line typescript/no-explicit-any
+export interface RestoreManyResolverArgs<Filter = any> {
+  filter: Filter;
+}
+
+export interface MergeManyResolverArgs {
+  ids: string[];
+  conflictPriorityIndex: number;
+  dryRun?: boolean;
+}
+
+export interface DestroyOneResolverArgs {
+  id: string;
+}
+
+// oxlint-disable-next-line typescript/no-explicit-any
+export interface DestroyManyResolverArgs<Filter = any> {
   filter: Filter;
 }
 
@@ -95,10 +136,15 @@ export interface WorkspaceResolverBuilderMethods {
 export type ResolverArgs =
   | CreateManyResolverArgs
   | CreateOneResolverArgs
+  | GroupByResolverArgs
   | DeleteManyResolverArgs
   | DeleteOneResolverArgs
+  | DestroyManyResolverArgs
+  | FindDuplicatesResolverArgs
   | FindManyResolverArgs
   | FindOneResolverArgs
-  | FindDuplicatesResolverArgs
+  | MergeManyResolverArgs
+  | RestoreManyResolverArgs
+  | RestoreOneResolverArgs
   | UpdateManyResolverArgs
   | UpdateOneResolverArgs;

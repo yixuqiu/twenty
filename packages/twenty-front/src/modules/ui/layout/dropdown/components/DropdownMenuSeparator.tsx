@@ -1,10 +1,15 @@
-import styled from '@emotion/styled';
+import { styled } from '@linaria/react';
+import { forwardRef } from 'react';
+import { themeCssVariables } from 'twenty-ui/theme';
 
 const StyledDropdownMenuSeparator = styled.div`
-  background-color: ${({ theme }) => theme.border.color.light};
-  height: 1px;
-
+  background-color: ${themeCssVariables.border.color.light};
+  min-height: 1px;
   width: 100%;
 `;
 
-export const DropdownMenuSeparator = StyledDropdownMenuSeparator;
+export const DropdownMenuSeparator = forwardRef<HTMLDivElement>((_, ref) => {
+  return <StyledDropdownMenuSeparator ref={ref} data-dropdown-menu-separator />;
+});
+
+DropdownMenuSeparator.displayName = 'DropdownMenuSeparator';

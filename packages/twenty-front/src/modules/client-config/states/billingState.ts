@@ -1,8 +1,7 @@
-import { createState } from 'twenty-ui';
+import { type Billing } from '~/generated-metadata/graphql';
+import { createAtomState } from '@/ui/utilities/state/jotai/utils/createAtomState';
 
-import { Billing } from '~/generated/graphql';
-
-export const billingState = createState<Billing | null>({
+export const billingState = createAtomState<Billing | null>({
   key: 'billingState',
   defaultValue: null,
 });

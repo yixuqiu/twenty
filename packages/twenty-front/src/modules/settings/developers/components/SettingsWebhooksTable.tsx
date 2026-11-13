@@ -1,50 +1,47 @@
-import { useNavigate } from 'react-router-dom';
-import styled from '@emotion/styled';
-
-import { CoreObjectNameSingular } from '@/object-metadata/types/CoreObjectNameSingular';
-import { useFindManyRecords } from '@/object-record/hooks/useFindManyRecords';
+import { styled } from '@linaria/react';
 import { SettingsDevelopersWebhookTableRow } from '@/settings/developers/components/SettingsDevelopersWebhookTableRow';
-import { Webhook } from '@/settings/developers/types/webhook/Webhook';
+import { WEBHOOK_TABLE_ROW_GRID_TEMPLATE_COLUMNS } from '@/settings/developers/constants/WebhookTableRowGridTemplateColumns';
 import { Table } from '@/ui/layout/table/components/Table';
 import { TableBody } from '@/ui/layout/table/components/TableBody';
 import { TableHeader } from '@/ui/layout/table/components/TableHeader';
 import { TableRow } from '@/ui/layout/table/components/TableRow';
+import { SettingsPath } from 'twenty-shared/types';
+import { getSettingsPath } from 'twenty-shared/utils';
+import { useQuery } from '@apollo/client/react';
+import { GetWebhooksDocument } from '~/generated-metadata/graphql';
+import { useLingui } from '@lingui/react/macro';
 
-const StyledTableBody = styled(TableBody)`
-  border-bottom: 1px solid ${({ theme }) => theme.border.color.light};
-`;
-
-const StyledTableRow = styled(TableRow)`
-  grid-template-columns: 444px 68px;
+const StyledTableBodyContainer = styled.div`
+  max-height: 260px;
+  overflow-y: auto;
 `;
 
 export const SettingsWebhooksTable = () => {
-  const navigate = useNavigate();
+  const { t } = useLingui();
+  const { data: webhooksData } = useQuery(GetWebhooksDocument);
 
-  const { records: webhooks } = useFindManyRecords<Webhook>({
-    objectNameSingular: CoreObjectNameSingular.Webhook,
-  });
+  const webhooks = webhooksData?.webhooks;
 
   return (
     <Table>
-      <StyledTableRow>
-        <TableHeader>Url</TableHeader>
+      <TableRow gridTemplateColumns={WEBHOOK_TABLE_ROW_GRID_TEMPLATE_COLUMNS}>
+        <TableHeader>{t`URL`}</TableHeader>
         <TableHeader></TableHeader>
-      </StyledTableRow>
-      {!!webhooks.length && (
-        <StyledTableBody>
-          {webhooks.map((webhookFieldItem) => (
-            <SettingsDevelopersWebhookTableRow
-              key={webhookFieldItem.id}
-              fieldItem={webhookFieldItem}
-              onClick={() => {
-                navigate(
-                  `/settings/developers/webhooks/${webhookFieldItem.id}`,
-                );
-              }}
-            />
-          ))}
-        </StyledTableBody>
+      </TableRow>
+      {!!webhooks?.length && (
+        <StyledTableBodyContainer>
+          <TableBody>
+            {webhooks.map((webhookFieldItem) => (
+              <SettingsDevelopersWebhookTableRow
+                key={webhookFieldItem.id}
+                webhook={webhookFieldItem}
+                to={getSettingsPath(SettingsPath.WebhookDetail, {
+                  webhookId: webhookFieldItem.id,
+                })}
+              />
+            ))}
+          </TableBody>
+        </StyledTableBodyContainer>
       )}
     </Table>
   );

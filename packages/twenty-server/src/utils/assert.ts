@@ -1,4 +1,4 @@
-import { HttpException } from '@nestjs/common';
+import { type HttpException } from '@nestjs/common';
 
 type Assert = (
   condition: unknown,
@@ -6,9 +6,6 @@ type Assert = (
   ErrorType?: new (message?: string) => HttpException,
 ) => asserts condition;
 
-/**
- * assert condition and throws a HttpException
- */
 export const assert: Assert = (condition, message, ErrorType) => {
   if (!condition) {
     if (ErrorType) {
@@ -23,5 +20,6 @@ export const assert: Assert = (condition, message, ErrorType) => {
   }
 };
 
-export const assertNotNull = <T>(item: T): item is NonNullable<T> =>
-  item !== null && item !== undefined;
+export const assertNever = (_value: never, message?: string): never => {
+  throw new Error(message ?? "Didn't expect to get here.");
+};

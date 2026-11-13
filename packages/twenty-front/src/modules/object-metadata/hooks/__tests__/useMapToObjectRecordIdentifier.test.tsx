@@ -1,7 +1,11 @@
 import { renderHook } from '@testing-library/react';
-import { RecoilRoot } from 'recoil';
 
 import { useMapToObjectRecordIdentifier } from '@/object-metadata/hooks/useMapToObjectRecordIdentifier';
+import { getJestMetadataAndApolloMocksWrapper } from '~/testing/jest/getJestMetadataAndApolloMocksWrapper';
+
+const Wrapper = getJestMetadataAndApolloMocksWrapper({
+  apolloMocks: [],
+});
 
 describe('useMapToObjectRecordIdentifier', () => {
   it('should work as expected', async () => {
@@ -9,6 +13,7 @@ describe('useMapToObjectRecordIdentifier', () => {
       () => {
         const { mapToObjectRecordIdentifier } = useMapToObjectRecordIdentifier({
           objectNameSingular: 'person',
+          allowRequestsToTwentyIcons: true,
         });
 
         return mapToObjectRecordIdentifier({
@@ -18,7 +23,7 @@ describe('useMapToObjectRecordIdentifier', () => {
         });
       },
       {
-        wrapper: RecoilRoot,
+        wrapper: Wrapper,
       },
     );
 
@@ -26,7 +31,7 @@ describe('useMapToObjectRecordIdentifier', () => {
       id: 'id',
       name: 'Sheldon Cooper',
       avatarUrl: '',
-      avatarType: 'rounded',
+      avatarShape: 'circle',
       linkToShowPage: '/object/person/id',
     });
   });

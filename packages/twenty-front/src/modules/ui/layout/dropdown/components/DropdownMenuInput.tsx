@@ -1,57 +1,89 @@
-import { forwardRef, InputHTMLAttributes, ReactNode, useRef } from 'react';
-import { css } from '@emotion/react';
-import styled from '@emotion/styled';
+import { styled } from '@linaria/react';
+import {
+  forwardRef,
+  useRef,
+  type InputHTMLAttributes,
+  type ReactNode,
+} from 'react';
+import 'react-phone-number-input/style.css';
 
-import { useRegisterInputEvents } from '@/object-record/record-field/meta-types/input/hooks/useRegisterInputEvents';
-import { RGBA } from '@/ui/theme/constants/Rgba';
-import { TEXT_INPUT_STYLE } from '@/ui/theme/constants/TextInputStyle';
-import { useCombinedRefs } from '~/hooks/useCombinedRefs';
+import { useRegisterInputEvents } from '@/ui/input/hooks/useRegisterInputEvents';
+import { isDefined } from 'twenty-shared/utils';
+import { themeCssVariables } from 'twenty-ui/theme';
+import { combineRefs } from '~/utils/combineRefs';
 
-const StyledInput = styled.input<{ withRightComponent?: boolean }>`
-  ${TEXT_INPUT_STYLE}
-
-  border: 1px solid ${({ theme }) => theme.border.color.medium};
-  border-radius: ${({ theme }) => theme.border.radius.sm};
+const StyledInput = styled.input<{
+  withRightComponent?: boolean;
+  hasError?: boolean;
+}>`
+  background-color: transparent;
+  border: none;
   box-sizing: border-box;
-  font-weight: ${({ theme }) => theme.font.weight.medium};
-  height: 32px;
-  position: relative;
-  width: 100%;
+  color: ${themeCssVariables.font.color.primary};
+  font-family: ${themeCssVariables.font.family};
+  font-size: inherit;
+  font-weight: ${themeCssVariables.font.weight.medium};
+  font-weight: inherit;
 
-  &:focus {
-    border-color: ${({ theme }) => theme.color.blue};
-    box-shadow: 0px 0px 0px 3px ${({ theme }) => RGBA(theme.color.blue, 0.1)};
+  &::placeholder,
+  &::-webkit-input-placeholder {
+    color: ${themeCssVariables.font.color.light};
+    font-family: ${themeCssVariables.font.family};
+    font-weight: ${themeCssVariables.font.weight.medium};
   }
 
-  ${({ withRightComponent }) =>
-    withRightComponent &&
-    css`
-      padding-right: 32px;
-    `}
+  height: 32px;
+  outline: none;
+  padding: ${themeCssVariables.spacing[0]} ${themeCssVariables.spacing[2]};
+  padding-left: ${themeCssVariables.spacing[1]};
+  padding-right: ${({ withRightComponent }) =>
+    withRightComponent ? '32px' : '0'};
+  position: relative;
+
+  width: 100%;
 `;
 
 const StyledInputContainer = styled.div`
+  background-color: transparent;
   box-sizing: border-box;
-  padding: ${({ theme }) => theme.spacing(1)};
   position: relative;
   width: 100%;
+
+  &:not(:first-of-type) {
+    padding: ${themeCssVariables.spacing[1]};
+  }
 `;
 
 const StyledRightContainer = styled.div`
   position: absolute;
-  right: ${({ theme }) => theme.spacing(2)};
+  right: ${themeCssVariables.spacing[2]};
   top: 50%;
   transform: translateY(-50%);
 `;
 
-type DropdownMenuInputProps = InputHTMLAttributes<HTMLInputElement> & {
-  hotkeyScope?: string;
+const StyledErrorDiv = styled.div`
+  color: ${themeCssVariables.color.red};
+  padding: 0 ${themeCssVariables.spacing[2]};
+`;
+
+type HTMLInputProps = InputHTMLAttributes<HTMLInputElement>;
+
+export type DropdownMenuInputProps = HTMLInputProps & {
+  instanceId: string;
   onClickOutside?: () => void;
   onEnter?: () => void;
   onEscape?: () => void;
   onShiftTab?: () => void;
   onTab?: () => void;
   rightComponent?: ReactNode;
+  renderInput?: (props: {
+    value: HTMLInputProps['value'];
+    onChange: HTMLInputProps['onChange'];
+    autoFocus: HTMLInputProps['autoFocus'];
+    placeholder: HTMLInputProps['placeholder'];
+  }) => React.ReactNode;
+  error?: string | null;
+  hasError?: boolean;
 };
 
 export const DropdownMenuInput = forwardRef<
@@ -64,7 +96,7 @@ export const DropdownMenuInput = forwardRef<
       className,
       value,
       placeholder,
-      hotkeyScope = 'dropdown-menu-input',
+      instanceId,
       onChange,
       onClickOutside,
       onEnter = () => {},
@@ -72,13 +104,17 @@ export const DropdownMenuInput = forwardRef<
       onShiftTab,
       onTab,
       rightComponent,
+      renderInput,
+      error = '',
+      hasError = false,
     },
     ref,
   ) => {
     const inputRef = useRef<HTMLInputElement>(null);
-    const combinedRef = useCombinedRefs(ref, inputRef);
+    const combinedRef = combineRefs(ref, inputRef);
 
     useRegisterInputEvents({
+      focusId: instanceId,
       inputRef,
       inputValue: value,
       onEnter,
@@ -86,23 +122,35 @@ export const DropdownMenuInput = forwardRef<
       onClickOutside,
       onTab,
       onShiftTab,
-      hotkeyScope,
     });
 
     return (
-      <StyledInputContainer className={className}>
-        <StyledInput
-          autoFocus={autoFocus}
-          value={value}
-          placeholder={placeholder}
-          onChange={onChange}
-          ref={combinedRef}
-          withRightComponent={!!rightComponent}
-        />
-        {!!rightComponent && (
-          <StyledRightContainer>{rightComponent}</StyledRightContainer>
-        )}
-      </StyledInputContainer>
+      <>
+        <StyledInputContainer className={className}>
+          {renderInput ? (
+            renderInput({
+              value,
+              onChange,
+              autoFocus,
+              placeholder,
+            })
+          ) : (
+            <StyledInput
+              hasError={hasError}
+              autoFocus={autoFocus}
+              value={value}
+              placeholder={placeholder}
+              onChange={onChange}
+              ref={combinedRef}
+              withRightComponent={isDefined(rightComponent)}
+            />
+          )}
+          {isDefined(rightComponent) && (
+            <StyledRightContainer>{rightComponent}</StyledRightContainer>
+          )}
+        </StyledInputContainer>
+        {error && <StyledErrorDiv>{error}</StyledErrorDiv>}
+      </>
     );
   },
 );

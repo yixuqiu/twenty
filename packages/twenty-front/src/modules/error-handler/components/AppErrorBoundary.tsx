@@ -1,21 +1,39 @@
-import { ErrorInfo, ReactNode } from 'react';
-import { ErrorBoundary } from 'react-error-boundary';
-import * as Sentry from '@sentry/react';
+import { AppErrorBoundaryEffect } from '@/error-handler/components/internal/AppErrorBoundaryEffect';
+import { handleAppError } from '@/error-handler/utils/handleAppError';
+import { type ReactNode } from 'react';
+import { ErrorBoundary, type FallbackProps } from 'react-error-boundary';
+import { reloadWindow } from '~/utils/reloadWindow';
 
-import { GenericErrorFallback } from '@/error-handler/components/GenericErrorFallback';
+type AppErrorBoundaryProps = {
+  children: ReactNode;
+  FallbackComponent: React.ComponentType<FallbackProps>;
+  resetOnLocationChange?: boolean;
+};
 
-export const AppErrorBoundary = ({ children }: { children: ReactNode }) => {
-  const handleError = (_error: Error, _info: ErrorInfo) => {
-    Sentry.captureException(_error, (scope) => {
-      scope.setExtras({ _info });
-      return scope;
-    });
+export const AppErrorBoundary = ({
+  children,
+  FallbackComponent,
+  resetOnLocationChange = true,
+}: AppErrorBoundaryProps) => {
+  const handleReset = () => {
+    reloadWindow();
   };
 
   return (
     <ErrorBoundary
-      FallbackComponent={GenericErrorFallback}
-      onError={handleError}
+      FallbackComponent={({ error, resetErrorBoundary }) => (
+        <>
+          {resetOnLocationChange && (
+            <AppErrorBoundaryEffect resetErrorBoundary={resetErrorBoundary} />
+          )}
+          <FallbackComponent
+            error={error}
+            resetErrorBoundary={resetErrorBoundary}
+          />
+        </>
+      )}
+      onError={(error, errorInfo) => handleAppError({ error, errorInfo })}
+      onReset={handleReset}
     >
       {children}
     </ErrorBoundary>

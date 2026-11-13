@@ -1,28 +1,30 @@
-import { useRecoilCallback } from 'recoil';
+import { useStore } from 'jotai';
+import { useCallback } from 'react';
 
-import { useRecordTableStates } from '@/object-record/record-table/hooks/internal/useRecordTableStates';
-import { getSnapshotValue } from '@/ui/utilities/recoil-scope/utils/getSnapshotValue';
+import { recordTableCellEditModePositionComponentState } from '@/object-record/record-table/states/recordTableCellEditModePositionComponentState';
+import { useRemoveLastFocusItemFromFocusStackByComponentType } from '@/ui/utilities/focus/hooks/useRemoveFocusItemFromFocusStackByComponentType';
+import { FocusComponentType } from '@/ui/utilities/focus/types/FocusComponentType';
+import { useAtomComponentStateCallbackState } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateCallbackState';
 
 export const useCloseCurrentTableCellInEditMode = (recordTableId?: string) => {
-  const {
-    currentTableCellInEditModePositionState,
-    isTableCellInEditModeFamilyState,
-  } = useRecordTableStates(recordTableId);
-
-  return useRecoilCallback(
-    ({ set, snapshot }) => {
-      return async () => {
-        const currentTableCellInEditModePosition = getSnapshotValue(
-          snapshot,
-          currentTableCellInEditModePositionState,
-        );
-
-        set(
-          isTableCellInEditModeFamilyState(currentTableCellInEditModePosition),
-          false,
-        );
-      };
-    },
-    [currentTableCellInEditModePositionState, isTableCellInEditModeFamilyState],
+  const store = useStore();
+  const currentTableCellInEditModePosition = useAtomComponentStateCallbackState(
+    recordTableCellEditModePositionComponentState,
+    recordTableId,
   );
+
+  const { removeLastFocusItemFromFocusStackByComponentType } =
+    useRemoveLastFocusItemFromFocusStackByComponentType();
+
+  return useCallback(() => {
+    store.set(currentTableCellInEditModePosition, null);
+
+    removeLastFocusItemFromFocusStackByComponentType({
+      componentType: FocusComponentType.OPENED_FIELD_INPUT,
+    });
+  }, [
+    store,
+    currentTableCellInEditModePosition,
+    removeLastFocusItemFromFocusStackByComponentType,
+  ]);
 };

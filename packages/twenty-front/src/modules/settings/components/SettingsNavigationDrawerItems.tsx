@@ -1,116 +1,130 @@
-import { useRecoilValue } from 'recoil';
-import {
-  IconApps,
-  IconAt,
-  IconCalendarEvent,
-  IconCode,
-  IconColorSwatch,
-  IconCurrencyDollar,
-  IconDoorEnter,
-  IconHierarchy2,
-  IconMail,
-  IconSettings,
-  IconUserCircle,
-  IconUsers,
-} from 'twenty-ui';
-
-import { useSignOutAndRedirect } from '@/auth/hooks/useSignOutAndRedirect';
-import { billingState } from '@/client-config/states/billingState';
 import { SettingsNavigationDrawerItem } from '@/settings/components/SettingsNavigationDrawerItem';
-import { SettingsPath } from '@/types/SettingsPath';
-import { NavigationDrawerItem } from '@/ui/navigation/navigation-drawer/components/NavigationDrawerItem';
+import {
+  type SettingsNavigationItem,
+  type SettingsNavigationSection,
+  useSettingsNavigationItems,
+} from '@/settings/hooks/useSettingsNavigationItems';
+import { CollapsibleNavigationDrawerSection } from '@/ui/navigation/navigation-drawer/components/CollapsibleNavigationDrawerSection';
 import { NavigationDrawerItemGroup } from '@/ui/navigation/navigation-drawer/components/NavigationDrawerItemGroup';
-import { NavigationDrawerSection } from '@/ui/navigation/navigation-drawer/components/NavigationDrawerSection';
-import { NavigationDrawerSectionTitle } from '@/ui/navigation/navigation-drawer/components/NavigationDrawerSectionTitle';
+import { getNavigationSubItemLeftAdornment } from '@/ui/navigation/navigation-drawer/utils/getNavigationSubItemLeftAdornment';
+import { styled } from '@linaria/react';
+import { matchPath, resolvePath, useLocation } from 'react-router-dom';
+import { themeCssVariables } from 'twenty-ui/theme';
+import { getSettingsPath } from 'twenty-shared/utils';
+
+const StyledSectionsContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: ${themeCssVariables.spacing[3]};
+`;
+
+const renderSectionItem = (
+  item: SettingsNavigationItem,
+  index: number,
+  section: SettingsNavigationSection,
+  getSelectedIndexForSubItems: (subItems: SettingsNavigationItem[]) => number,
+) => {
+  const subItems = item.subItems;
+  if (Array.isArray(subItems) && subItems.length > 0) {
+    const selectedSubItemIndex = getSelectedIndexForSubItems(subItems);
+    const hasActiveSubItem = selectedSubItemIndex !== -1;
+
+    return (
+      <NavigationDrawerItemGroup key={item.path || `group-${index}`}>
+        <SettingsNavigationDrawerItem
+          item={item}
+          hasActiveSubItem={hasActiveSubItem}
+          subItemState={
+            item.indentationLevel
+              ? getNavigationSubItemLeftAdornment({
+                  arrayLength: section.items.length,
+                  index,
+                  selectedIndex: selectedSubItemIndex,
+                })
+              : undefined
+          }
+        />
+        {subItems.map((subItem, subIndex) => (
+          <SettingsNavigationDrawerItem
+            key={subItem.path || `subitem-${subIndex}`}
+            item={subItem}
+            subItemState={
+              subItem.indentationLevel
+                ? getNavigationSubItemLeftAdornment({
+                    arrayLength: subItems.length,
+                    index: subIndex,
+                    selectedIndex: selectedSubItemIndex,
+                  })
+                : undefined
+            }
+          />
+        ))}
+      </NavigationDrawerItemGroup>
+    );
+  }
+  return (
+    <SettingsNavigationDrawerItem
+      key={item.path || `item-${index}`}
+      item={item}
+      subItemState={
+        item.indentationLevel
+          ? getNavigationSubItemLeftAdornment({
+              arrayLength: section.items.length,
+              index,
+              selectedIndex: index,
+            })
+          : undefined
+      }
+    />
+  );
+};
 
 export const SettingsNavigationDrawerItems = () => {
-  const handleLogout = useSignOutAndRedirect();
+  const settingsNavigationItems: SettingsNavigationSection[] =
+    useSettingsNavigationItems();
 
-  const billing = useRecoilValue(billingState);
+  const currentPathName = useLocation().pathname;
+
+  const getSelectedIndexForSubItems = (subItems: SettingsNavigationItem[]) => {
+    return subItems.findIndex((subItem) => {
+      const href = subItem.path ? getSettingsPath(subItem.path) : '';
+      const pathName = resolvePath(href).pathname;
+
+      return matchPath(
+        {
+          path: pathName,
+          end: subItem.matchSubPages === false,
+        },
+        currentPathName,
+      );
+    });
+  };
 
   return (
-    <>
-      <NavigationDrawerSection>
-        <NavigationDrawerSectionTitle label="User" />
-        <SettingsNavigationDrawerItem
-          label="Profile"
-          path={SettingsPath.ProfilePage}
-          Icon={IconUserCircle}
-        />
-        <SettingsNavigationDrawerItem
-          label="Appearance"
-          path={SettingsPath.Appearance}
-          Icon={IconColorSwatch}
-        />
+    <StyledSectionsContainer>
+      {settingsNavigationItems.map((section) => {
+        const allItemsHidden = section.items.every((item) => item.isHidden);
+        if (allItemsHidden) {
+          return null;
+        }
 
-        <NavigationDrawerItemGroup>
-          <SettingsNavigationDrawerItem
-            label="Accounts"
-            path={SettingsPath.Accounts}
-            Icon={IconAt}
-          />
-          <SettingsNavigationDrawerItem
-            level={2}
-            label="Emails"
-            path={SettingsPath.AccountsEmails}
-            Icon={IconMail}
-            matchSubPages
-          />
-          <SettingsNavigationDrawerItem
-            level={2}
-            label="Calendars"
-            path={SettingsPath.AccountsCalendars}
-            Icon={IconCalendarEvent}
-            matchSubPages
-          />
-        </NavigationDrawerItemGroup>
-      </NavigationDrawerSection>
-
-      <NavigationDrawerSection>
-        <NavigationDrawerSectionTitle label="Workspace" />
-        <SettingsNavigationDrawerItem
-          label="General"
-          path={SettingsPath.Workspace}
-          Icon={IconSettings}
-        />
-        <SettingsNavigationDrawerItem
-          label="Members"
-          path={SettingsPath.WorkspaceMembersPage}
-          Icon={IconUsers}
-        />
-        {billing?.isBillingEnabled && (
-          <SettingsNavigationDrawerItem
-            label="Billing"
-            path={SettingsPath.Billing}
-            Icon={IconCurrencyDollar}
-          />
-        )}
-        <SettingsNavigationDrawerItem
-          label="Data model"
-          path={SettingsPath.Objects}
-          Icon={IconHierarchy2}
-          matchSubPages
-        />
-        <SettingsNavigationDrawerItem
-          label="Developers"
-          path={SettingsPath.Developers}
-          Icon={IconCode}
-        />
-        <SettingsNavigationDrawerItem
-          label="Integrations"
-          path={SettingsPath.Integrations}
-          Icon={IconApps}
-        />
-      </NavigationDrawerSection>
-
-      <NavigationDrawerSection>
-        <NavigationDrawerSectionTitle label="Other" />
-        <NavigationDrawerItem
-          label="Logout"
-          onClick={handleLogout}
-          Icon={IconDoorEnter}
-        />
-      </NavigationDrawerSection>
-    </>
+        return (
+          <CollapsibleNavigationDrawerSection
+            key={section.label}
+            sectionId={`settings/${section.label}`}
+            label={section.label}
+          >
+            {section.items.map((item, index) =>
+              renderSectionItem(
+                item,
+                index,
+                section,
+                getSelectedIndexForSubItems,
+              ),
+            )}
+          </CollapsibleNavigationDrawerSection>
+        );
+      })}
+    </StyledSectionsContainer>
   );
 };

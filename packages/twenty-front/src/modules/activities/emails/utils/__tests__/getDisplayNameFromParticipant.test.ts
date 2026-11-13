@@ -1,12 +1,16 @@
-import { EmailThreadMessageParticipant } from '@/activities/emails/types/EmailThreadMessageParticipant';
+import { type EmailThreadMessageParticipant } from '@/activities/emails/types/EmailThreadMessageParticipant';
 
-import { getDisplayNameFromParticipant } from '../getDisplayNameFromParticipant';
+import { MessageParticipantRole } from 'twenty-shared/types';
+import { getDisplayNameFromParticipant } from '@/activities/emails/utils/getDisplayNameFromParticipant';
 
 describe('getDisplayNameFromParticipant', () => {
   const participantWithName: EmailThreadMessageParticipant = {
+    id: '2cac0ba7-0e60-46c6-86e7-e5b0bc55b7cf',
+    __typename: 'EmailThreadMessageParticipant',
     displayName: '',
     handle: '',
-    role: 'from',
+    role: MessageParticipantRole.FROM,
+    messageId: '638f52d1-fd55-4a2b-b0f3-9858ea3b2e91',
     person: {
       __typename: 'Person',
       id: '1',
@@ -20,14 +24,9 @@ describe('getDisplayNameFromParticipant', () => {
       avatarUrl: '',
       jobTitle: '',
       linkedinLink: {
-        url: '',
-        label: '',
+        primaryLinkUrl: '',
+        primaryLinkLabel: '',
       },
-      xLink: {
-        url: '',
-        label: '',
-      },
-      city: '',
       email: '',
       phone: '',
       companyId: '',
@@ -44,40 +43,41 @@ describe('getDisplayNameFromParticipant', () => {
       updatedAt: '',
       userEmail: '',
       userId: '',
+      colorScheme: 'Light',
     },
   };
 
-  const participantWithHandle: any = {
+  const participantWithHandle = {
     displayName: '',
     handle: 'user_handle',
-    role: 'from',
-  };
+    role: MessageParticipantRole.FROM,
+  } as EmailThreadMessageParticipant;
 
-  const participantWithDisplayName: any = {
+  const participantWithDisplayName = {
     displayName: 'User123',
     handle: '',
-    role: 'from',
-  };
+    role: MessageParticipantRole.FROM,
+  } as EmailThreadMessageParticipant;
 
-  const participantWithoutInfo: any = {
+  const participantWithoutInfo = {
     displayName: '',
     handle: '',
-    role: 'from',
-  };
+    role: MessageParticipantRole.FROM,
+  } as EmailThreadMessageParticipant;
 
-  it('should return full name when shouldUseFullName is true', () => {
+  it('should prefer the workspace member full name when shouldUseFullName is true', () => {
     expect(
       getDisplayNameFromParticipant({
         participant: participantWithName,
         shouldUseFullName: true,
       }),
-    ).toBe('John Doe');
+    ).toBe('Jane Smith');
   });
 
-  it('should return first name when shouldUseFullName is false', () => {
+  it('should prefer the workspace member first name when shouldUseFullName is false', () => {
     expect(
       getDisplayNameFromParticipant({ participant: participantWithName }),
-    ).toBe('John');
+    ).toBe('Jane');
   });
 
   it('should return displayName if it is a non-empty string', () => {
@@ -92,6 +92,38 @@ describe('getDisplayNameFromParticipant', () => {
     expect(
       getDisplayNameFromParticipant({ participant: participantWithHandle }),
     ).toBe('user_handle');
+  });
+
+  it('should not append whitespace for a missing last name', () => {
+    const participantWithFirstNameOnly = {
+      displayName: '',
+      handle: '',
+      role: MessageParticipantRole.FROM,
+      person: { name: { firstName: 'John', lastName: '' } },
+    };
+
+    expect(
+      getDisplayNameFromParticipant({
+        participant: participantWithFirstNameOnly,
+        shouldUseFullName: true,
+      }),
+    ).toBe('John');
+  });
+
+  it('should fall back to displayName when the resolved name is empty', () => {
+    const participantWithEmptyPersonName = {
+      displayName: 'User123',
+      handle: '',
+      role: MessageParticipantRole.FROM,
+      person: { name: { firstName: '', lastName: '' } },
+    };
+
+    expect(
+      getDisplayNameFromParticipant({
+        participant: participantWithEmptyPersonName,
+        shouldUseFullName: true,
+      }),
+    ).toBe('User123');
   });
 
   it('should return Unknown if no suitable information is available', () => {

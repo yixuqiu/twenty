@@ -1,9 +1,8 @@
-import { ApolloCache, Modifiers } from '@apollo/client/cache';
+import { type ApolloCache, type Modifiers } from '@apollo/client/cache';
 
-import { ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
-import { ObjectRecord } from '@/object-record/types/ObjectRecord';
-import { isUndefinedOrNull } from '~/utils/isUndefinedOrNull';
-import { capitalize } from '~/utils/string/capitalize';
+import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/EnrichedObjectMetadataItem';
+import { type ObjectRecord } from '@/object-record/types/ObjectRecord';
+import { capitalize, isDefined } from 'twenty-shared/utils';
 
 export const modifyRecordFromCache = <
   CachedObjectRecord extends ObjectRecord = ObjectRecord,
@@ -13,12 +12,14 @@ export const modifyRecordFromCache = <
   fieldModifiers,
   recordId,
 }: {
-  objectMetadataItem: ObjectMetadataItem;
-  cache: ApolloCache<object>;
+  objectMetadataItem: EnrichedObjectMetadataItem;
+  cache: ApolloCache;
   fieldModifiers: Modifiers<CachedObjectRecord>;
   recordId: string;
 }) => {
-  if (isUndefinedOrNull(objectMetadataItem)) return;
+  if (!isDefined(objectMetadataItem)) {
+    return;
+  }
 
   const cachedRecordId = cache.identify({
     __typename: capitalize(objectMetadataItem.nameSingular),

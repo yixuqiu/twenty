@@ -1,20 +1,24 @@
+import { styled } from '@linaria/react';
 import { useCallback, useEffect, useState } from 'react';
-import styled from '@emotion/styled';
-import { useRecoilValue, useSetRecoilState } from 'recoil';
 import { useDebouncedCallback } from 'use-debounce';
 
 import { currentWorkspaceState } from '@/auth/states/currentWorkspaceState';
-import { TextInput } from '@/ui/input/components/TextInput';
-import { useUpdateWorkspaceMutation } from '~/generated/graphql';
-import { isDefined } from '~/utils/isDefined';
-import { isUndefinedOrNull } from '~/utils/isUndefinedOrNull';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import { useSetAtomState } from '@/ui/utilities/state/jotai/hooks/useSetAtomState';
+import { SettingsTextInput } from '@/ui/input/components/SettingsTextInput';
+import { useLingui } from '@lingui/react/macro';
+import isEmpty from 'lodash.isempty';
+import { isDefined } from 'twenty-shared/utils';
+import { themeCssVariables } from 'twenty-ui/theme';
+import { useMutation } from '@apollo/client/react';
+import { UpdateWorkspaceDocument } from '~/generated-metadata/graphql';
 import { logError } from '~/utils/logError';
 
 const StyledComboInputContainer = styled.div`
   display: flex;
   flex-direction: row;
   > * + * {
-    margin-left: ${({ theme }) => theme.spacing(4)};
+    margin-left: ${themeCssVariables.spacing[4]};
   }
 `;
 
@@ -27,20 +31,23 @@ export const NameField = ({
   autoSave = true,
   onNameUpdate,
 }: NameFieldProps) => {
-  const currentWorkspace = useRecoilValue(currentWorkspaceState);
-  const setCurrentWorkspace = useSetRecoilState(currentWorkspaceState);
+  const { t } = useLingui();
+  const currentWorkspace = useAtomStateValue(currentWorkspaceState);
+  const setCurrentWorkspace = useSetAtomState(currentWorkspaceState);
 
   const [displayName, setDisplayName] = useState(
     currentWorkspace?.displayName ?? '',
   );
 
-  const [updateWorkspace] = useUpdateWorkspaceMutation();
+  const [updateWorkspace] = useMutation(UpdateWorkspaceDocument);
 
   // TODO: Enhance this with react-web-hook-form (https://www.react-hook-form.com)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // oxlint-disable-next-line react-hooks/exhaustive-deps
   const debouncedUpdate = useCallback(
     useDebouncedCallback(async (name: string) => {
-      // update local recoil state when workspace name is updated
+      if (isEmpty(name)) {
+        return;
+      }
       setCurrentWorkspace((currentValue) => {
         if (currentValue === null) {
           return null;
@@ -58,7 +65,7 @@ export const NameField = ({
         return;
       }
       try {
-        const { data, errors } = await updateWorkspace({
+        const result = await updateWorkspace({
           variables: {
             input: {
               displayName: name,
@@ -66,8 +73,11 @@ export const NameField = ({
           },
         });
 
-        if (isDefined(errors) || isUndefinedOrNull(data?.updateWorkspace)) {
-          throw errors;
+        if (
+          isDefined(result.error) ||
+          !isDefined(result.data?.updateWorkspace)
+        ) {
+          throw result.error;
         }
       } catch (error) {
         logError(error);
@@ -83,11 +93,12 @@ export const NameField = ({
 
   return (
     <StyledComboInputContainer>
-      <TextInput
-        label="Name"
+      <SettingsTextInput
+        instanceId="workspace-name"
+        label={t`Name`}
         value={displayName}
         onChange={setDisplayName}
-        placeholder="Apple"
+        placeholder={t`Apple`}
         fullWidth
       />
     </StyledComboInputContainer>

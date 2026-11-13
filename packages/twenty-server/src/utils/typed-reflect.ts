@@ -1,29 +1,11 @@
 import 'reflect-metadata';
+import { type FeatureFlagKey } from 'twenty-shared/types';
 
-import { GateDecoratorParams } from 'src/engine/workspace-manager/workspace-sync-metadata/interfaces/gate-decorator.interface';
-import { ReflectBaseCustomObjectMetadata } from 'src/engine/workspace-manager/workspace-sync-metadata/interfaces/reflect-custom-object-metadata.interface';
-import { ReflectDynamicRelationFieldMetadata } from 'src/engine/workspace-manager/workspace-sync-metadata/interfaces/reflect-computed-relation-field-metadata.interface';
-import { ReflectFieldMetadata } from 'src/engine/workspace-manager/workspace-sync-metadata/interfaces/reflect-field-metadata.interface';
-import { ReflectObjectMetadata } from 'src/engine/workspace-manager/workspace-sync-metadata/interfaces/reflect-object-metadata.interface';
-import { ReflectRelationMetadata } from 'src/engine/workspace-manager/workspace-sync-metadata/interfaces/reflect-relation-metadata.interface';
-import { Gate } from 'src/engine/twenty-orm/interfaces/gate.interface';
+import { type ConfigVariablesMetadataMap } from 'src/engine/core-modules/twenty-config/decorators/config-variables-metadata.decorator';
 
 export interface ReflectMetadataTypeMap {
-  objectMetadata: ReflectObjectMetadata;
-  extendObjectMetadata: ReflectBaseCustomObjectMetadata;
-  fieldMetadataMap: ReflectFieldMetadata;
-  dynamicRelationFieldMetadataMap: ReflectDynamicRelationFieldMetadata;
-  reflectRelationMetadataCollection: ReflectRelationMetadata[];
-  gate: GateDecoratorParams;
-  isNullable: true;
-  isSystem: true;
-  isAuditLogged: false;
-
-  ['workspace:is-nullable-metadata-args']: true;
-  ['workspace:gate-metadata-args']: Gate;
-  ['workspace:is-system-metadata-args']: true;
-  ['workspace:is-audit-logged-metadata-args']: false;
-  ['workspace:is-primary-field-metadata-args']: true;
+  ['config-variables']: ConfigVariablesMetadataMap;
+  ['feature-flag-metadata-args']: FeatureFlagKey;
 }
 
 export class TypedReflect {
@@ -76,8 +58,7 @@ export class TypedReflect {
   ) {
     if (propertyKeyOrUndefined === undefined) {
       return Reflect.getMetadata(metadataKey, target);
-    } else {
-      return Reflect.getMetadata(metadataKey, target, propertyKeyOrUndefined);
     }
+    return Reflect.getMetadata(metadataKey, target, propertyKeyOrUndefined);
   }
 }

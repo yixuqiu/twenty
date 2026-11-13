@@ -1,10 +1,14 @@
-import { Meta } from '@storybook/react';
+import { type Meta } from '@storybook/react-vite';
 
-import { ModalWrapper } from '@/spreadsheet-import/components/ModalWrapper';
-import { Providers } from '@/spreadsheet-import/components/Providers';
+import { mockRsiValues } from '@/spreadsheet-import/__mocks__/mockRsiValues';
+import { ReactSpreadsheetImportContextProvider } from '@/spreadsheet-import/components/ReactSpreadsheetImportContextProvider';
+import { SpreadSheetImportModalWrapper } from '@/spreadsheet-import/components/SpreadSheetImportModalWrapper';
 import { SelectSheetStep } from '@/spreadsheet-import/steps/components/SelectSheetStep/SelectSheetStep';
-import { mockRsiValues } from '@/spreadsheet-import/tests/mockRsiValues';
-import { DialogManagerScope } from '@/ui/feedback/dialog-manager/scopes/DialogManagerScope';
+import { SpreadsheetImportStepType } from '@/spreadsheet-import/steps/types/SpreadsheetImportStepType';
+import { DialogComponentInstanceContext } from '@/ui/feedback/dialog-manager/contexts/DialogComponentInstanceContext';
+import { isDialogOpenedComponentState } from '@/ui/layout/dialog/states/isDialogOpenedComponentState';
+import { jotaiStore } from '@/ui/utilities/state/jotai/jotaiStore';
+import { Provider as JotaiProvider } from 'jotai';
 
 const meta: Meta<typeof SelectSheetStep> = {
   title: 'Modules/SpreadsheetImport/SelectSheetStep',
@@ -12,6 +16,21 @@ const meta: Meta<typeof SelectSheetStep> = {
   parameters: {
     layout: 'fullscreen',
   },
+  decorators: [
+    (Story) => {
+      jotaiStore.set(
+        isDialogOpenedComponentState.atomFamily({
+          instanceId: 'select-sheet-step',
+        }),
+        true,
+      );
+      return (
+        <JotaiProvider store={jotaiStore}>
+          <Story />
+        </JotaiProvider>
+      );
+    },
+  ],
 };
 
 export default meta;
@@ -19,14 +38,45 @@ export default meta;
 const sheetNames = ['Sheet1', 'Sheet2', 'Sheet3'];
 
 export const Default = () => (
-  <DialogManagerScope dialogManagerScopeId="dialog-manager">
-    <Providers values={mockRsiValues}>
-      <ModalWrapper isOpen={true} onClose={() => null}>
+  <DialogComponentInstanceContext.Provider
+    value={{ instanceId: 'dialog-manager' }}
+  >
+    <ReactSpreadsheetImportContextProvider values={mockRsiValues}>
+      <SpreadSheetImportModalWrapper
+        modalInstanceId="select-sheet-step"
+        onClose={() => null}
+      >
         <SelectSheetStep
           sheetNames={sheetNames}
-          onContinue={() => Promise.resolve()}
+          setCurrentStepState={() => {}}
+          setPreviousStepState={() => {}}
+          currentStepState={{
+            type: SpreadsheetImportStepType.selectSheet,
+            workbook: {
+              SheetNames: sheetNames,
+              Sheets: {
+                Sheet1: {
+                  A1: 1,
+                  A2: 2,
+                  A3: 3,
+                },
+                Sheet2: {
+                  A1: 1,
+                  A2: 2,
+                  A3: 3,
+                },
+                Sheet3: {
+                  A1: 1,
+                  A2: 2,
+                  A3: 3,
+                },
+              },
+            },
+          }}
+          onError={() => null}
+          onBack={() => Promise.resolve()}
         />
-      </ModalWrapper>
-    </Providers>
-  </DialogManagerScope>
+      </SpreadSheetImportModalWrapper>
+    </ReactSpreadsheetImportContextProvider>
+  </DialogComponentInstanceContext.Provider>
 );

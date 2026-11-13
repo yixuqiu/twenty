@@ -1,109 +1,131 @@
-import { useTheme } from '@emotion/react';
-import styled from '@emotion/styled';
-import { useRecoilValue } from 'recoil';
-import { IconChevronDown, IconList, useIcons } from 'twenty-ui';
-
+import { useNumberFormat } from '@/localization/hooks/useNumberFormat';
+import { useRecordIndexContextOrThrow } from '@/object-record/record-index/contexts/RecordIndexContext';
 import { Dropdown } from '@/ui/layout/dropdown/components/Dropdown';
 import { StyledDropdownButtonContainer } from '@/ui/layout/dropdown/components/StyledDropdownButtonContainer';
-import { useDropdown } from '@/ui/layout/dropdown/hooks/useDropdown';
-import { MOBILE_VIEWPORT } from '@/ui/theme/constants/MobileViewport';
-import { useGetCurrentView } from '@/views/hooks/useGetCurrentView';
-import { ViewsHotkeyScope } from '@/views/types/ViewsHotkeyScope';
-import { ViewPickerCreateOrEditContent } from '@/views/view-picker/components/ViewPickerCreateOrEditContent';
-import { ViewPickerCreateOrEditContentEffect } from '@/views/view-picker/components/ViewPickerCreateOrEditContentEffect';
+import { isDropdownOpenComponentState } from '@/ui/layout/dropdown/states/isDropdownOpenComponentState';
+import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
+import { useGetRecordIndexTotalCount } from '@/views/hooks/internal/useGetRecordIndexTotalCount';
+import { useGetCurrentViewOnly } from '@/views/hooks/useGetCurrentViewOnly';
+import { ViewPickerContentCreateMode } from '@/views/view-picker/components/ViewPickerContentCreateMode';
+import { ViewPickerContentEditMode } from '@/views/view-picker/components/ViewPickerContentEditMode';
+import { ViewPickerContentEffect } from '@/views/view-picker/components/ViewPickerContentEffect';
 import { ViewPickerListContent } from '@/views/view-picker/components/ViewPickerListContent';
-import { VIEW_PICKER_DROPDOWN_ID } from '@/views/view-picker/constants/ViewPickerDropdownId';
+import { useUpdateViewFromCurrentState } from '@/views/view-picker/hooks/useUpdateViewFromCurrentState';
 import { useViewPickerMode } from '@/views/view-picker/hooks/useViewPickerMode';
-import { useViewPickerPersistView } from '@/views/view-picker/hooks/useViewPickerPersistView';
+import { getViewPickerDropdownId } from '@/views/view-picker/utils/getViewPickerDropdownId';
+import { styled } from '@linaria/react';
+import { isDefined } from 'twenty-shared/utils';
+import { OverflowingTextWithTooltip } from 'twenty-ui/primitives/typography';
+import { IconChevronDown, IconList } from 'twenty-ui/icon';
+import { useIcons } from 'twenty-ui/icon/provider';
+import { MOBILE_VIEWPORT, useTheme, themeCssVariables } from 'twenty-ui/theme';
+import { useLingui } from '@lingui/react/macro';
 
-import { useViewStates } from '../../hooks/internal/useViewStates';
+const StyledIconContainer = styled.span`
+  display: flex;
+  flex-shrink: 0;
+`;
 
 const StyledDropdownLabelAdornments = styled.span`
   align-items: center;
-  color: ${({ theme }) => theme.grayScale.gray35};
-  display: inline-flex;
-  gap: ${({ theme }) => theme.spacing(1)};
-  margin-left: ${({ theme }) => theme.spacing(1)};
+  color: ${themeCssVariables.grayScale.gray8};
+  display: flex;
+  flex-shrink: 0;
+  gap: ${themeCssVariables.spacing[1]};
+  margin-left: ${themeCssVariables.spacing[1]};
 `;
 
 const StyledViewName = styled.span`
-  margin-left: ${({ theme }) => theme.spacing(1)};
-  display: inline-block;
+  margin-left: ${themeCssVariables.spacing[1]};
   max-width: 130px;
+  min-width: 0;
+  overflow: hidden;
   @media (max-width: 375px) {
     max-width: 90px;
   }
   @media (min-width: 376px) and (max-width: ${MOBILE_VIEWPORT}px) {
     max-width: 110px;
   }
-  overflow: hidden;
-  text-overflow: ellipsis;
-  vertical-align: middle;
-  white-space: nowrap;
 `;
 
 export const ViewPickerDropdown = () => {
+  const { t } = useLingui();
   const theme = useTheme();
+  const { currentView } = useGetCurrentViewOnly();
 
-  const { entityCountInCurrentViewState } = useViewStates();
+  const { updateViewFromCurrentState } = useUpdateViewFromCurrentState();
 
-  const { currentViewWithCombinedFiltersAndSorts } = useGetCurrentView();
+  const { totalCount } = useGetRecordIndexTotalCount();
 
-  const { handleUpdate } = useViewPickerPersistView();
+  const { formatNumber } = useNumberFormat();
 
-  const entityCountInCurrentView = useRecoilValue(
-    entityCountInCurrentViewState,
-  );
+  const { recordIndexId } = useRecordIndexContextOrThrow();
+  const dropdownId = getViewPickerDropdownId(recordIndexId);
 
-  const { isDropdownOpen: isViewsListDropdownOpen } = useDropdown(
-    VIEW_PICKER_DROPDOWN_ID,
+  const isDropdownOpen = useAtomComponentStateValue(
+    isDropdownOpenComponentState,
+    dropdownId,
   );
 
   const { viewPickerMode, setViewPickerMode } = useViewPickerMode();
 
   const { getIcon } = useIcons();
-  const CurrentViewIcon = getIcon(currentViewWithCombinedFiltersAndSorts?.icon);
+  const CurrentViewIcon = getIcon(currentView?.icon);
 
   const handleClickOutside = async () => {
-    if (isViewsListDropdownOpen && viewPickerMode === 'edit') {
-      await handleUpdate();
+    if (isDropdownOpen && viewPickerMode === 'edit') {
+      await updateViewFromCurrentState();
     }
     setViewPickerMode('list');
   };
 
   return (
     <Dropdown
-      dropdownId={VIEW_PICKER_DROPDOWN_ID}
-      dropdownHotkeyScope={{ scope: ViewsHotkeyScope.ListDropdown }}
+      dropdownId={dropdownId}
       dropdownOffset={{ x: 0, y: 8 }}
-      dropdownMenuWidth={200}
+      dropdownPlacement="bottom-start"
       onClickOutside={handleClickOutside}
       clickableComponent={
-        <StyledDropdownButtonContainer isUnfolded={isViewsListDropdownOpen}>
-          {currentViewWithCombinedFiltersAndSorts && CurrentViewIcon ? (
-            <CurrentViewIcon size={theme.icon.size.md} />
-          ) : (
-            <IconList size={theme.icon.size.md} />
-          )}
+        <StyledDropdownButtonContainer isUnfolded={isDropdownOpen}>
+          <StyledIconContainer>
+            {isDefined(currentView) && isDefined(CurrentViewIcon) ? (
+              <CurrentViewIcon size={theme.icon.size.md} />
+            ) : (
+              <IconList size={theme.icon.size.md} />
+            )}
+          </StyledIconContainer>
           <StyledViewName>
-            {currentViewWithCombinedFiltersAndSorts?.name ?? 'All'}
+            <OverflowingTextWithTooltip text={currentView?.name ?? t`All`} />
           </StyledViewName>
           <StyledDropdownLabelAdornments>
-            · {entityCountInCurrentView}{' '}
+            {isDefined(totalCount) && <>· {formatNumber(totalCount)} </>}
             <IconChevronDown size={theme.icon.size.sm} />
           </StyledDropdownLabelAdornments>
         </StyledDropdownButtonContainer>
       }
-      dropdownComponents={
-        viewPickerMode === 'list' ? (
-          <ViewPickerListContent />
-        ) : (
-          <>
-            <ViewPickerCreateOrEditContent />
-            <ViewPickerCreateOrEditContentEffect />
-          </>
-        )
-      }
+      dropdownComponents={(() => {
+        switch (viewPickerMode) {
+          case 'list':
+            return <ViewPickerListContent />;
+          case 'create-empty':
+          case 'create-from-current':
+            return (
+              <>
+                <ViewPickerContentCreateMode />
+                <ViewPickerContentEffect />
+              </>
+            );
+          case 'edit':
+            return (
+              <>
+                <ViewPickerContentEditMode />
+                <ViewPickerContentEffect />
+              </>
+            );
+          default:
+            return null;
+        }
+      })()}
     />
   );
 };

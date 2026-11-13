@@ -1,37 +1,81 @@
-import { ApolloClient, useMutation } from '@apollo/client';
-import { getOperationName } from '@apollo/client/utilities';
-
+import { useMutation } from '@apollo/client/react';
 import {
-  CreateFieldInput,
-  CreateOneFieldMetadataItemMutation,
-  CreateOneFieldMetadataItemMutationVariables,
+  type CreateFieldInput,
+  CreateOneFieldMetadataItemDocument,
 } from '~/generated-metadata/graphql';
 
-import { CREATE_ONE_FIELD_METADATA_ITEM } from '../graphql/mutations';
-import { FIND_MANY_OBJECT_METADATA_ITEMS } from '../graphql/queries';
-
-import { useApolloMetadataClient } from './useApolloMetadataClient';
+import { useMetadataErrorHandler } from '@/metadata-error-handler/hooks/useMetadataErrorHandler';
+import { useUpdateMetadataStoreDraft } from '@/metadata-store/hooks/useUpdateMetadataStoreDraft';
+import { type FlatFieldMetadataItem } from '@/metadata-store/types/FlatFieldMetadataItem';
+import { type MetadataRequestResult } from '@/object-metadata/types/MetadataRequestResult';
+import { CombinedGraphQLErrors } from '@apollo/client/errors';
+import { CrudOperationType } from 'twenty-shared/types';
+import { isDefined } from 'twenty-shared/utils';
+import { useToast } from 'twenty-ui/components/feedback';
+import { useLingui } from '@lingui/react/macro';
 
 export const useCreateOneFieldMetadataItem = () => {
-  const apolloMetadataClient = useApolloMetadataClient();
+  const { t } = useLingui();
+  const [createOneFieldMetadataItemMutation] = useMutation(
+    CreateOneFieldMetadataItemDocument,
+  );
 
-  const [mutate] = useMutation<
-    CreateOneFieldMetadataItemMutation,
-    CreateOneFieldMetadataItemMutationVariables
-  >(CREATE_ONE_FIELD_METADATA_ITEM, {
-    client: apolloMetadataClient ?? ({} as ApolloClient<any>),
-  });
+  const { handleMetadataError } = useMetadataErrorHandler();
+  const { enqueueToast } = useToast();
+  const { addToDraft, applyChanges } = useUpdateMetadataStoreDraft();
 
-  const createOneFieldMetadataItem = async (input: CreateFieldInput) => {
-    return await mutate({
-      variables: {
-        input: {
-          field: input,
+  const createOneFieldMetadataItem = async (
+    input: CreateFieldInput,
+  ): Promise<
+    MetadataRequestResult<
+      Awaited<ReturnType<typeof createOneFieldMetadataItemMutation>>
+    >
+  > => {
+    try {
+      const response = await createOneFieldMetadataItemMutation({
+        variables: {
+          input: {
+            field: input,
+          },
         },
-      },
-      awaitRefetchQueries: true,
-      refetchQueries: [getOperationName(FIND_MANY_OBJECT_METADATA_ITEMS) ?? ''],
-    });
+      });
+
+      const createdField = response.data?.createOneField;
+
+      if (isDefined(createdField)) {
+        const { __typename, object, ...fieldData } = createdField;
+
+        addToDraft({
+          key: 'fieldMetadataItems',
+          items: [
+            {
+              ...fieldData,
+              objectMetadataId: object?.id ?? input.objectMetadataId,
+            } as FlatFieldMetadataItem,
+          ],
+        });
+        applyChanges();
+      }
+
+      return {
+        status: 'successful',
+        response,
+      };
+    } catch (error) {
+      if (CombinedGraphQLErrors.is(error)) {
+        handleMetadataError(error, {
+          primaryMetadataName: 'fieldMetadata',
+          operationType: CrudOperationType.CREATE,
+        });
+      } else {
+        enqueueToast({ status: 'error', children: t`An error occurred.` });
+      }
+
+      return {
+        status: 'failed',
+        error,
+      };
+    }
   };
 
   return {

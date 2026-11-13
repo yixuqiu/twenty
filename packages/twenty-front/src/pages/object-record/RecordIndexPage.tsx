@@ -1,58 +1,78 @@
+import { WorkspaceRouteUnavailable } from '@/ui/layout/page/components/WorkspaceRouteUnavailable';
+import { contextStoreCurrentObjectMetadataItemIdComponentState } from '@/context-store/states/contextStoreCurrentObjectMetadataItemIdComponentState';
+import { useObjectMetadataItems } from '@/object-metadata/hooks/useObjectMetadataItems';
+import { RecordIndexContainerGater } from '@/object-record/record-index/components/RecordIndexContainerGater';
+import { isWorkspaceWorkflowVersionRouteHidden } from '@/object-core/workflows/utils/isWorkspaceWorkflowVersionRouteHidden';
+import { RecordIndexSkeletonLoader } from '@/object-record/record-index/components/RecordIndexSkeletonLoader';
+import { useWorkspaceSurface } from '@/ui/layout/hooks/useWorkspaceSurface';
+import { PageContainer } from '@/ui/layout/page/components/PageContainer';
+import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
+import { metadataStoreState } from '@/metadata-store/states/metadataStoreState';
+import { useAtomFamilyStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomFamilyStateValue';
+import { isUndefined } from '@sniptt/guards';
 import { useParams } from 'react-router-dom';
-import styled from '@emotion/styled';
-import { v4 } from 'uuid';
-
-import { RecordIndexContainer } from '@/object-record/record-index/components/RecordIndexContainer';
-import { RecordIndexPageHeader } from '@/object-record/record-index/components/RecordIndexPageHeader';
-import { useRecordTable } from '@/object-record/record-table/hooks/useRecordTable';
-import { DEFAULT_CELL_SCOPE } from '@/object-record/record-table/record-table-cell/hooks/useOpenRecordTableCell';
-import { useSelectedTableCellEditMode } from '@/object-record/record-table/record-table-cell/hooks/useSelectedTableCellEditMode';
-import { PageBody } from '@/ui/layout/page/PageBody';
-import { PageContainer } from '@/ui/layout/page/PageContainer';
-import { useSetHotkeyScope } from '@/ui/utilities/hotkey/hooks/useSetHotkeyScope';
-import { PageTitle } from '@/ui/utilities/page-title/PageTitle';
-import { capitalize } from '~/utils/string/capitalize';
-
-const StyledIndexContainer = styled.div`
-  display: flex;
-  height: 100%;
-  width: 100%;
-`;
 
 export const RecordIndexPage = () => {
-  const objectNamePlural = useParams().objectNamePlural ?? '';
+  const workspaceSurface = useWorkspaceSurface();
+  const { objectNamePlural } = useParams<{ objectNamePlural: string }>();
 
-  const recordIndexId = objectNamePlural ?? '';
-  const setHotkeyScope = useSetHotkeyScope();
+  const contextStoreCurrentObjectMetadataItemId = useAtomComponentStateValue(
+    contextStoreCurrentObjectMetadataItemIdComponentState,
+  );
 
-  const { setSelectedTableCellEditMode } = useSelectedTableCellEditMode({
-    scopeId: recordIndexId,
-  });
+  const { objectMetadataItems } = useObjectMetadataItems();
+  const metadataStore = useAtomFamilyStateValue(
+    metadataStoreState,
+    'objectMetadataItems',
+  );
 
-  const { setPendingRecordId } = useRecordTable({
-    recordTableId: recordIndexId,
-  });
+  const routeObjectMetadataItem = objectMetadataItems.find(
+    (objectMetadataItem) => objectMetadataItem.namePlural === objectNamePlural,
+  );
 
-  const handleAddButtonClick = async () => {
-    setPendingRecordId(v4());
+  if (
+    workspaceSurface.type === 'side-panel' &&
+    metadataStore.status === 'empty'
+  ) {
+    return <RecordIndexSkeletonLoader />;
+  }
 
-    setSelectedTableCellEditMode(-1, 0);
-    setHotkeyScope(DEFAULT_CELL_SCOPE.scope, DEFAULT_CELL_SCOPE.customScopes);
-  };
+  if (
+    workspaceSurface.type === 'side-panel' &&
+    !isUndefined(objectNamePlural) &&
+    isUndefined(routeObjectMetadataItem)
+  ) {
+    return <WorkspaceRouteUnavailable />;
+  }
+
+  if (isUndefined(contextStoreCurrentObjectMetadataItemId)) {
+    return <RecordIndexSkeletonLoader />;
+  }
+
+  const objectMetadataItem = objectMetadataItems.find(
+    (objectMetadataItem) =>
+      objectMetadataItem.id === contextStoreCurrentObjectMetadataItemId,
+  );
+
+  if (isUndefined(objectMetadataItem)) {
+    return <RecordIndexSkeletonLoader />;
+  }
+
+  if (
+    isWorkspaceWorkflowVersionRouteHidden({
+      objectNameSingular: routeObjectMetadataItem?.nameSingular,
+    })
+  ) {
+    return <WorkspaceRouteUnavailable />;
+  }
+
+  if (workspaceSurface.type === 'side-panel') {
+    return <RecordIndexContainerGater />;
+  }
 
   return (
     <PageContainer>
-      <PageTitle title={`${capitalize(objectNamePlural)}`} />
-      <RecordIndexPageHeader createRecord={handleAddButtonClick} />
-      <PageBody>
-        <StyledIndexContainer>
-          <RecordIndexContainer
-            recordIndexId={recordIndexId}
-            objectNamePlural={objectNamePlural}
-            createRecord={handleAddButtonClick}
-          />
-        </StyledIndexContainer>
-      </PageBody>
+      <RecordIndexContainerGater />
     </PageContainer>
   );
 };

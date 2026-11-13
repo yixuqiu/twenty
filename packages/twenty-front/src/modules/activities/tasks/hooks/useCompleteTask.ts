@@ -1,27 +1,24 @@
 import { useCallback } from 'react';
 
-import { Activity } from '@/activities/types/Activity';
-import { CoreObjectNameSingular } from '@/object-metadata/types/CoreObjectNameSingular';
+import { type Task } from '@/activities/types/Task';
+import { StandardObjectNameSingular } from 'twenty-shared/types';
 import { useUpdateOneRecord } from '@/object-record/hooks/useUpdateOneRecord';
 
-type Task = Pick<Activity, 'id' | 'completedAt'>;
-
 export const useCompleteTask = (task: Task) => {
-  const { updateOneRecord: updateOneActivity } = useUpdateOneRecord<Activity>({
-    objectNameSingular: CoreObjectNameSingular.Activity,
-  });
+  const { updateOneRecord } = useUpdateOneRecord();
 
   const completeTask = useCallback(
     async (value: boolean) => {
-      const completedAt = value ? new Date().toISOString() : null;
-      await updateOneActivity?.({
+      const status = value ? 'DONE' : 'TODO';
+      await updateOneRecord({
+        objectNameSingular: StandardObjectNameSingular.Task,
         idToUpdate: task.id,
         updateOneRecordInput: {
-          completedAt,
+          status,
         },
       });
     },
-    [task.id, updateOneActivity],
+    [task.id, updateOneRecord],
   );
 
   return {

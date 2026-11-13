@@ -1,46 +1,107 @@
-import { useMutation } from '@apollo/client';
-import { getOperationName } from '@apollo/client/utilities';
-
+import { useApolloClient, useMutation } from '@apollo/client/react';
 import {
-  UpdateOneObjectInput,
-  UpdateOneObjectMetadataItemMutation,
-  UpdateOneObjectMetadataItemMutationVariables,
+  type UpdateOneObjectInput,
+  FindManyCommandMenuItemsDocument,
+  UpdateOneObjectMetadataItemDocument,
 } from '~/generated-metadata/graphql';
 
-import { UPDATE_ONE_OBJECT_METADATA_ITEM } from '../graphql/mutations';
-import { FIND_MANY_OBJECT_METADATA_ITEMS } from '../graphql/queries';
-
-import { useApolloMetadataClient } from './useApolloMetadataClient';
+import { useMetadataErrorHandler } from '@/metadata-error-handler/hooks/useMetadataErrorHandler';
+import { useUpdateMetadataStoreDraft } from '@/metadata-store/hooks/useUpdateMetadataStoreDraft';
+import { type FlatObjectMetadataItem } from '@/metadata-store/types/FlatObjectMetadataItem';
+import { type MetadataRequestResult } from '@/object-metadata/types/MetadataRequestResult';
+import { CombinedGraphQLErrors } from '@apollo/client/errors';
+import { CrudOperationType } from 'twenty-shared/types';
+import { isDefined } from 'twenty-shared/utils';
+import { useToast } from 'twenty-ui/components/feedback';
+import { useLingui } from '@lingui/react/macro';
 
 // TODO: Slice the Apollo store synchronously in the update function instead of subscribing, so we can use update after read in the same function call
 export const useUpdateOneObjectMetadataItem = () => {
-  const apolloClientMetadata = useApolloMetadataClient();
+  const { t } = useLingui();
+  const [updateOneObjectMetadataItemMutation, { loading }] = useMutation(
+    UpdateOneObjectMetadataItemDocument,
+  );
 
-  const [mutate] = useMutation<
-    UpdateOneObjectMetadataItemMutation,
-    UpdateOneObjectMetadataItemMutationVariables
-  >(UPDATE_ONE_OBJECT_METADATA_ITEM, {
-    client: apolloClientMetadata ?? undefined,
-  });
+  const client = useApolloClient();
+  const { handleMetadataError } = useMetadataErrorHandler();
+  const { enqueueToast } = useToast();
+  const { updateInDraft, replaceDraft, applyChanges } =
+    useUpdateMetadataStoreDraft();
+
+  const refetchCommandMenuItems = async () => {
+    const commandMenuItemsResult = await client.query({
+      query: FindManyCommandMenuItemsDocument,
+      fetchPolicy: 'network-only',
+    });
+
+    replaceDraft(
+      'commandMenuItems',
+      commandMenuItemsResult.data?.commandMenuItems ?? [],
+    );
+    applyChanges();
+  };
 
   const updateOneObjectMetadataItem = async ({
     idToUpdate,
     updatePayload,
+    shouldRefetchCommandMenuItems = true,
   }: {
     idToUpdate: UpdateOneObjectInput['id'];
     updatePayload: UpdateOneObjectInput['update'];
-  }) => {
-    return await mutate({
-      variables: {
-        idToUpdate,
-        updatePayload,
-      },
-      awaitRefetchQueries: true,
-      refetchQueries: [getOperationName(FIND_MANY_OBJECT_METADATA_ITEMS) ?? ''],
-    });
+    // Callers updating several objects at once refetch once at the end instead.
+    shouldRefetchCommandMenuItems?: boolean;
+  }): Promise<
+    MetadataRequestResult<
+      Awaited<ReturnType<typeof updateOneObjectMetadataItemMutation>>
+    >
+  > => {
+    try {
+      const response = await updateOneObjectMetadataItemMutation({
+        variables: {
+          idToUpdate,
+          updatePayload,
+        },
+      });
+
+      const updatedObject = response.data?.updateOneObject;
+
+      if (isDefined(updatedObject)) {
+        const { __typename, ...objectData } = updatedObject;
+
+        updateInDraft('objectMetadataItems', [
+          objectData as FlatObjectMetadataItem,
+        ]);
+        applyChanges();
+
+        if (shouldRefetchCommandMenuItems) {
+          await refetchCommandMenuItems();
+        }
+      }
+
+      return {
+        status: 'successful',
+        response,
+      };
+    } catch (error) {
+      if (CombinedGraphQLErrors.is(error)) {
+        handleMetadataError(error, {
+          primaryMetadataName: 'objectMetadata',
+          operationType: CrudOperationType.UPDATE,
+        });
+      } else {
+        enqueueToast({ status: 'error', children: t`An error occurred.` });
+      }
+
+      return {
+        status: 'failed',
+        error,
+      };
+    }
   };
 
   return {
     updateOneObjectMetadataItem,
+    refetchCommandMenuItems,
+    loading,
   };
 };

@@ -1,22 +1,30 @@
-import { IconSettings } from 'twenty-ui';
-
 import { SettingsNewAccountSection } from '@/settings/accounts/components/SettingsNewAccountSection';
+import { useAccountsSettingsBreadcrumbLink } from '@/settings/app-preferences/hooks/useAccountsSettingsBreadcrumbLink';
 import { SettingsPageContainer } from '@/settings/components/SettingsPageContainer';
-import { SubMenuTopBarContainer } from '@/ui/layout/page/SubMenuTopBarContainer';
-import { Breadcrumb } from '@/ui/navigation/bread-crumb/components/Breadcrumb';
+import { SettingsPageLayout } from '@/settings/components/layout/SettingsPageLayout';
+import { SettingsPath } from 'twenty-shared/types';
+import { getSettingsPath } from 'twenty-shared/utils';
+import { useLingui } from '@lingui/react/macro';
 
 export const SettingsNewAccount = () => {
+  const { t } = useLingui();
+  const accountsBreadcrumbLink = useAccountsSettingsBreadcrumbLink(t`Accounts`);
+
   return (
-    <SubMenuTopBarContainer Icon={IconSettings} title="Settings">
+    <SettingsPageLayout
+      title={t`New Account`}
+      links={[
+        {
+          children: t`User`,
+          href: getSettingsPath(SettingsPath.ProfilePage),
+        },
+        accountsBreadcrumbLink,
+        { children: t`New` },
+      ]}
+    >
       <SettingsPageContainer>
-        <Breadcrumb
-          links={[
-            { children: 'Accounts', href: '/settings/accounts' },
-            { children: `New` },
-          ]}
-        />
         <SettingsNewAccountSection />
       </SettingsPageContainer>
-    </SubMenuTopBarContainer>
+    </SettingsPageLayout>
   );
 };

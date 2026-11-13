@@ -1,21 +1,16 @@
-// TODO: We should create our own accordion component
-import {
-  Accordion,
-  AccordionButton as ChakraAccordionButton,
-  AccordionIcon,
-  AccordionItem,
-  AccordionPanel,
-} from '@chakra-ui/accordion';
-import styled from '@emotion/styled';
-import { IconChevronDown, IconForbid } from 'twenty-ui';
+import { styled } from '@linaria/react';
+import { themeCssVariables } from 'twenty-ui/theme';
 
-import { MatchColumnSelect } from '@/spreadsheet-import/components/MatchColumnSelect';
+import { MatchColumnToFieldSelect } from '@/spreadsheet-import/components/MatchColumnToFieldSelect';
+import { DO_NOT_IMPORT_OPTION_KEY } from '@/spreadsheet-import/constants/DoNotImportOptionKey';
 import { useSpreadsheetImportInternal } from '@/spreadsheet-import/hooks/useSpreadsheetImportInternal';
-import { Fields } from '@/spreadsheet-import/types';
-
-import { Column, Columns, ColumnType } from '../MatchColumnsStep';
-
-import { SubMatchingSelect } from './SubMatchingSelect';
+import { suggestedFieldsByColumnHeaderState } from '@/spreadsheet-import/steps/components/MatchColumnsStep/components/states/suggestedFieldsByColumnHeaderState';
+import { SpreadsheetColumnType } from '@/spreadsheet-import/types/SpreadsheetColumnType';
+import { type SpreadsheetColumns } from '@/spreadsheet-import/types/SpreadsheetColumns';
+import { spreadsheetImportBuildFieldOptions } from '@/spreadsheet-import/utils/spreadsheetImportBuildFieldOptions';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import { useLingui } from '@lingui/react/macro';
+import { IconForbid } from 'twenty-ui/icon';
 
 const StyledContainer = styled.div`
   display: flex;
@@ -24,135 +19,69 @@ const StyledContainer = styled.div`
   width: 100%;
 `;
 
-const StyledAccordionButton = styled(ChakraAccordionButton)`
-  align-items: center;
-  background-color: ${({ theme }) => theme.accent.secondary};
-  border: none;
-  border-radius: ${({ theme }) => theme.border.radius.sm};
-  box-sizing: border-box;
-  color: ${({ theme }) => theme.font.color.primary};
-  display: flex;
-  flex-direction: row;
-  margin-top: ${({ theme }) => theme.spacing(2)};
-  padding-bottom: ${({ theme }) => theme.spacing(1)};
-  padding-left: ${({ theme }) => theme.spacing(2)};
-  padding-right: ${({ theme }) => theme.spacing(2)};
-  padding-top: ${({ theme }) => theme.spacing(1)};
-  width: 100%;
-
-  &:hover {
-    background-color: ${({ theme }) => theme.accent.primary};
-  }
+const StyledErrorMessage = styled.span`
+  color: ${themeCssVariables.font.color.danger};
+  font-size: ${themeCssVariables.font.size.sm};
+  font-weight: ${themeCssVariables.font.weight.regular};
+  margin-top: ${themeCssVariables.spacing[1]};
 `;
 
-const StyledAccordionContainer = styled.div`
-  display: flex;
-  width: 100%;
-`;
-
-const StyledAccordionLabel = styled.span`
-  color: ${({ theme }) => theme.font.color.primary};
-  display: flex;
-  flex: 1;
-  font-size: ${({ theme }) => theme.font.size.sm};
-  padding-left: ${({ theme }) => theme.spacing(1)};
-  text-align: left;
-`;
-
-const getAccordionTitle = <T extends string>(
-  fields: Fields<T>,
-  column: Column<T>,
-) => {
-  const fieldLabel = fields.find(
-    (field) => 'value' in column && field.key === column.value,
-  )?.label;
-
-  return `Match ${fieldLabel} (${
-    'matchedOptions' in column && column.matchedOptions.length
-  } Unmatched)`;
-};
-
-type TemplateColumnProps<T extends string> = {
-  columns: Columns<T>;
+type TemplateColumnProps = {
+  columns: SpreadsheetColumns;
   columnIndex: number;
-  onChange: (val: T, index: number) => void;
-  onSubChange: (val: T, index: number, option: string) => void;
+  onChange: (val: string, index: number) => void;
 };
 
-export const TemplateColumn = <T extends string>({
+export const TemplateColumn = ({
   columns,
   columnIndex,
   onChange,
-  onSubChange,
-}: TemplateColumnProps<T>) => {
-  const { fields } = useSpreadsheetImportInternal<T>();
+}: TemplateColumnProps) => {
+  const { spreadsheetImportFields: fields } = useSpreadsheetImportInternal();
+  const suggestedFieldsByColumnHeader = useAtomStateValue(
+    suggestedFieldsByColumnHeaderState,
+  );
+
   const column = columns[columnIndex];
-  const isIgnored = column.type === ColumnType.ignored;
-  const isSelect = 'matchedOptions' in column;
-  const fieldOptions = fields.map(({ icon, label, key }) => {
-    const isSelected =
-      columns.findIndex((column) => {
-        if ('value' in column) {
-          return column.value === key;
-        }
+  const isIgnored = column.type === SpreadsheetColumnType.ignored;
 
-        return false;
-      }) !== -1;
+  const { t } = useLingui();
 
-    return {
-      icon,
-      value: key,
-      label,
-      disabled: isSelected,
-    } as const;
-  });
+  const fieldOptions = spreadsheetImportBuildFieldOptions(fields, columns);
+  const suggestedFieldOptions = spreadsheetImportBuildFieldOptions(
+    suggestedFieldsByColumnHeader[column.header] ?? [],
+    columns,
+  );
+
   const selectOptions = [
     {
-      icon: IconForbid,
-      value: 'do-not-import',
-      label: 'Do not import',
+      Icon: IconForbid,
+      value: DO_NOT_IMPORT_OPTION_KEY,
+      label: t`Do not import`,
     },
     ...fieldOptions,
   ];
+
   const selectValue = fieldOptions.find(
     ({ value }) => 'value' in column && column.value === value,
   );
+
   const ignoreValue = selectOptions.find(
-    ({ value }) => value === 'do-not-import',
+    ({ value }) => value === DO_NOT_IMPORT_OPTION_KEY,
   );
 
   return (
     <StyledContainer>
-      <MatchColumnSelect
-        placeholder="Select column..."
+      <MatchColumnToFieldSelect
+        placeholder={t`Select column...`}
         value={isIgnored ? ignoreValue : selectValue}
-        onChange={(value) => onChange(value?.value as T, column.index)}
+        onChange={(value) => onChange(value.value, column.index)}
         options={selectOptions}
-        name={column.header}
+        suggestedOptions={suggestedFieldOptions}
+        columnIndex={column.index.toString()}
       />
-      {isSelect && (
-        <StyledAccordionContainer>
-          <Accordion allowMultiple width="100%">
-            <AccordionItem border="none" py={1}>
-              <StyledAccordionButton data-testid="accordion-button">
-                <StyledAccordionLabel>
-                  {getAccordionTitle<T>(fields, column)}
-                </StyledAccordionLabel>
-                <AccordionIcon as={IconChevronDown} />
-              </StyledAccordionButton>
-              <AccordionPanel pb={4} pr={3} display="flex" flexDir="column">
-                {column.matchedOptions.map((option) => (
-                  <SubMatchingSelect
-                    option={option}
-                    column={column}
-                    onSubChange={onSubChange}
-                    key={option.entry}
-                  />
-                ))}
-              </AccordionPanel>
-            </AccordionItem>
-          </Accordion>
-        </StyledAccordionContainer>
+      {column.type === SpreadsheetColumnType.matchedError && (
+        <StyledErrorMessage>{`"${column.header}" ${column.errorMessage}`}</StyledErrorMessage>
       )}
     </StyledContainer>
   );

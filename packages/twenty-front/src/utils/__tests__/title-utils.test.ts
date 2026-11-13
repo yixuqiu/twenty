@@ -1,4 +1,9 @@
-import { getPageTitleFromPath, SettingsPageTitles } from '../title-utils';
+import { i18n } from '@lingui/core';
+import { messages as enMessages } from '~/locales/generated/en';
+import { getPageTitleFromPath } from '~/utils/title-utils';
+
+i18n.load('en', enMessages);
+i18n.activate('en');
 
 describe('title-utils', () => {
   it('should return the correct title for a given path', () => {
@@ -7,44 +12,54 @@ describe('title-utils', () => {
       'Sign in or Create an account',
     );
     expect(getPageTitleFromPath('/invite/:workspaceInviteHash')).toBe('Invite');
-    expect(getPageTitleFromPath('/create/workspace')).toBe('Create Workspace');
-    expect(getPageTitleFromPath('/create/profile')).toBe('Create Profile');
-    expect(getPageTitleFromPath('/tasks')).toBe('Tasks');
-    expect(getPageTitleFromPath('/objects/opportunities')).toBe(
-      'Opportunities',
+    expect(getPageTitleFromPath('/workspace-activation')).toBe(
+      'Create Workspace',
     );
+    expect(getPageTitleFromPath('/create/profile')).toBe('Create Profile');
     expect(getPageTitleFromPath('/settings/objects/opportunities')).toBe(
-      SettingsPageTitles.Objects,
+      'Data model - Settings',
     );
     expect(getPageTitleFromPath('/settings/profile')).toBe(
-      SettingsPageTitles.Profile,
+      'Profile - Settings',
     );
-    expect(getPageTitleFromPath('/settings/appearance')).toBe(
-      SettingsPageTitles.Appearance,
+    expect(getPageTitleFromPath('/settings/experience')).toBe(
+      'Experience - Settings',
     );
     expect(getPageTitleFromPath('/settings/accounts')).toBe(
-      SettingsPageTitles.Accounts,
+      'Account - Settings',
     );
     expect(getPageTitleFromPath('/settings/accounts/new')).toBe(
-      SettingsPageTitles.Accounts,
+      'Account - Settings',
     );
     expect(getPageTitleFromPath('/settings/accounts/calendars')).toBe(
-      SettingsPageTitles.Accounts,
+      'Account - Settings',
     );
     expect(
       getPageTitleFromPath('/settings/accounts/calendars/:accountUuid'),
-    ).toBe(SettingsPageTitles.Accounts);
+    ).toBe('Account - Settings');
     expect(getPageTitleFromPath('/settings/accounts/emails')).toBe(
-      SettingsPageTitles.Accounts,
+      'Account - Settings',
     );
     expect(getPageTitleFromPath('/settings/accounts/emails/:accountUuid')).toBe(
-      SettingsPageTitles.Accounts,
+      'Account - Settings',
     );
-    expect(getPageTitleFromPath('/settings/workspace-members')).toBe(
-      SettingsPageTitles.Members,
+    expect(getPageTitleFromPath('/settings/app-preferences')).toBe(
+      'Apps preferences - Settings',
     );
-    expect(getPageTitleFromPath('/settings/workspace')).toBe(
-      SettingsPageTitles.General,
+    expect(getPageTitleFromPath('/settings/app-preferences/google')).toBe(
+      'Apps preferences - Settings',
+    );
+    expect(getPageTitleFromPath('/settings/billing/plans')).toBe(
+      'Billing - Settings',
+    );
+    expect(getPageTitleFromPath('/settings/partner')).toBe(
+      'Partner - Settings',
+    );
+    expect(getPageTitleFromPath('/settings/members')).toBe(
+      'Members - Settings',
+    );
+    expect(getPageTitleFromPath('/settings/general')).toBe(
+      'General - Settings',
     );
     expect(getPageTitleFromPath('/')).toBe('Twenty');
     expect(getPageTitleFromPath('/random')).toBe('Twenty');

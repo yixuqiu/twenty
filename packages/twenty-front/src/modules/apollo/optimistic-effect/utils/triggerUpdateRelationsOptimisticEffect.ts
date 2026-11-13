@@ -1,19 +1,53 @@
-import { ApolloCache } from '@apollo/client';
-
-import { getRelationDefinition } from '@/apollo/optimistic-effect/utils/getRelationDefinition';
 import { triggerAttachRelationOptimisticEffect } from '@/apollo/optimistic-effect/utils/triggerAttachRelationOptimisticEffect';
-import { triggerDeleteRecordsOptimisticEffect } from '@/apollo/optimistic-effect/utils/triggerDeleteRecordsOptimisticEffect';
+import { triggerDestroyRecordsOptimisticEffect } from '@/apollo/optimistic-effect/utils/triggerDestroyRecordsOptimisticEffect';
 import { triggerDetachRelationOptimisticEffect } from '@/apollo/optimistic-effect/utils/triggerDetachRelationOptimisticEffect';
-import { CORE_OBJECT_NAMES_TO_DELETE_ON_TRIGGER_RELATION_DETACH } from '@/apollo/types/coreObjectNamesToDeleteOnRelationDetach';
-import { CoreObjectNameSingular } from '@/object-metadata/types/CoreObjectNameSingular';
-import { ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
-import { isObjectRecordConnection } from '@/object-record/cache/utils/isObjectRecordConnection';
-import { RecordGqlConnection } from '@/object-record/graphql/types/RecordGqlConnection';
-import { RecordGqlNode } from '@/object-record/graphql/types/RecordGqlNode';
-import { ObjectRecord } from '@/object-record/types/ObjectRecord';
-import { FieldMetadataType } from '~/generated-metadata/graphql';
+import {
+  FieldMetadataType,
+  type ObjectRecordsPermissions,
+  RelationType,
+} from 'twenty-shared/types';
+import { type FieldMetadataItem } from '@/object-metadata/types/FieldMetadataItem';
+import { type FieldMetadataItemRelation } from '@/object-metadata/types/FieldMetadataItemRelation';
+import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/EnrichedObjectMetadataItem';
+import { getFieldMetadataItemById } from '@/object-metadata/utils/getFieldMetadataItemById';
+import { type RecordGqlConnectionEdgesRequired } from '@/object-record/graphql/types/RecordGqlConnectionEdgesRequired';
+import { type RecordGqlNode } from '@/object-record/graphql/types/RecordGqlNode';
+import { isFieldMorphRelation } from '@/object-record/record-field/ui/types/guards/isFieldMorphRelation';
+import { isFieldRelation } from '@/object-record/record-field/ui/types/guards/isFieldRelation';
+import { getJunctionObjectMetadataIds } from '@/object-record/record-field/ui/utils/junction/getJunctionObjectMetadataIds';
+import { type ObjectRecord } from '@/object-record/types/ObjectRecord';
+import { type ApolloCache } from '@apollo/client';
+import { isArray } from '@sniptt/guards';
+import {
+  computeMorphRelationGqlFieldName,
+  CustomError,
+  isDefined,
+} from 'twenty-shared/utils';
+import { doNotTranslate } from 'twenty-shared/i18n';
 import { isDeeplyEqual } from '~/utils/isDeeplyEqual';
-import { isDefined } from '~/utils/isDefined';
+
+type TriggerUpdateRelationsOptimisticEffectArgs = {
+  cache: ApolloCache;
+  sourceObjectMetadataItem: EnrichedObjectMetadataItem;
+  currentSourceRecord: RecordGqlNode | null;
+  updatedSourceRecord: RecordGqlNode | null;
+  objectMetadataItems: EnrichedObjectMetadataItem[];
+  objectPermissionsByObjectMetadataId: Record<string, ObjectRecordsPermissions>;
+  upsertRecordsInStore: (props: { partialRecords: ObjectRecord[] }) => void;
+};
+
+const COMMENT_OBJECT_NAME_SINGULAR = 'comment';
+
+// A junction only links its two sides, so detaching destroys it; comments are the one non-junction cascade.
+const shouldCascadeDeleteOnDetach = ({
+  targetObjectMetadata,
+  junctionObjectMetadataIds,
+}: {
+  targetObjectMetadata: FieldMetadataItemRelation['targetObjectMetadata'];
+  junctionObjectMetadataIds: ReadonlySet<string>;
+}) =>
+  junctionObjectMetadataIds.has(targetObjectMetadata.id) ||
+  targetObjectMetadata.nameSingular === COMMENT_OBJECT_NAME_SINGULAR;
 
 export const triggerUpdateRelationsOptimisticEffect = ({
   cache,
@@ -21,135 +55,376 @@ export const triggerUpdateRelationsOptimisticEffect = ({
   currentSourceRecord,
   updatedSourceRecord,
   objectMetadataItems,
-}: {
-  cache: ApolloCache<unknown>;
-  sourceObjectMetadataItem: ObjectMetadataItem;
-  currentSourceRecord: ObjectRecord | null;
-  updatedSourceRecord: ObjectRecord | null;
-  objectMetadataItems: ObjectMetadataItem[];
-}) => {
-  return sourceObjectMetadataItem.fields.forEach(
-    (fieldMetadataItemOnSourceRecord) => {
-      const notARelationField =
-        fieldMetadataItemOnSourceRecord.type !== FieldMetadataType.Relation;
+  objectPermissionsByObjectMetadataId,
+  upsertRecordsInStore,
+}: TriggerUpdateRelationsOptimisticEffectArgs) => {
+  const isDeletion =
+    isDefined(updatedSourceRecord) &&
+    isDefined(updatedSourceRecord['deletedAt']);
+  const junctionObjectMetadataIds =
+    getJunctionObjectMetadataIds(objectMetadataItems);
 
-      if (notARelationField) {
-        return;
-      }
+  sourceObjectMetadataItem.fields.forEach((fieldMetadataItemOnSourceRecord) => {
+    if (
+      !isFieldMorphRelation(fieldMetadataItemOnSourceRecord) &&
+      !isFieldRelation(fieldMetadataItemOnSourceRecord)
+    ) {
+      return;
+    }
 
-      const fieldDoesNotExist =
-        isDefined(updatedSourceRecord) &&
-        !(fieldMetadataItemOnSourceRecord.name in updatedSourceRecord);
-
-      if (fieldDoesNotExist) {
-        return;
-      }
-
-      const relationDefinition = getRelationDefinition({
+    if (isFieldRelation(fieldMetadataItemOnSourceRecord)) {
+      triggerUpdateRelationOptimisticEffect({
         fieldMetadataItemOnSourceRecord,
+        updatedSourceRecord,
+        currentSourceRecord,
+        objectMetadataItems,
+        sourceObjectMetadataItem,
+        cache,
+        isDeletion,
+        upsertRecordsInStore,
+        objectPermissionsByObjectMetadataId,
+        junctionObjectMetadataIds,
+      });
+    }
+
+    if (isFieldMorphRelation(fieldMetadataItemOnSourceRecord)) {
+      triggerUpdateMorphRelationOptimisticEffect({
+        fieldMetadataItemOnSourceRecord,
+        updatedSourceRecord,
+        currentSourceRecord,
+        objectMetadataItems,
+        sourceObjectMetadataItem,
+        cache,
+        isDeletion,
+        upsertRecordsInStore,
+        objectPermissionsByObjectMetadataId,
+        junctionObjectMetadataIds,
+      });
+    }
+  });
+};
+
+const triggerUpdateRelationOptimisticEffect = ({
+  fieldMetadataItemOnSourceRecord,
+  updatedSourceRecord,
+  currentSourceRecord,
+  objectMetadataItems,
+  sourceObjectMetadataItem,
+  cache,
+  isDeletion,
+  upsertRecordsInStore,
+  objectPermissionsByObjectMetadataId,
+  junctionObjectMetadataIds,
+}: {
+  fieldMetadataItemOnSourceRecord: FieldMetadataItem;
+  updatedSourceRecord: RecordGqlNode | null;
+  currentSourceRecord: RecordGqlNode | null;
+  objectMetadataItems: EnrichedObjectMetadataItem[];
+  sourceObjectMetadataItem: EnrichedObjectMetadataItem;
+  cache: ApolloCache;
+  isDeletion: boolean;
+  upsertRecordsInStore: (props: { partialRecords: ObjectRecord[] }) => void;
+  objectPermissionsByObjectMetadataId: Record<string, ObjectRecordsPermissions>;
+  junctionObjectMetadataIds: ReadonlySet<string>;
+}) => {
+  const fieldDoesNotExist =
+    isDefined(updatedSourceRecord) &&
+    !(fieldMetadataItemOnSourceRecord.name in updatedSourceRecord);
+
+  if (fieldDoesNotExist) {
+    return;
+  }
+
+  const relation = fieldMetadataItemOnSourceRecord.relation;
+  if (!relation) {
+    return;
+  }
+
+  const { targetObjectMetadata, targetFieldMetadata } = relation;
+
+  const { fieldMetadataItem: targetFieldMetadataFullObject } =
+    getFieldMetadataItemById({
+      fieldMetadataId: targetFieldMetadata.id,
+      objectMetadataItems,
+    });
+  if (!targetFieldMetadataFullObject) {
+    throw new CustomError(
+      doNotTranslate('Target field metadata full object not found'),
+      'TARGET_FIELD_METADATA_FULL_OBJECT_NOT_FOUND',
+    );
+  }
+
+  const fullTargetObjectMetadataItem = objectMetadataItems.find(
+    ({ nameSingular }) => nameSingular === targetObjectMetadata.nameSingular,
+  );
+
+  if (!fullTargetObjectMetadataItem) {
+    return;
+  }
+
+  const currentFieldValueOnSourceRecord:
+    | RecordGqlConnectionEdgesRequired
+    | RecordGqlNode
+    | null = currentSourceRecord?.[fieldMetadataItemOnSourceRecord.name];
+
+  const updatedFieldValueOnSourceRecord:
+    | RecordGqlConnectionEdgesRequired
+    | RecordGqlNode
+    | null = updatedSourceRecord?.[fieldMetadataItemOnSourceRecord.name];
+
+  const noDiff = isDeeplyEqual(
+    currentFieldValueOnSourceRecord,
+    updatedFieldValueOnSourceRecord,
+    { strict: true },
+  );
+  if (noDiff && !isDeletion) {
+    return;
+  }
+
+  const recordToExtractDetachFrom = isDeletion
+    ? updatedFieldValueOnSourceRecord
+    : currentFieldValueOnSourceRecord;
+  const targetRecordsToDetachFrom = extractTargetRecordsFromRelation(
+    recordToExtractDetachFrom,
+    relation,
+  );
+
+  const shouldCascadeDeleteTargetRecords = shouldCascadeDeleteOnDetach({
+    targetObjectMetadata,
+    junctionObjectMetadataIds,
+  });
+
+  const gqlFieldNameOnTargetRecord =
+    targetFieldMetadataFullObject.type === FieldMetadataType.RELATION
+      ? targetFieldMetadataFullObject.name
+      : computeMorphRelationGqlFieldName({
+          fieldName: targetFieldMetadataFullObject.name,
+          relationType: targetFieldMetadataFullObject.settings?.relationType,
+          targetObjectMetadataNameSingular:
+            sourceObjectMetadataItem.nameSingular,
+          targetObjectMetadataNamePlural: sourceObjectMetadataItem.namePlural,
+        });
+  if (
+    shouldCascadeDeleteTargetRecords &&
+    targetRecordsToDetachFrom.length > 0
+  ) {
+    triggerDestroyRecordsOptimisticEffect({
+      cache,
+      objectMetadataItem: fullTargetObjectMetadataItem,
+      recordsToDestroy: targetRecordsToDetachFrom,
+      objectMetadataItems,
+      upsertRecordsInStore,
+      objectPermissionsByObjectMetadataId,
+    });
+  } else if (
+    isDefined(currentSourceRecord) &&
+    targetRecordsToDetachFrom.length > 0
+  ) {
+    targetRecordsToDetachFrom.forEach((targetRecordToDetachFrom) => {
+      triggerDetachRelationOptimisticEffect({
+        cache,
+        sourceObjectNameSingular: sourceObjectMetadataItem.nameSingular,
+        sourceRecordId: currentSourceRecord.id,
+        fieldNameOnTargetRecord: gqlFieldNameOnTargetRecord,
+        targetObjectMetadataItem: fullTargetObjectMetadataItem,
+        targetRecordId: targetRecordToDetachFrom.id,
+        objectMetadataItems,
+        objectPermissionsByObjectMetadataId,
+        upsertRecordsInStore,
+      });
+    });
+  }
+
+  if (!isDeletion && isDefined(updatedSourceRecord)) {
+    const targetRecordsToAttachTo = extractTargetRecordsFromRelation(
+      updatedFieldValueOnSourceRecord,
+      relation,
+    );
+
+    targetRecordsToAttachTo.forEach((targetRecordToAttachTo) =>
+      triggerAttachRelationOptimisticEffect({
+        cache,
+        sourceObjectNameSingular: sourceObjectMetadataItem.nameSingular,
+        sourceRecord: updatedSourceRecord,
+        fieldNameOnTargetRecord: gqlFieldNameOnTargetRecord,
+        targetObjectMetadataItem: fullTargetObjectMetadataItem,
+        targetRecordId: targetRecordToAttachTo.id,
+        objectMetadataItems,
+        objectPermissionsByObjectMetadataId,
+        upsertRecordsInStore,
+      }),
+    );
+  }
+};
+
+const triggerUpdateMorphRelationOptimisticEffect = ({
+  fieldMetadataItemOnSourceRecord,
+  updatedSourceRecord,
+  currentSourceRecord,
+  objectMetadataItems,
+  sourceObjectMetadataItem,
+  cache,
+  isDeletion,
+  objectPermissionsByObjectMetadataId,
+  upsertRecordsInStore,
+  junctionObjectMetadataIds,
+}: {
+  fieldMetadataItemOnSourceRecord: FieldMetadataItem;
+  updatedSourceRecord: RecordGqlNode | null;
+  currentSourceRecord: RecordGqlNode | null;
+  objectMetadataItems: EnrichedObjectMetadataItem[];
+  sourceObjectMetadataItem: EnrichedObjectMetadataItem;
+  cache: ApolloCache;
+  isDeletion: boolean;
+  upsertRecordsInStore: (props: { partialRecords: ObjectRecord[] }) => void;
+  objectPermissionsByObjectMetadataId: Record<string, ObjectRecordsPermissions>;
+  junctionObjectMetadataIds: ReadonlySet<string>;
+}) => {
+  const morphRelations = fieldMetadataItemOnSourceRecord.morphRelations;
+  if (!morphRelations) {
+    return;
+  }
+
+  morphRelations.forEach((morphRelation) => {
+    const gqlFieldMorphRelation = computeMorphRelationGqlFieldName({
+      fieldName: fieldMetadataItemOnSourceRecord.name,
+      relationType: morphRelation.type,
+      targetObjectMetadataNameSingular:
+        morphRelation.targetObjectMetadata.nameSingular,
+      targetObjectMetadataNamePlural:
+        morphRelation.targetObjectMetadata.namePlural,
+    });
+
+    const { fieldMetadataItem: targetFieldMetadataFullObject } =
+      getFieldMetadataItemById({
+        fieldMetadataId: morphRelation.targetFieldMetadata.id,
         objectMetadataItems,
       });
-      if (!relationDefinition) {
-        return;
-      }
+    if (!targetFieldMetadataFullObject) {
+      throw new CustomError(
+        doNotTranslate('Target field metadata full object not found'),
+        'TARGET_FIELD_METADATA_FULL_OBJECT_NOT_FOUND',
+      );
+    }
 
-      const { targetObjectMetadataItem, fieldMetadataItemOnTargetRecord } =
-        relationDefinition;
+    const fieldDoesNotExist =
+      isDefined(updatedSourceRecord) &&
+      !(gqlFieldMorphRelation in updatedSourceRecord);
 
-      const currentFieldValueOnSourceRecord:
-        | RecordGqlConnection
-        | RecordGqlNode
-        | null = currentSourceRecord?.[fieldMetadataItemOnSourceRecord.name];
+    if (fieldDoesNotExist) {
+      return;
+    }
 
-      const updatedFieldValueOnSourceRecord:
-        | RecordGqlConnection
-        | RecordGqlNode
-        | null = updatedSourceRecord?.[fieldMetadataItemOnSourceRecord.name];
+    const { targetObjectMetadata, targetFieldMetadata } = morphRelation;
 
-      if (
-        isDeeplyEqual(
-          currentFieldValueOnSourceRecord,
-          updatedFieldValueOnSourceRecord,
-        )
-      ) {
-        return;
-      }
+    const fullTargetObjectMetadataItem = objectMetadataItems.find(
+      ({ nameSingular }) => nameSingular === targetObjectMetadata.nameSingular,
+    );
 
-      // TODO: replace this by a relation type check, if it's one to many,
-      //   it's an object record connection (we can still check it though as a safeguard)
-      const currentFieldValueOnSourceRecordIsARecordConnection =
-        isObjectRecordConnection(
-          targetObjectMetadataItem.nameSingular,
-          currentFieldValueOnSourceRecord,
-        );
+    if (!fullTargetObjectMetadataItem) {
+      return;
+    }
 
-      const targetRecordsToDetachFrom =
-        currentFieldValueOnSourceRecordIsARecordConnection
-          ? currentFieldValueOnSourceRecord.edges.map(
-              ({ node }) => node as RecordGqlNode,
-            )
-          : [currentFieldValueOnSourceRecord].filter(isDefined);
+    const currentFieldValueOnSourceRecord:
+      | RecordGqlConnectionEdgesRequired
+      | RecordGqlNode
+      | null = currentSourceRecord?.[gqlFieldMorphRelation];
 
-      const updatedFieldValueOnSourceRecordIsARecordConnection =
-        isObjectRecordConnection(
-          targetObjectMetadataItem.nameSingular,
-          updatedFieldValueOnSourceRecord,
-        );
+    const updatedFieldValueOnSourceRecord:
+      | RecordGqlConnectionEdgesRequired
+      | RecordGqlNode
+      | null = updatedSourceRecord?.[gqlFieldMorphRelation];
 
-      const targetRecordsToAttachTo =
-        updatedFieldValueOnSourceRecordIsARecordConnection
-          ? updatedFieldValueOnSourceRecord.edges.map(
-              ({ node }) => node as RecordGqlNode,
-            )
-          : [updatedFieldValueOnSourceRecord].filter(isDefined);
+    const noDiff = isDeeplyEqual(
+      currentFieldValueOnSourceRecord,
+      updatedFieldValueOnSourceRecord,
+      { strict: true },
+    );
+    if (noDiff && !isDeletion) {
+      return;
+    }
 
-      const shouldDetachSourceFromAllTargets =
-        isDefined(currentSourceRecord) && targetRecordsToDetachFrom.length > 0;
+    const recordToExtractDetachFrom = isDeletion
+      ? updatedFieldValueOnSourceRecord
+      : currentFieldValueOnSourceRecord;
+    const targetRecordsToDetachFrom = extractTargetRecordsFromRelation(
+      recordToExtractDetachFrom,
+      morphRelation,
+    );
 
-      if (shouldDetachSourceFromAllTargets) {
-        // TODO: see if we can de-hardcode this, put cascade delete in relation metadata item
-        //   Instead of hardcoding it here
-        const shouldCascadeDeleteTargetRecords =
-          CORE_OBJECT_NAMES_TO_DELETE_ON_TRIGGER_RELATION_DETACH.includes(
-            targetObjectMetadataItem.nameSingular as CoreObjectNameSingular,
-          );
+    const shouldCascadeDeleteTargetRecords = shouldCascadeDeleteOnDetach({
+      targetObjectMetadata,
+      junctionObjectMetadataIds,
+    });
+    if (
+      shouldCascadeDeleteTargetRecords &&
+      targetRecordsToDetachFrom.length > 0
+    ) {
+      triggerDestroyRecordsOptimisticEffect({
+        cache,
+        objectMetadataItem: fullTargetObjectMetadataItem,
+        recordsToDestroy: targetRecordsToDetachFrom,
+        objectMetadataItems,
+        objectPermissionsByObjectMetadataId,
+        upsertRecordsInStore,
+      });
+    } else if (
+      isDefined(currentSourceRecord) &&
+      targetRecordsToDetachFrom.length > 0
+    ) {
+      targetRecordsToDetachFrom.forEach((targetRecordToDetachFrom) => {
+        triggerDetachRelationOptimisticEffect({
+          cache,
+          sourceObjectNameSingular: sourceObjectMetadataItem.nameSingular,
+          sourceRecordId: currentSourceRecord.id,
+          fieldNameOnTargetRecord: targetFieldMetadata.name,
+          targetObjectMetadataItem: fullTargetObjectMetadataItem,
+          objectMetadataItems,
+          objectPermissionsByObjectMetadataId,
+          targetRecordId: targetRecordToDetachFrom.id,
+          upsertRecordsInStore,
+        });
+      });
+    }
 
-        if (shouldCascadeDeleteTargetRecords) {
-          triggerDeleteRecordsOptimisticEffect({
-            cache,
-            objectMetadataItem: targetObjectMetadataItem,
-            recordsToDelete: targetRecordsToDetachFrom,
-            objectMetadataItems,
-          });
-        } else {
-          targetRecordsToDetachFrom.forEach((targetRecordToDetachFrom) => {
-            triggerDetachRelationOptimisticEffect({
-              cache,
-              sourceObjectNameSingular: sourceObjectMetadataItem.nameSingular,
-              sourceRecordId: currentSourceRecord.id,
-              fieldNameOnTargetRecord: fieldMetadataItemOnTargetRecord.name,
-              targetObjectNameSingular: targetObjectMetadataItem.nameSingular,
-              targetRecordId: targetRecordToDetachFrom.id,
-            });
-          });
-        }
-      }
+    if (!isDeletion && isDefined(updatedSourceRecord)) {
+      const targetRecordsToAttachTo = extractTargetRecordsFromRelation(
+        updatedFieldValueOnSourceRecord,
+        morphRelation,
+      );
 
-      const shouldAttachSourceToAllTargets =
-        isDefined(updatedSourceRecord) && targetRecordsToAttachTo.length > 0;
+      targetRecordsToAttachTo.forEach((targetRecordToAttachTo) =>
+        triggerAttachRelationOptimisticEffect({
+          cache,
+          sourceObjectNameSingular: sourceObjectMetadataItem.nameSingular,
+          sourceRecord: updatedSourceRecord,
+          fieldNameOnTargetRecord: targetFieldMetadata.name,
+          targetObjectMetadataItem: fullTargetObjectMetadataItem,
+          objectMetadataItems,
+          objectPermissionsByObjectMetadataId,
+          targetRecordId: targetRecordToAttachTo.id,
+          upsertRecordsInStore,
+        }),
+      );
+    }
+  });
+};
 
-      if (shouldAttachSourceToAllTargets) {
-        targetRecordsToAttachTo.forEach((targetRecordToAttachTo) =>
-          triggerAttachRelationOptimisticEffect({
-            cache,
-            sourceObjectNameSingular: sourceObjectMetadataItem.nameSingular,
-            sourceRecordId: updatedSourceRecord.id,
-            fieldNameOnTargetRecord: fieldMetadataItemOnTargetRecord.name,
-            targetObjectNameSingular: targetObjectMetadataItem.nameSingular,
-            targetRecordId: targetRecordToAttachTo.id,
-          }),
-        );
-      }
-    },
-  );
+const extractTargetRecordsFromRelation = (
+  value: RecordGqlConnectionEdgesRequired | RecordGqlNode | null,
+  relation: FieldMetadataItemRelation,
+): RecordGqlNode[] => {
+  // TODO: find why arrays get injected here; ObjectRecord/RecordGqlNode mixing may corrupt the cache.
+
+  if (!isDefined(value) || isArray(value)) {
+    return [];
+  }
+  if (!isDefined(relation)) {
+    throw new Error(doNotTranslate('Relation found is undefined'));
+  }
+  if (relation.type === RelationType.ONE_TO_MANY) {
+    return value.edges.map(({ node }: { node: RecordGqlNode }) => node);
+  }
+
+  return [value as RecordGqlNode];
 };

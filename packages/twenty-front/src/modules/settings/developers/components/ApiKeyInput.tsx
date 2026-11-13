@@ -1,10 +1,10 @@
-import { useTheme } from '@emotion/react';
-import styled from '@emotion/styled';
-import { IconCopy } from 'twenty-ui';
-
-import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
-import { Button } from '@/ui/input/button/components/Button';
-import { TextInput } from '@/ui/input/components/TextInput';
+import { SettingsTextInput } from '@/ui/input/components/SettingsTextInput';
+import { styled } from '@linaria/react';
+import { useLingui } from '@lingui/react/macro';
+import { IconCopy } from 'twenty-ui/icon';
+import { Button } from 'twenty-ui/primitives/input';
+import { themeCssVariables } from 'twenty-ui/theme';
+import { useCopyToClipboard } from '~/hooks/useCopyToClipboard';
 
 const StyledContainer = styled.div`
   display: flex;
@@ -13,32 +13,29 @@ const StyledContainer = styled.div`
 
 const StyledLinkContainer = styled.div`
   flex: 1;
-  margin-right: ${({ theme }) => theme.spacing(2)};
+  margin-right: ${themeCssVariables.spacing[2]};
 `;
 
 type ApiKeyInputProps = { apiKey: string };
 
 export const ApiKeyInput = ({ apiKey }: ApiKeyInputProps) => {
-  const theme = useTheme();
-
-  const { enqueueSnackBar } = useSnackBar();
+  const { t } = useLingui();
+  const { copyToClipboard } = useCopyToClipboard();
   return (
     <StyledContainer>
       <StyledLinkContainer>
-        <TextInput value={apiKey} fullWidth />
+        <SettingsTextInput
+          instanceId="api-key-display"
+          value={apiKey}
+          fullWidth
+        />
       </StyledLinkContainer>
       <Button
-        Icon={IconCopy}
-        title="Copy"
+        startIcon={<IconCopy />}
         onClick={() => {
-          enqueueSnackBar('Api Key copied to clipboard', {
-            variant: 'success',
-            icon: <IconCopy size={theme.icon.size.md} />,
-            duration: 2000,
-          });
-          navigator.clipboard.writeText(apiKey);
+          copyToClipboard(apiKey, t`API Key copied to clipboard`);
         }}
-      />
+      >{t`Copy`}</Button>
     </StyledContainer>
   );
 };

@@ -1,22 +1,27 @@
-import { useNavigate } from 'react-router-dom';
-import styled from '@emotion/styled';
+import { EmptyState } from '@/ui/feedback/empty-state/components/EmptyState';
+import { ErrorState } from '@/ui/feedback/empty-state/components/ErrorState';
+import { NavigationButton } from '@/ui/input/components/NavigationButton';
+import { Trans, useLingui } from '@lingui/react/macro';
+import { Suspense, lazy } from 'react';
+import { AppPath } from 'twenty-shared/types';
 
-import { SignInBackgroundMockPage } from '@/sign-in-background-mock/components/SignInBackgroundMockPage';
-import { AppPath } from '@/types/AppPath';
-import { MainButton } from '@/ui/input/button/components/MainButton';
-import AnimatedPlaceholder from '@/ui/layout/animated-placeholder/components/AnimatedPlaceholder';
-import { AnimatedPlaceholderEmptyTextContainer } from '@/ui/layout/animated-placeholder/components/EmptyPlaceholderStyled';
-import {
-  AnimatedPlaceholderErrorContainer,
-  AnimatedPlaceholderErrorSubTitle,
-  AnimatedPlaceholderErrorTitle,
-} from '@/ui/layout/animated-placeholder/components/ErrorPlaceholderStyled';
-import { PageTitle } from '@/ui/utilities/page-title/PageTitle';
+const BackgroundMockPage = lazy(() =>
+  import('@/sign-in-background-mock/components/BackgroundMockPage').then(
+    (module) => ({ default: module.BackgroundMockPage }),
+  ),
+);
+
+import { AnimatedPlaceholder } from '@/ui/feedback/empty-state/components/AnimatedPlaceholder/AnimatedPlaceholder';
+import { RootStackingContextZIndices } from '@/ui/layout/constants/RootStackingContextZIndices';
+import { PageTitle } from '@/ui/utilities/page-title/components/PageTitle';
+import { styled } from '@linaria/react';
+import { MainButton } from 'twenty-ui/components/input';
+import { themeCssVariables } from 'twenty-ui/theme';
 
 const StyledBackDrop = styled.div`
   align-items: center;
-  backdrop-filter: ${({ theme }) => theme.blur.light};
-  background: ${({ theme }) => theme.background.transparent.secondary};
+  backdrop-filter: ${themeCssVariables.blur.light};
+  background: ${themeCssVariables.background.transparent.secondary};
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -25,7 +30,7 @@ const StyledBackDrop = styled.div`
   position: fixed;
   top: 0;
   width: 100%;
-  z-index: 10000;
+  z-index: ${RootStackingContextZIndices.NotFound};
 `;
 
 const StyledButtonContainer = styled.div`
@@ -33,33 +38,37 @@ const StyledButtonContainer = styled.div`
 `;
 
 export const NotFound = () => {
-  const navigate = useNavigate();
+  const { t } = useLingui();
 
   return (
     <>
-      <PageTitle title="Page Not Found | Twenty" />
+      <PageTitle title={t`Page Not Found | Twenty`} />
       <StyledBackDrop>
-        <AnimatedPlaceholderErrorContainer>
+        <ErrorState.Root>
           <AnimatedPlaceholder type="error404" />
-          <AnimatedPlaceholderEmptyTextContainer>
-            <AnimatedPlaceholderErrorTitle>
-              Off the beaten path
-            </AnimatedPlaceholderErrorTitle>
-            <AnimatedPlaceholderErrorSubTitle>
-              The page you're seeking is either gone or never was. Let's get you
-              back on track
-            </AnimatedPlaceholderErrorSubTitle>
-          </AnimatedPlaceholderEmptyTextContainer>
+          <EmptyState.Content>
+            <ErrorState.Title>
+              <Trans>Off the beaten path</Trans>
+            </ErrorState.Title>
+            <ErrorState.Description>
+              <Trans>
+                The page you're seeking is either gone or never was. Let's get
+                you back on track
+              </Trans>
+            </ErrorState.Description>
+          </EmptyState.Content>
           <StyledButtonContainer>
-            <MainButton
-              title="Back to content"
+            <NavigationButton
+              buttonComponent={MainButton}
+              to={AppPath.Index}
               fullWidth
-              onClick={() => navigate(AppPath.Index)}
-            />
+            >{t`Back to content`}</NavigationButton>
           </StyledButtonContainer>
-        </AnimatedPlaceholderErrorContainer>
+        </ErrorState.Root>
       </StyledBackDrop>
-      <SignInBackgroundMockPage />
+      <Suspense fallback={null}>
+        <BackgroundMockPage />
+      </Suspense>
     </>
   );
 };

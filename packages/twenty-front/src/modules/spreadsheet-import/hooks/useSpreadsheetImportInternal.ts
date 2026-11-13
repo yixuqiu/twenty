@@ -1,14 +1,14 @@
 import { useContext } from 'react';
-import { SetRequired } from 'type-fest';
+import { type SetRequired } from 'type-fest';
 
-import { RsiContext } from '@/spreadsheet-import/components/Providers';
-import { defaultSpreadsheetImportProps } from '@/spreadsheet-import/provider/components/SpreadsheetImport';
-import { SpreadsheetOptions } from '@/spreadsheet-import/types';
+import { RsiContext } from '@/spreadsheet-import/components/ReactSpreadsheetImportContextProvider';
+import { type defaultSpreadsheetImportProps } from '@/spreadsheet-import/provider/components/SpreadsheetImport';
+import { type SpreadsheetImportDialogOptions } from '@/spreadsheet-import/types';
 
-export const useSpreadsheetImportInternal = <T extends string>() =>
+export const useSpreadsheetImportInternal = () =>
   useContext<
     SetRequired<
-      SpreadsheetOptions<T>,
+      SpreadsheetImportDialogOptions,
       keyof typeof defaultSpreadsheetImportProps
     >
   >(RsiContext);

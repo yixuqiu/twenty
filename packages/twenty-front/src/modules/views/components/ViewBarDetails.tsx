@@ -1,131 +1,221 @@
-import { ReactNode } from 'react';
-import styled from '@emotion/styled';
-import { useRecoilValue } from 'recoil';
+import { styled } from '@linaria/react';
+import { type ReactNode, useMemo } from 'react';
 
-import { AddObjectFilterFromDetailsButton } from '@/object-record/object-filter-dropdown/components/AddObjectFilterFromDetailsButton';
-import { ObjectFilterDropdownScope } from '@/object-record/object-filter-dropdown/scopes/ObjectFilterDropdownScope';
-import { DropdownScope } from '@/ui/layout/dropdown/scopes/DropdownScope';
-import { EditableFilterDropdownButton } from '@/views/components/EditableFilterDropdownButton';
-import { EditableSortChip } from '@/views/components/EditableSortChip';
-import { ViewBarFilterEffect } from '@/views/components/ViewBarFilterEffect';
-import { useViewFromQueryParams } from '@/views/hooks/internal/useViewFromQueryParams';
-import { useViewStates } from '@/views/hooks/internal/useViewStates';
-import { useGetCurrentView } from '@/views/hooks/useGetCurrentView';
-import { useResetCurrentView } from '@/views/hooks/useResetCurrentView';
-import { mapViewFiltersToFilters } from '@/views/utils/mapViewFiltersToFilters';
-import { mapViewSortsToSorts } from '@/views/utils/mapViewSortsToSorts';
+import { useObjectNameSingularFromPlural } from '@/object-metadata/hooks/useObjectNameSingularFromPlural';
+import { ObjectFilterDropdownComponentInstanceContext } from '@/object-record/object-filter-dropdown/states/contexts/ObjectFilterDropdownComponentInstanceContext';
+import { useHandleToggleTrashColumnFilter } from '@/object-record/record-index/hooks/useHandleToggleTrashColumnFilter';
+import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
+import { AdvancedFilterDropdownButton } from '@/views/advanced-filter-chip/components/AdvancedFilterDropdownButton';
+import { ViewBarDetailsAddFilterButton } from '@/views/components/ViewBarDetailsAddFilterButton';
+import { EditableSortChip } from '@/views/editable-chip/components/EditableSortChip';
+
+import { currentRecordFiltersComponentState } from '@/object-record/record-filter/states/currentRecordFiltersComponentState';
+import { currentRecordSortsComponentState } from '@/object-record/record-sort/states/currentRecordSortsComponentState';
+import { SoftDeleteFilterChip } from '@/views/components/SoftDeleteFilterChip';
+import { useApplyCurrentViewFiltersToCurrentRecordFilters } from '@/views/hooks/useApplyCurrentViewFiltersToCurrentRecordFilters';
+import { useApplyCurrentViewSortsToCurrentRecordSorts } from '@/views/hooks/useApplyCurrentViewSortsToCurrentRecordSorts';
+import { useAreViewFiltersDifferentFromRecordFilters } from '@/views/hooks/useAreViewFiltersDifferentFromRecordFilters';
+import { useAreViewSortsDifferentFromRecordSorts } from '@/views/hooks/useAreViewSortsDifferentFromRecordSorts';
+
+import { currentRecordFilterGroupsComponentState } from '@/object-record/record-filter-group/states/currentRecordFilterGroupsComponentState';
+import { useCheckIsSoftDeleteFilter } from '@/object-record/record-filter/hooks/useCheckIsSoftDeleteFilter';
+import { anyFieldFilterValueComponentState } from '@/object-record/record-filter/states/anyFieldFilterValueComponentState';
+import { isDropdownOpenComponentState } from '@/ui/layout/dropdown/states/isDropdownOpenComponentState';
+import { ScrollWrapper } from '@/ui/utilities/scroll/components/ScrollWrapper';
+import { AnyFieldSearchDropdownButton } from '@/views/components/AnyFieldSearchDropdownButton';
+import { useRecordIndexContextOrThrow } from '@/object-record/record-index/contexts/RecordIndexContext';
+import { getAnyFieldSearchDropdownId } from '@/views/utils/getAnyFieldSearchDropdownId';
+import { EditableFilterDropdownButton } from '@/views/editable-chip/components/EditableFilterDropdownButton';
+import { getEditableChipObjectFilterDropdownComponentInstanceId } from '@/views/editable-chip/utils/getEditableChipObjectFilterDropdownComponentInstanceId';
+import { useHasFiltersInQueryParams } from '@/views/hooks/internal/useHasFiltersInQueryParams';
+import { useApplyCurrentViewAnyFieldFilterToAnyFieldFilter } from '@/views/hooks/useApplyCurrentViewAnyFieldFilterToAnyFieldFilter';
+import { useApplyCurrentViewFilterGroupsToCurrentRecordFilterGroups } from '@/views/hooks/useApplyCurrentViewFilterGroupsToCurrentRecordFilterGroups';
+import { useAreViewFilterGroupsDifferentFromRecordFilterGroups } from '@/views/hooks/useAreViewFilterGroupsDifferentFromRecordFilterGroups';
+import { useIsViewAnyFieldFilterDifferentFromCurrentAnyFieldFilter } from '@/views/hooks/useIsViewAnyFieldFilterDifferentFromCurrentAnyFieldFilter';
+import { isViewBarExpandedComponentState } from '@/views/states/isViewBarExpandedComponentState';
+import { isNonEmptyArray, isNonEmptyString } from '@sniptt/guards';
+import { isDefined } from 'twenty-shared/utils';
+import { LightButton } from 'twenty-ui/components/input';
+import { themeCssVariables } from 'twenty-ui/theme';
+import { useLingui } from '@lingui/react/macro';
 
 export type ViewBarDetailsProps = {
   hasFilterButton?: boolean;
   rightComponent?: ReactNode;
-  filterDropdownId?: string;
   viewBarId: string;
+  objectNamePlural: string;
 };
 
 const StyledBar = styled.div`
   align-items: center;
-  border-top: 1px solid ${({ theme }) => theme.border.color.light};
+  border-top: 1px solid ${themeCssVariables.border.color.light};
   display: flex;
   flex-direction: row;
-  min-height: 32px;
   justify-content: space-between;
+  min-height: 32px;
+  padding-bottom: ${themeCssVariables.spacing[1]};
+  padding-top: ${themeCssVariables.spacing[1]};
   z-index: 4;
-  padding-top: ${({ theme }) => theme.spacing(1)};
-  padding-bottom: ${({ theme }) => theme.spacing(1)};
 `;
 
-const StyledChipcontainer = styled.div`
+const StyledChipContainer = styled.div`
   align-items: center;
   display: flex;
   flex-direction: row;
-  gap: ${({ theme }) => theme.spacing(1)};
-  min-height: 32px;
-  margin-left: ${({ theme }) => theme.spacing(2)};
-  flex-wrap: wrap;
+  gap: ${themeCssVariables.spacing[2]};
+  z-index: 1;
 `;
 
-const StyledCancelButton = styled.button`
-  background-color: inherit;
-  border: none;
-  color: ${({ theme }) => theme.font.color.tertiary};
-  cursor: pointer;
-  font-weight: ${({ theme }) => theme.font.weight.medium};
-  margin-left: auto;
-  margin-right: ${({ theme }) => theme.spacing(2)};
-  padding: ${(props) => {
-    const horiz = props.theme.spacing(2);
-    const vert = props.theme.spacing(1);
-    return `${vert} ${horiz} ${vert} ${horiz}`;
-  }};
-  user-select: none;
-
-  &:hover {
-    background-color: ${({ theme }) => theme.background.tertiary};
-    border-radius: ${({ theme }) => theme.spacing(1)};
-  }
+const StyledActionButtonContainer = styled.div`
+  display: flex;
+  flex-direction: row;
+  gap: ${themeCssVariables.spacing[2]};
 `;
 
 const StyledFilterContainer = styled.div`
   align-items: center;
   display: flex;
+  gap: ${themeCssVariables.spacing[1]};
+
+  overflow-x: hidden;
 `;
 
-const StyledSeperatorContainer = styled.div`
+const StyledSeparatorContainer = styled.div`
   align-items: flex-start;
   align-self: stretch;
   display: flex;
-  padding-bottom: ${({ theme }) => theme.spacing(2)};
-  padding-left: ${({ theme }) => theme.spacing(1)};
-  padding-right: ${({ theme }) => theme.spacing(1)};
-  padding-top: ${({ theme }) => theme.spacing(2)};
+  padding-bottom: ${themeCssVariables.spacing[2]};
+  padding-left: ${themeCssVariables.spacing[1]};
+  padding-right: ${themeCssVariables.spacing[1]};
+  padding-top: ${themeCssVariables.spacing[2]};
 `;
 
-const StyledSeperator = styled.div`
+const StyledSeparator = styled.div`
   align-self: stretch;
-  background: ${({ theme }) => theme.background.quaternary};
+  background: ${themeCssVariables.background.quaternary};
   width: 1px;
 `;
 
 const StyledAddFilterContainer = styled.div`
-  margin-left: ${({ theme }) => theme.spacing(1)};
   z-index: 5;
 `;
 
 export const ViewBarDetails = ({
   hasFilterButton = false,
   rightComponent,
-  filterDropdownId,
+  viewBarId,
+  objectNamePlural,
 }: ViewBarDetailsProps) => {
-  const {
-    canPersistViewSelector,
-    isViewBarExpandedState,
-    availableFilterDefinitionsState,
-    availableSortDefinitionsState,
-  } = useViewStates();
+  const { t } = useLingui();
+  const { recordIndexId } = useRecordIndexContextOrThrow();
 
-  const { currentViewWithCombinedFiltersAndSorts } = useGetCurrentView();
-
-  const isViewBarExpanded = useRecoilValue(isViewBarExpandedState);
-  const { hasFiltersQueryParams } = useViewFromQueryParams();
-  const canPersistView = useRecoilValue(canPersistViewSelector());
-  const availableFilterDefinitions = useRecoilValue(
-    availableFilterDefinitionsState,
-  );
-  const availableSortDefinitions = useRecoilValue(
-    availableSortDefinitionsState,
+  const isViewBarExpanded = useAtomComponentStateValue(
+    isViewBarExpandedComponentState,
   );
 
-  const { resetCurrentView } = useResetCurrentView();
-  const canResetView = canPersistView && !hasFiltersQueryParams;
+  const { hasFiltersQueryParams } = useHasFiltersInQueryParams();
+
+  const currentRecordFilterGroups = useAtomComponentStateValue(
+    currentRecordFilterGroupsComponentState,
+    viewBarId,
+  );
+
+  const currentRecordFilters = useAtomComponentStateValue(
+    currentRecordFiltersComponentState,
+    viewBarId,
+  );
+
+  const currentRecordSorts = useAtomComponentStateValue(
+    currentRecordSortsComponentState,
+    viewBarId,
+  );
+
+  const anyFieldFilterValue = useAtomComponentStateValue(
+    anyFieldFilterValueComponentState,
+    viewBarId,
+  );
+
+  const { objectNameSingular } = useObjectNameSingularFromPlural({
+    objectNamePlural: objectNamePlural,
+  });
+  const { toggleSoftDeleteFilterState } = useHandleToggleTrashColumnFilter({
+    objectNameSingular: objectNameSingular,
+    viewBarId: viewBarId,
+  });
+
+  const { viewFilterGroupsAreDifferentFromRecordFilterGroups } =
+    useAreViewFilterGroupsDifferentFromRecordFilterGroups();
+
+  const { viewFiltersAreDifferentFromRecordFilters } =
+    useAreViewFiltersDifferentFromRecordFilters();
+
+  const { viewSortsAreDifferentFromRecordSorts } =
+    useAreViewSortsDifferentFromRecordSorts();
+
+  const { viewAnyFieldFilterDifferentFromCurrentAnyFieldFilter } =
+    useIsViewAnyFieldFilterDifferentFromCurrentAnyFieldFilter();
+
+  const { isSeeDeletedRecordsFilter } = useCheckIsSoftDeleteFilter();
+
+  const allSoftDeletedRecordsFilter = currentRecordFilters.find(
+    (recordFilter) => isSeeDeletedRecordsFilter(recordFilter),
+  );
+
+  const recordFilters = useMemo(() => {
+    return currentRecordFilters.filter(
+      (recordFilter) =>
+        !recordFilter.recordFilterGroupId &&
+        !isSeeDeletedRecordsFilter(recordFilter),
+    );
+  }, [currentRecordFilters, isSeeDeletedRecordsFilter]);
+
+  const { applyCurrentViewFilterGroupsToCurrentRecordFilterGroups } =
+    useApplyCurrentViewFilterGroupsToCurrentRecordFilterGroups();
+
+  const { applyCurrentViewFiltersToCurrentRecordFilters } =
+    useApplyCurrentViewFiltersToCurrentRecordFilters();
+
+  const { applyCurrentViewAnyFieldFilterToAnyFieldFilter } =
+    useApplyCurrentViewAnyFieldFilterToAnyFieldFilter();
+
+  const { applyCurrentViewSortsToCurrentRecordSorts } =
+    useApplyCurrentViewSortsToCurrentRecordSorts();
 
   const handleCancelClick = () => {
-    resetCurrentView();
+    applyCurrentViewFilterGroupsToCurrentRecordFilterGroups();
+    applyCurrentViewFiltersToCurrentRecordFilters();
+    applyCurrentViewSortsToCurrentRecordSorts();
+    applyCurrentViewAnyFieldFilterToAnyFieldFilter();
+    toggleSoftDeleteFilterState(false);
   };
 
+  const shouldShowAdvancedFilterDropdownButton =
+    currentRecordFilterGroups.length > 0;
+
+  const isDropdownOpen = useAtomComponentStateValue(
+    isDropdownOpenComponentState,
+    getAnyFieldSearchDropdownId(recordIndexId),
+  );
+
+  const canResetView =
+    (viewFiltersAreDifferentFromRecordFilters ||
+      viewSortsAreDifferentFromRecordSorts ||
+      viewFilterGroupsAreDifferentFromRecordFilterGroups ||
+      viewAnyFieldFilterDifferentFromCurrentAnyFieldFilter) &&
+    !hasFiltersQueryParams;
+
+  const shouldShowAnyFieldSearchChip =
+    isNonEmptyString(anyFieldFilterValue) || isDropdownOpen;
+
   const shouldExpandViewBar =
-    canPersistView ||
-    ((currentViewWithCombinedFiltersAndSorts?.viewSorts?.length ||
-      currentViewWithCombinedFiltersAndSorts?.viewFilters?.length) &&
+    shouldShowAnyFieldSearchChip ||
+    viewFiltersAreDifferentFromRecordFilters ||
+    viewSortsAreDifferentFromRecordSorts ||
+    viewFilterGroupsAreDifferentFromRecordFilterGroups ||
+    viewAnyFieldFilterDifferentFromCurrentAnyFieldFilter ||
+    ((currentRecordSorts.length > 0 ||
+      currentRecordFilters.length > 0 ||
+      currentRecordFilterGroups.length > 0) &&
       isViewBarExpanded);
 
   if (!shouldExpandViewBar) {
@@ -135,59 +225,70 @@ export const ViewBarDetails = ({
   return (
     <StyledBar>
       <StyledFilterContainer>
-        <StyledChipcontainer>
-          {mapViewSortsToSorts(
-            currentViewWithCombinedFiltersAndSorts?.viewSorts ?? [],
-            availableSortDefinitions,
-          ).map((sort) => (
-            <EditableSortChip key={sort.fieldMetadataId} viewSort={sort} />
-          ))}
-          {!!currentViewWithCombinedFiltersAndSorts?.viewSorts?.length &&
-            !!currentViewWithCombinedFiltersAndSorts?.viewFilters?.length && (
-              <StyledSeperatorContainer>
-                <StyledSeperator />
-              </StyledSeperatorContainer>
+        <ScrollWrapper
+          componentInstanceId={viewBarId}
+          defaultEnableYScroll={false}
+        >
+          <StyledChipContainer>
+            {isDefined(allSoftDeletedRecordsFilter) && (
+              <SoftDeleteFilterChip
+                key={allSoftDeletedRecordsFilter.fieldMetadataId}
+                recordFilter={allSoftDeletedRecordsFilter}
+                viewBarId={viewBarId}
+              />
             )}
-          {mapViewFiltersToFilters(
-            currentViewWithCombinedFiltersAndSorts?.viewFilters ?? [],
-            availableFilterDefinitions,
-          ).map((viewFilter) => (
-            <ObjectFilterDropdownScope
-              key={viewFilter.fieldMetadataId}
-              filterScopeId={viewFilter.fieldMetadataId}
-            >
-              <DropdownScope dropdownScopeId={viewFilter.fieldMetadataId}>
-                <ViewBarFilterEffect
-                  filterDropdownId={viewFilter.fieldMetadataId}
-                />
-                <EditableFilterDropdownButton
-                  viewFilter={viewFilter}
-                  hotkeyScope={{
-                    scope: viewFilter.fieldMetadataId,
-                  }}
-                  viewFilterDropdownId={viewFilter.fieldMetadataId}
-                />
-              </DropdownScope>
-            </ObjectFilterDropdownScope>
-          ))}
-        </StyledChipcontainer>
+            {isDefined(allSoftDeletedRecordsFilter) && (
+              <StyledSeparatorContainer>
+                <StyledSeparator />
+              </StyledSeparatorContainer>
+            )}
+            {currentRecordSorts.map((recordSort) => (
+              <EditableSortChip
+                key={recordSort.fieldMetadataId}
+                recordSort={recordSort}
+              />
+            ))}
+            {isNonEmptyArray(recordFilters) &&
+              isNonEmptyArray(currentRecordSorts) && (
+                <StyledSeparatorContainer>
+                  <StyledSeparator />
+                </StyledSeparatorContainer>
+              )}
+            {shouldShowAnyFieldSearchChip && <AnyFieldSearchDropdownButton />}
+            {shouldShowAdvancedFilterDropdownButton && (
+              <AdvancedFilterDropdownButton />
+            )}
+            {recordFilters.map((recordFilter) => (
+              <ObjectFilterDropdownComponentInstanceContext.Provider
+                key={recordFilter.id}
+                value={{
+                  instanceId:
+                    getEditableChipObjectFilterDropdownComponentInstanceId({
+                      recordFilterId: recordFilter.id,
+                    }),
+                }}
+              >
+                <EditableFilterDropdownButton recordFilter={recordFilter} />
+              </ObjectFilterDropdownComponentInstanceContext.Provider>
+            ))}
+          </StyledChipContainer>
+        </ScrollWrapper>
         {hasFilterButton && (
           <StyledAddFilterContainer>
-            <AddObjectFilterFromDetailsButton
-              filterDropdownId={filterDropdownId}
-            />
+            <ViewBarDetailsAddFilterButton />
           </StyledAddFilterContainer>
         )}
       </StyledFilterContainer>
-      {canResetView && (
-        <StyledCancelButton
-          data-testid="cancel-button"
-          onClick={handleCancelClick}
-        >
-          Reset
-        </StyledCancelButton>
-      )}
-      {rightComponent}
+      <StyledActionButtonContainer>
+        {canResetView && (
+          <LightButton
+            emphasis="subtle"
+            data-testid="cancel-button"
+            onClick={handleCancelClick}
+          >{t`Reset`}</LightButton>
+        )}
+        {rightComponent}
+      </StyledActionButtonContainer>
     </StyledBar>
   );
 };

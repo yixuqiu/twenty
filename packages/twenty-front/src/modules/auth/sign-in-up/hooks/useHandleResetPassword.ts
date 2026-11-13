@@ -1,44 +1,73 @@
 import { useCallback } from 'react';
 
-import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
-import { useEmailPasswordResetLinkMutation } from '~/generated/graphql';
+import { currentUserState } from '@/auth/states/currentUserState';
+import { workspacePublicDataState } from '@/auth/states/workspacePublicDataState';
+import { useReadCaptchaToken } from '@/captcha/hooks/useReadCaptchaToken';
+import { useCaptcha } from '@/client-config/hooks/useCaptcha';
+import { getToastOptionsFromError } from '@/error-handler/utils/getToastOptionsFromError';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import { useMutation } from '@apollo/client/react';
+import { useLingui } from '@lingui/react/macro';
+import { useToast } from 'twenty-ui/components/feedback';
+import { EmailPasswordResetLinkDocument } from '~/generated-metadata/graphql';
 
 export const useHandleResetPassword = () => {
-  const { enqueueSnackBar } = useSnackBar();
-  const [emailPasswordResetLink] = useEmailPasswordResetLinkMutation();
+  const { enqueueToast } = useToast();
+  const [emailPasswordResetLink] = useMutation(EmailPasswordResetLinkDocument);
+  const workspacePublicData = useAtomStateValue(workspacePublicDataState);
+  const currentUser = useAtomStateValue(currentUserState);
+  const { isCaptchaReady } = useCaptcha();
+  const { readCaptchaToken } = useReadCaptchaToken();
+
+  const { t } = useLingui();
 
   const handleResetPassword = useCallback(
-    (email: string) => {
+    (email = currentUser?.email) => {
       return async () => {
         if (!email) {
-          enqueueSnackBar('Invalid email', {
-            variant: 'error',
+          enqueueToast({ status: 'error', children: t`Invalid email` });
+          return;
+        }
+
+        if (!isCaptchaReady) {
+          enqueueToast({
+            status: 'error',
+            children: t`Captcha (anti-bot check) is still loading, try again`,
           });
           return;
         }
 
+        const captchaToken = readCaptchaToken();
+
         try {
           const { data } = await emailPasswordResetLink({
-            variables: { email },
+            variables: workspacePublicData?.id
+              ? { email, workspaceId: workspacePublicData.id, captchaToken }
+              : { email, captchaToken },
           });
 
           if (data?.emailPasswordResetLink?.success === true) {
-            enqueueSnackBar('Password reset link has been sent to the email', {
-              variant: 'success',
+            enqueueToast({
+              status: 'success',
+              children: t`If this email is registered, a password reset link has been sent`,
             });
           } else {
-            enqueueSnackBar('There was some issue', {
-              variant: 'error',
-            });
+            enqueueToast({ status: 'error', children: t`An error occurred.` });
           }
         } catch (error) {
-          enqueueSnackBar((error as Error).message, {
-            variant: 'error',
-          });
+          enqueueToast(getToastOptionsFromError({ error }));
         }
       };
     },
-    [enqueueSnackBar, emailPasswordResetLink],
+    [
+      currentUser?.email,
+      workspacePublicData?.id,
+      enqueueToast,
+      t,
+      emailPasswordResetLink,
+      isCaptchaReady,
+      readCaptchaToken,
+    ],
   );
 
   return { handleResetPassword };

@@ -1,19 +1,21 @@
+import { styled } from '@linaria/react';
 import { useEffect, useState } from 'react';
-import { useTheme } from '@emotion/react';
-import styled from '@emotion/styled';
-import { IconCheck, IconX } from 'twenty-ui';
 
-const StyledEditableBooleanFieldContainer = styled.div`
+import { BooleanDisplay } from '@/ui/field/display/components/BooleanDisplay';
+import { themeCssVariables } from 'twenty-ui/theme';
+
+const StyledEditableBooleanFieldContainer = styled.div<{ readonly?: boolean }>`
   align-items: center;
+  color: ${({ readonly }) =>
+    readonly
+      ? themeCssVariables.font.color.tertiary
+      : themeCssVariables.font.color.primary};
   cursor: ${({ onClick }) => (onClick ? 'pointer' : 'default')};
+
   display: flex;
-
   height: 100%;
-  width: 100%;
-`;
 
-const StyledEditableBooleanFieldValue = styled.div`
-  margin-left: ${({ theme }) => theme.spacing(1)};
+  width: 100%;
 `;
 
 type BooleanInputProps = {
@@ -40,21 +42,13 @@ export const BooleanInput = ({
     onToggle?.(!internalValue);
   };
 
-  const theme = useTheme();
-
   return (
     <StyledEditableBooleanFieldContainer
       onClick={readonly ? undefined : handleClick}
+      readonly={readonly}
       data-testid={testId}
     >
-      {internalValue ? (
-        <IconCheck size={theme.icon.size.sm} />
-      ) : (
-        <IconX size={theme.icon.size.sm} />
-      )}
-      <StyledEditableBooleanFieldValue>
-        {internalValue ? 'True' : 'False'}
-      </StyledEditableBooleanFieldValue>
+      <BooleanDisplay value={internalValue} />
     </StyledEditableBooleanFieldContainer>
   );
 };

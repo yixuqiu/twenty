@@ -1,187 +1,139 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
 
-import { DataSourceService } from 'src/engine/metadata-modules/data-source/data-source.service';
-import { ObjectMetadataService } from 'src/engine/metadata-modules/object-metadata/object-metadata.service';
-import { WorkspaceMigrationService } from 'src/engine/metadata-modules/workspace-migration/workspace-migration.service';
-import { standardObjectsPrefillData } from 'src/engine/workspace-manager/standard-objects-prefill-data/standard-objects-prefill-data';
-import { demoObjectsPrefillData } from 'src/engine/workspace-manager/demo-objects-prefill-data/demo-objects-prefill-data';
-import { WorkspaceDataSourceService } from 'src/engine/workspace-datasource/workspace-datasource.service';
-import { DataSourceEntity } from 'src/engine/metadata-modules/data-source/data-source.entity';
-import { WorkspaceSyncMetadataService } from 'src/engine/workspace-manager/workspace-sync-metadata/workspace-sync-metadata.service';
+import { MEMBER_ROLE_UNIVERSAL_IDENTIFIER } from 'twenty-shared/constants';
+import { Repository } from 'typeorm';
+
+import { ApplicationService } from 'src/engine/core-modules/application/application.service';
+import { FlatApplication } from 'src/engine/core-modules/application/types/flat-application.type';
+import { UserWorkspaceEntity } from 'src/engine/core-modules/user-workspace/user-workspace.entity';
+import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
+import { RoleEntity } from 'src/engine/metadata-modules/role/role.entity';
+import { RoleService } from 'src/engine/metadata-modules/role/role.service';
+import { RoleAssignmentWriteService } from 'src/engine/permissions/role-assignment/role-assignment-write.service';
+import { InjectWorkspaceScopedRepository } from 'src/engine/twenty-orm/workspace-scoped-repository/inject-workspace-scoped-repository.decorator';
+import { WorkspaceScopedRepository } from 'src/engine/twenty-orm/workspace-scoped-repository/workspace-scoped-repository';
+import { WorkspaceSchemaService } from 'src/engine/workspace-datasource/workspace-schema.service';
+import { STANDARD_ROLE } from 'src/engine/workspace-manager/twenty-standard-application/constants/standard-role.constant';
+import { TwentyStandardApplicationService } from 'src/engine/workspace-manager/twenty-standard-application/services/twenty-standard-application.service';
 
 @Injectable()
 export class WorkspaceManagerService {
+  private readonly logger = new Logger(WorkspaceManagerService.name);
+
   constructor(
-    private readonly workspaceDataSourceService: WorkspaceDataSourceService,
-    private readonly workspaceMigrationService: WorkspaceMigrationService,
-    private readonly objectMetadataService: ObjectMetadataService,
-    private readonly dataSourceService: DataSourceService,
-    private readonly workspaceSyncMetadataService: WorkspaceSyncMetadataService,
+    private readonly workspaceSchemaService: WorkspaceSchemaService,
+    @InjectRepository(UserWorkspaceEntity)
+    private readonly userWorkspaceRepository: Repository<UserWorkspaceEntity>,
+    private readonly roleService: RoleService,
+    private readonly roleAssignmentWriteService: RoleAssignmentWriteService,
+    private readonly twentyStandardApplicationService: TwentyStandardApplicationService,
+    @InjectRepository(WorkspaceEntity)
+    private readonly workspaceRepository: Repository<WorkspaceEntity>,
+    @InjectWorkspaceScopedRepository(RoleEntity)
+    private readonly roleRepository: WorkspaceScopedRepository<RoleEntity>,
+    private readonly applicationService: ApplicationService,
   ) {}
 
-  /**
-   * Init a workspace by creating a new data source and running all migrations
-   * @param workspaceId
-   * @returns Promise<void>
-   */
-  public async init(workspaceId: string): Promise<void> {
+  public async init({
+    workspace,
+    userId,
+  }: {
+    workspace: WorkspaceEntity;
+    userId: string;
+  }): Promise<void> {
+    const workspaceId = workspace.id;
+    const schemaCreationStart = performance.now();
     const schemaName =
-      await this.workspaceDataSourceService.createWorkspaceDBSchema(
-        workspaceId,
-      );
+      await this.workspaceSchemaService.createWorkspaceDBSchema(workspaceId);
 
-    const dataSourceMetadata =
-      await this.dataSourceService.createDataSourceMetadata(
-        workspaceId,
-        schemaName,
-      );
+    const schemaCreationEnd = performance.now();
 
-    await this.setWorkspaceMaxRow(workspaceId, schemaName);
+    this.logger.log(
+      `Schema creation took ${schemaCreationEnd - schemaCreationStart}ms`,
+    );
 
-    await this.workspaceSyncMetadataService.synchronize({
-      workspaceId,
-      dataSourceId: dataSourceMetadata.id,
+    const dataSourceMetadataCreationStart = performance.now();
+
+    await this.workspaceRepository.update(workspaceId, {
+      databaseSchema: schemaName,
     });
 
-    await this.prefillWorkspaceWithStandardObjects(
-      dataSourceMetadata,
+    await this.applicationService.createTwentyStandardApplication({
       workspaceId,
-    );
-  }
-
-  /**
-   * InitDemo a workspace by creating a new data source and running all migrations
-   * @param workspaceId
-   * @returns Promise<void>
-   */
-  public async initDemo(workspaceId: string): Promise<void> {
-    const schemaName =
-      await this.workspaceDataSourceService.createWorkspaceDBSchema(
-        workspaceId,
-      );
-
-    const dataSourceMetadata =
-      await this.dataSourceService.createDataSourceMetadata(
-        workspaceId,
-        schemaName,
-      );
-
-    await this.setWorkspaceMaxRow(workspaceId, schemaName);
-
-    await this.workspaceSyncMetadataService.synchronize({
-      workspaceId,
-      dataSourceId: dataSourceMetadata.id,
     });
 
-    await this.prefillWorkspaceWithDemoObjects(dataSourceMetadata, workspaceId);
-  }
-
-  /**
-   *
-   * Check if the workspace schema has already been created or not
-   *
-   * @param workspaceId
-   * @Returns Promise<boolean>
-   */
-  public async doesDataSourceExist(workspaceId: string): Promise<boolean> {
-    const dataSource =
-      await this.dataSourceService.getDataSourcesMetadataFromWorkspaceId(
+    await this.twentyStandardApplicationService.synchronizeTwentyStandardApplicationOrThrow(
+      {
         workspaceId,
-      );
-
-    return dataSource.length > 0;
-  }
-
-  /**
-   *
-   * We are updating the pg_graphql max_rows from 30 (default value) to 60
-   *
-   * @params workspaceId, schemaName
-   * @param workspaceId
-   */
-  private async setWorkspaceMaxRow(workspaceId, schemaName) {
-    const workspaceDataSource =
-      await this.workspaceDataSourceService.connectToWorkspaceDataSource(
-        workspaceId,
-      );
-
-    await workspaceDataSource.query(
-      `comment on schema ${schemaName} is e'@graphql({"max_rows": 60})'`,
+      },
     );
-  }
 
-  /**
-   *
-   * We are prefilling a few standard objects with data to make it easier for the user to get started.
-   *
-   * @param dataSourceMetadata
-   * @param workspaceId
-   */
-  private async prefillWorkspaceWithStandardObjects(
-    dataSourceMetadata: DataSourceEntity,
-    workspaceId: string,
-  ) {
-    const workspaceDataSource =
-      await this.workspaceDataSourceService.connectToWorkspaceDataSource(
-        workspaceId,
+    const dataSourceMetadataCreationEnd = performance.now();
+
+    this.logger.log(
+      `Metadata creation took ${dataSourceMetadataCreationEnd - dataSourceMetadataCreationStart}ms`,
+    );
+
+    const { workspaceCustomFlatApplication } =
+      await this.applicationService.findWorkspaceTwentyStandardAndCustomApplicationOrThrow(
+        {
+          workspaceId,
+        },
       );
 
-    if (!workspaceDataSource) {
-      throw new Error('Could not connect to workspace data source');
+    await this.roleService.createWorkspaceCustomApplicationRole({
+      workspaceId,
+      workspaceCustomFlatApplication,
+    });
+
+    await this.setupDefaultRoles({
+      workspaceId,
+      userId,
+      workspaceCustomFlatApplication,
+    });
+  }
+
+  private async setupDefaultRoles({
+    userId,
+    workspaceId,
+    workspaceCustomFlatApplication,
+  }: {
+    workspaceId: string;
+    userId: string;
+    workspaceCustomFlatApplication: FlatApplication;
+  }): Promise<void> {
+    const adminRole = await this.roleRepository.findOne(workspaceId, {
+      where: {
+        universalIdentifier: STANDARD_ROLE.admin.universalIdentifier,
+      },
+    });
+
+    if (adminRole) {
+      const userWorkspace = await this.userWorkspaceRepository.findOneOrFail({
+        where: { workspaceId, userId },
+      });
+
+      await this.roleAssignmentWriteService.assignRoleToUserWorkspaces({
+        workspaceId,
+        userWorkspaceIds: [userWorkspace.id],
+        roleId: adminRole.id,
+      });
     }
 
-    const createdObjectMetadata =
-      await this.objectMetadataService.findManyWithinWorkspace(workspaceId);
+    const existingMemberRole = await this.roleRepository.findOne(workspaceId, {
+      where: { universalIdentifier: MEMBER_ROLE_UNIVERSAL_IDENTIFIER },
+    });
 
-    await standardObjectsPrefillData(
-      workspaceDataSource,
-      dataSourceMetadata.schema,
-      createdObjectMetadata,
-    );
-  }
-
-  /**
-   *
-   * We are prefilling a few demo objects with data to make it easier for the user to get started.
-   *
-   * @param dataSourceMetadata
-   * @param workspaceId
-   */
-  private async prefillWorkspaceWithDemoObjects(
-    dataSourceMetadata: DataSourceEntity,
-    workspaceId: string,
-  ) {
-    const workspaceDataSource =
-      await this.workspaceDataSourceService.connectToWorkspaceDataSource(
+    const memberRole =
+      existingMemberRole ??
+      (await this.roleService.createMemberRole({
         workspaceId,
-      );
+        ownerFlatApplication: workspaceCustomFlatApplication,
+      }));
 
-    if (!workspaceDataSource) {
-      throw new Error('Could not connect to workspace data source');
-    }
-
-    const createdObjectMetadata =
-      await this.objectMetadataService.findManyWithinWorkspace(workspaceId);
-
-    await demoObjectsPrefillData(
-      workspaceDataSource,
-      dataSourceMetadata.schema,
-      createdObjectMetadata,
-    );
-  }
-
-  /**
-   *
-   * Delete a workspace by deleting all metadata and the schema
-   *
-   * @param workspaceId
-   */
-  public async delete(workspaceId: string): Promise<void> {
-    // Delete data from metadata tables
-    await this.objectMetadataService.deleteObjectsMetadata(workspaceId);
-    await this.workspaceMigrationService.deleteAllWithinWorkspace(workspaceId);
-    await this.dataSourceService.delete(workspaceId);
-    // Delete schema
-    await this.workspaceDataSourceService.deleteWorkspaceDBSchema(workspaceId);
+    await this.workspaceRepository.update(workspaceId, {
+      defaultRoleId: memberRole.id,
+    });
   }
 }

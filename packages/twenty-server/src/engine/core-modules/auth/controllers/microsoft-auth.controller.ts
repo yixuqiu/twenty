@@ -1,49 +1,56 @@
-import { Controller, Get, Req, Res, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Req,
+  Res,
+  UseFilters,
+  UseGuards,
+} from '@nestjs/common';
 
 import { Response } from 'express';
+import { ApiPath } from 'twenty-shared/types';
 
-import { TypeORMService } from 'src/database/typeorm/typeorm.service';
+import { AuthRestApiExceptionFilter } from 'src/engine/core-modules/auth/filters/auth-rest-api-exception.filter';
 import { MicrosoftOAuthGuard } from 'src/engine/core-modules/auth/guards/microsoft-oauth.guard';
 import { MicrosoftProviderEnabledGuard } from 'src/engine/core-modules/auth/guards/microsoft-provider-enabled.guard';
 import { AuthService } from 'src/engine/core-modules/auth/services/auth.service';
-import { TokenService } from 'src/engine/core-modules/auth/services/token.service';
 import { MicrosoftRequest } from 'src/engine/core-modules/auth/strategies/microsoft.auth.strategy';
+import { AuthProviderEnum } from 'src/engine/core-modules/workspace/types/workspace.type';
+import { NoPermissionGuard } from 'src/engine/guards/no-permission.guard';
+import { PublicEndpointGuard } from 'src/engine/guards/public-endpoint.guard';
 
-@Controller('auth/microsoft')
+@Controller(`${ApiPath.Auth}/microsoft`)
+@UseFilters(AuthRestApiExceptionFilter)
 export class MicrosoftAuthController {
-  constructor(
-    private readonly tokenService: TokenService,
-    private readonly typeORMService: TypeORMService,
-    private readonly authService: AuthService,
-  ) {}
+  constructor(private readonly authService: AuthService) {}
 
   @Get()
-  @UseGuards(MicrosoftProviderEnabledGuard, MicrosoftOAuthGuard)
+  @UseGuards(
+    MicrosoftProviderEnabledGuard,
+    MicrosoftOAuthGuard,
+    PublicEndpointGuard,
+    NoPermissionGuard,
+  )
   async microsoftAuth() {
-    // As this method is protected by Microsoft Auth guard, it will trigger Microsoft SSO flow
     return;
   }
 
   @Get('redirect')
-  @UseGuards(MicrosoftProviderEnabledGuard, MicrosoftOAuthGuard)
+  @UseGuards(
+    MicrosoftProviderEnabledGuard,
+    MicrosoftOAuthGuard,
+    PublicEndpointGuard,
+    NoPermissionGuard,
+  )
   async microsoftAuthRedirect(
     @Req() req: MicrosoftRequest,
     @Res() res: Response,
   ) {
-    const { firstName, lastName, email, picture, workspaceInviteHash } =
-      req.user;
-
-    const user = await this.authService.signInUp({
-      email,
-      firstName,
-      lastName,
-      picture,
-      workspaceInviteHash,
-      fromSSO: true,
-    });
-
-    const loginToken = await this.tokenService.generateLoginToken(user.email);
-
-    return res.redirect(this.tokenService.computeRedirectURI(loginToken.token));
+    return res.redirect(
+      await this.authService.signInUpWithSocialSso(
+        req.user,
+        AuthProviderEnum.Microsoft,
+      ),
+    );
   }
 }

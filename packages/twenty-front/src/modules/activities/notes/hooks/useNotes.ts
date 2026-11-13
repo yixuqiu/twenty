@@ -1,35 +1,51 @@
 import { useEffect, useMemo } from 'react';
-import { useRecoilState } from 'recoil';
 
 import { useActivities } from '@/activities/hooks/useActivities';
 import { currentNotesQueryVariablesState } from '@/activities/notes/states/currentNotesQueryVariablesState';
-import { FIND_MANY_TIMELINE_ACTIVITIES_ORDER_BY } from '@/activities/timeline/constants/FindManyTimelineActivitiesOrderBy';
-import { Note } from '@/activities/types/Note';
-import { RecordGqlOperationVariables } from '@/object-record/graphql/types/RecordGqlOperationVariables';
+import { FIND_MANY_TIMELINE_ACTIVITIES_ORDER_BY } from '@/activities/timeline-activities/constants/FindManyTimelineActivitiesOrderBy';
+import { type Note } from '@/activities/types/Note';
+import {
+  StandardObjectNameSingular,
+  type RecordGqlOperationVariables,
+} from 'twenty-shared/types';
 import { isDeeplyEqual } from '~/utils/isDeeplyEqual';
 
-import { ActivityTargetableObject } from '../../types/ActivityTargetableEntity';
+import { type ActivityTargetableObject } from '@/activities/types/ActivityTargetableEntity';
+import { useAtomState } from '@/ui/utilities/state/jotai/hooks/useAtomState';
 
 export const useNotes = (targetableObject: ActivityTargetableObject) => {
   const notesQueryVariables = useMemo(
     () =>
       ({
-        filter: {
-          type: { eq: 'Note' },
-        },
         orderBy: FIND_MANY_TIMELINE_ACTIVITIES_ORDER_BY,
       }) as RecordGqlOperationVariables,
     [],
   );
 
-  const { activities, loading } = useActivities({
-    activitiesFilters: notesQueryVariables.filter ?? {},
-    activitiesOrderByVariables: notesQueryVariables.orderBy ?? {},
+  const {
+    activities,
+    loading,
+    totalCountActivities,
+    fetchMoreActivities,
+    hasNextPage,
+  } = useActivities({
+    objectNameSingular: StandardObjectNameSingular.Note,
+    activityTargetsOrderByVariables: notesQueryVariables.orderBy ?? [{}],
     targetableObjects: [targetableObject],
+    limit: 10,
   });
 
+  const notes = activities.filter(
+    (activity): activity is Note => activity.__typename === 'Note',
+  );
+
+  const fetchMoreNotes = async () =>
+    (await fetchMoreActivities()).filter(
+      (activity): activity is Note => activity.__typename === 'Note',
+    );
+
   const [currentNotesQueryVariables, setCurrentNotesQueryVariables] =
-    useRecoilState(currentNotesQueryVariablesState);
+    useAtomState(currentNotesQueryVariablesState);
 
   // TODO: fix useEffect, remove with better pattern
   useEffect(() => {
@@ -43,7 +59,10 @@ export const useNotes = (targetableObject: ActivityTargetableObject) => {
   ]);
 
   return {
-    notes: activities as Note[],
+    notes,
     loading,
+    totalCountNotes: totalCountActivities,
+    fetchMoreNotes,
+    hasNextPage,
   };
 };

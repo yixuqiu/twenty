@@ -1,79 +1,89 @@
-import styled from '@emotion/styled';
-import { Droppable } from '@hello-pangea/dnd';
-import { useRecoilValue } from 'recoil';
+import { styled } from '@linaria/react';
+import { themeCssVariables } from 'twenty-ui/theme';
 
-import { useRecordBoardStates } from '@/object-record/record-board/hooks/internal/useRecordBoardStates';
+import { RECORD_BOARD_COLUMN_WIDTH } from '@/object-record/record-board/constants/RecordBoardColumnWidth';
+import { RECORD_BOARD_COLUMN_WIDTH_CSS_VARIABLE_NAME } from '@/object-record/record-board/constants/RecordBoardColumnWidthCssVariableName';
 import { RecordBoardColumnCardsContainer } from '@/object-record/record-board/record-board-column/components/RecordBoardColumnCardsContainer';
-import { RecordBoardColumnHeader } from '@/object-record/record-board/record-board-column/components/RecordBoardColumnHeader';
 import { RecordBoardColumnContext } from '@/object-record/record-board/record-board-column/contexts/RecordBoardColumnContext';
+import { useShouldHideRecordGroup } from '@/object-record/record-group/hooks/useShouldHideRecordGroup';
+import { recordGroupDefinitionFamilyState } from '@/object-record/record-group/states/recordGroupDefinitionFamilyState';
+import { recordIndexRecordIdsByGroupComponentFamilyState } from '@/object-record/record-index/states/recordIndexRecordIdsByGroupComponentFamilyState';
+import { useAtomFamilyStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomFamilyStateValue';
+import { useAtomComponentFamilyStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentFamilyStateValue';
+import { isDefined } from 'twenty-shared/utils';
+import { useDroppable } from '@dnd-kit/react';
+import { pointerIntersection } from '@dnd-kit/collision';
+import { RECORD_BOARD_CARD_DND_TYPE } from '@/object-record/record-board/record-board-dnd/constants/RecordBoardCardDndType';
+import { RECORD_BOARD_COLUMN_DND_TYPE } from '@/object-record/record-board/record-board-dnd/constants/RecordBoardColumnDndType';
+import { DND_KIT_COLLISION_PRIORITY } from '@/ui/utilities/drag-and-drop/constants/DndKitCollisionPriority';
 
-const StyledColumn = styled.div<{ isFirstColumn: boolean }>`
-  background-color: ${({ theme }) => theme.background.primary};
-  border-left: 1px solid
-    ${({ theme, isFirstColumn }) =>
-      isFirstColumn ? 'none' : theme.border.color.light};
+const StyledColumn = styled.div`
+  background-color: ${themeCssVariables.background.primary};
   display: flex;
   flex-direction: column;
-  max-width: 200px;
-  min-width: 200px;
-
-  padding: ${({ theme }) => theme.spacing(2)};
+  max-width: var(
+    ${RECORD_BOARD_COLUMN_WIDTH_CSS_VARIABLE_NAME},
+    ${RECORD_BOARD_COLUMN_WIDTH}px
+  );
+  min-width: var(
+    ${RECORD_BOARD_COLUMN_WIDTH_CSS_VARIABLE_NAME},
+    ${RECORD_BOARD_COLUMN_WIDTH}px
+  );
+  padding: ${themeCssVariables.spacing[2]};
+  padding-top: 0px;
   position: relative;
 `;
 
 type RecordBoardColumnProps = {
   recordBoardColumnId: string;
+  recordBoardColumnIndex: number;
 };
 
 export const RecordBoardColumn = ({
   recordBoardColumnId,
+  recordBoardColumnIndex,
 }: RecordBoardColumnProps) => {
-  const {
-    isFirstColumnFamilyState,
-    isLastColumnFamilyState,
-    columnsFamilySelector,
-    recordIdsByColumnIdFamilyState,
-  } = useRecordBoardStates();
-  const columnDefinition = useRecoilValue(
-    columnsFamilySelector(recordBoardColumnId),
+  const recordGroupDefinition = useAtomFamilyStateValue(
+    recordGroupDefinitionFamilyState,
+    recordBoardColumnId,
+  );
+  const recordIndexRecordIdsByGroup = useAtomComponentFamilyStateValue(
+    recordIndexRecordIdsByGroupComponentFamilyState,
+    recordBoardColumnId,
   );
 
-  const isFirstColumn = useRecoilValue(
-    isFirstColumnFamilyState(recordBoardColumnId),
-  );
+  const shouldHide = useShouldHideRecordGroup(recordBoardColumnId);
 
-  const isLastColumn = useRecoilValue(
-    isLastColumnFamilyState(recordBoardColumnId),
-  );
+  const { ref } = useDroppable({
+    id: recordBoardColumnId,
+    collisionPriority: DND_KIT_COLLISION_PRIORITY,
+    collisionDetector: pointerIntersection,
+    type: RECORD_BOARD_COLUMN_DND_TYPE,
+    accept: RECORD_BOARD_CARD_DND_TYPE,
+  });
 
-  const recordIds = useRecoilValue(
-    recordIdsByColumnIdFamilyState(recordBoardColumnId),
-  );
+  if (shouldHide) {
+    return null;
+  }
 
-  if (!columnDefinition) {
+  if (!isDefined(recordGroupDefinition)) {
     return null;
   }
 
   return (
     <RecordBoardColumnContext.Provider
       value={{
-        columnDefinition: columnDefinition,
-        isFirstColumn: isFirstColumn,
-        isLastColumn: isLastColumn,
-        recordCount: recordIds.length,
+        columnDefinition: recordGroupDefinition,
+        columnId: recordBoardColumnId,
+        recordIds: recordIndexRecordIdsByGroup,
+        columnIndex: recordBoardColumnIndex,
       }}
     >
-      <Droppable droppableId={recordBoardColumnId}>
-        {(droppableProvided) => (
-          <StyledColumn isFirstColumn={isFirstColumn}>
-            <RecordBoardColumnHeader />
-            <RecordBoardColumnCardsContainer
-              droppableProvided={droppableProvided}
-              recordIds={recordIds}
-            />
-          </StyledColumn>
-        )}
-      </Droppable>
+      <StyledColumn ref={ref} data-record-board-column-id={recordBoardColumnId}>
+        <RecordBoardColumnCardsContainer
+          recordBoardColumnId={recordBoardColumnId}
+        />
+      </StyledColumn>
     </RecordBoardColumnContext.Provider>
   );
 };

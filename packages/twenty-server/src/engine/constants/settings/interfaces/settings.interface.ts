@@ -1,15 +1,10 @@
-import { FileFolder } from 'src/engine/core-modules/file/interfaces/file-folder.interface';
-
-import { ShortCropSize } from 'src/utils/image';
-
-type ValueOfFileFolder = `${FileFolder}`;
-
 export interface Settings {
   storage: {
-    imageCropSizes: {
-      [key in ValueOfFileFolder]?: ShortCropSize[];
-    };
-    maxFileSize: `${number}MB`;
+    maxMultipartFileSize: `${number}MB`;
+    maxDirectUploadFileSize: `${number}MB` | `${number}GB`;
+    maxCorePictureFileSize: `${number}MB`;
   };
+  maxRequestBodySize: `${number}MB`;
   minLengthOfStringForDuplicateCheck: number;
+  maxVisibleViewFields: number;
 }

@@ -1,16 +1,24 @@
-import { ReactNode } from 'react';
-import { MockedProvider } from '@apollo/client/testing';
 import { act, renderHook } from '@testing-library/react';
-import { RecoilRoot } from 'recoil';
 
 import { useCreateOneObjectMetadataItem } from '@/object-metadata/hooks/useCreateOneObjectMetadataItem';
 
+import { getJestMetadataAndApolloMocksWrapper } from '~/testing/jest/getJestMetadataAndApolloMocksWrapper';
 import {
+  findManyCommandMenuItemsQuery,
+  findManyNavigationMenuItemsQuery,
   findManyViewsQuery,
   query,
   responseData,
   variables,
-} from '../__mocks__/useCreateOneObjectMetadataItem';
+} from '@/object-metadata/hooks/__mocks__/useCreateOneObjectMetadataItem';
+
+import { jestExpectSuccessfulMetadataRequestResult } from '@/object-metadata/hooks/__tests__/utils/jest-expect-metadata-request-status.util';
+import { GetCurrentUserDocument } from '~/generated-metadata/graphql';
+import { mockedUserData } from '~/testing/mock-data/users';
+import {
+  query as findManyObjectMetadataItemsQuery,
+  responseData as findManyObjectMetadataItemsResponseData,
+} from '@/object-metadata/hooks/__mocks__/useFindManyObjectMetadataItems';
 
 const mocks = [
   {
@@ -26,34 +34,64 @@ const mocks = [
   },
   {
     request: {
-      query: findManyViewsQuery,
+      query: GetCurrentUserDocument,
       variables: {},
     },
     result: jest.fn(() => ({
       data: {
-        views: {
-          __typename: 'ViewConnection',
-          totalCount: 0,
-          pageInfo: {
-            __typename: 'PageInfo',
-            hasNextPage: false,
-            startCursor: '',
-            endCursor: '',
-          },
-          edges: [],
-        },
+        currentUser: mockedUserData,
+      },
+    })),
+  },
+  {
+    request: {
+      query: findManyObjectMetadataItemsQuery,
+      variables: {},
+    },
+    result: jest.fn(() => ({
+      data: findManyObjectMetadataItemsResponseData,
+    })),
+  },
+  {
+    request: {
+      query: findManyViewsQuery,
+      variables: {
+        objectMetadataId: responseData.id,
+      },
+    },
+    result: jest.fn(() => ({
+      data: {
+        getViews: [],
+      },
+    })),
+  },
+  {
+    request: {
+      query: findManyNavigationMenuItemsQuery,
+      variables: {},
+    },
+    result: jest.fn(() => ({
+      data: {
+        navigationMenuItems: [],
+      },
+    })),
+  },
+  {
+    request: {
+      query: findManyCommandMenuItemsQuery,
+      variables: {},
+    },
+    result: jest.fn(() => ({
+      data: {
+        commandMenuItems: [],
       },
     })),
   },
 ];
 
-const Wrapper = ({ children }: { children: ReactNode }) => (
-  <RecoilRoot>
-    <MockedProvider mocks={mocks} addTypename={false}>
-      {children}
-    </MockedProvider>
-  </RecoilRoot>
-);
+const Wrapper = getJestMetadataAndApolloMocksWrapper({
+  apolloMocks: mocks,
+});
 
 describe('useCreateOneObjectMetadataItem', () => {
   it('should work as expected', async () => {
@@ -69,8 +107,8 @@ describe('useCreateOneObjectMetadataItem', () => {
         namePlural: 'viewFilters',
         nameSingular: 'viewFilter',
       });
-
-      expect(res.data).toEqual({ createOneObject: responseData });
+      jestExpectSuccessfulMetadataRequestResult(res);
+      expect(res.response).toEqual({ data: { createOneObject: responseData } });
     });
   });
 });

@@ -1,99 +1,88 @@
-import { ReactNode } from 'react';
-import { useParams } from 'react-router-dom';
+import { type ReactNode } from 'react';
 
-import { ObjectFilterDropdownButton } from '@/object-record/object-filter-dropdown/components/ObjectFilterDropdownButton';
-import { FiltersHotkeyScope } from '@/object-record/object-filter-dropdown/types/FiltersHotkeyScope';
 import { ObjectSortDropdownButton } from '@/object-record/object-sort-dropdown/components/ObjectSortDropdownButton';
-import { TopBar } from '@/ui/layout/top-bar/TopBar';
+import { useRecordIndexContextOrThrow } from '@/object-record/record-index/contexts/RecordIndexContext';
+import { TopBar } from '@/ui/layout/top-bar/components/TopBar';
 import { QueryParamsFiltersEffect } from '@/views/components/QueryParamsFiltersEffect';
-import { QueryParamsViewIdEffect } from '@/views/components/QueryParamsViewIdEffect';
-import { ViewBarEffect } from '@/views/components/ViewBarEffect';
-import { ViewBarFilterEffect } from '@/views/components/ViewBarFilterEffect';
+import { QueryParamsSortsEffect } from '@/views/components/QueryParamsSortsEffect';
 import { ViewBarPageTitle } from '@/views/components/ViewBarPageTitle';
-import { ViewBarSortEffect } from '@/views/components/ViewBarSortEffect';
-import { ViewScope } from '@/views/scopes/ViewScope';
-import { GraphQLView } from '@/views/types/GraphQLView';
 import { ViewPickerDropdown } from '@/views/view-picker/components/ViewPickerDropdown';
 
-import { ViewsHotkeyScope } from '../types/ViewsHotkeyScope';
-
+import { ObjectFilterDropdownComponentInstanceContext } from '@/object-record/object-filter-dropdown/states/contexts/ObjectFilterDropdownComponentInstanceContext';
+import { getObjectSortDropdownId } from '@/object-record/object-sort-dropdown/utils/getObjectSortDropdownId';
+import { ObjectSortDropdownComponentInstanceContext } from '@/object-record/object-sort-dropdown/states/context/ObjectSortDropdownComponentInstanceContext';
+import { QueryParamsCleanupEffect } from '@/views/components/QueryParamsCleanupEffect';
+import { ViewBarAnyFieldFilterEffect } from '@/views/components/ViewBarAnyFieldFilterEffect';
+import { ViewBarFilterDropdown } from '@/views/components/ViewBarFilterDropdown';
+import { ViewBarRecordFieldEffect } from '@/views/components/ViewBarRecordFieldEffect';
+import { ViewBarRecordFilterEffect } from '@/views/components/ViewBarRecordFilterEffect';
+import { ViewBarRecordFilterGroupEffect } from '@/views/components/ViewBarRecordFilterGroupEffect';
+import { ViewBarRecordSortEffect } from '@/views/components/ViewBarRecordSortEffect';
+import { getViewBarFilterDropdownId } from '@/views/utils/getViewBarFilterDropdownId';
 import { UpdateViewButtonGroup } from './UpdateViewButtonGroup';
 import { ViewBarDetails } from './ViewBarDetails';
 
-export type ViewBarProps = {
+type ViewBarProps = {
   viewBarId: string;
   className?: string;
   optionsDropdownButton: ReactNode;
-  onCurrentViewChange: (view: GraphQLView | undefined) => void | Promise<void>;
+  isReadOnly?: boolean;
 };
 
 export const ViewBar = ({
   viewBarId,
   className,
   optionsDropdownButton,
-  onCurrentViewChange,
+  isReadOnly = false,
 }: ViewBarProps) => {
-  const { objectNamePlural } = useParams();
-
-  const filterDropdownId = 'view-filter';
-  const sortDropdownId = 'view-sort';
+  const { objectNamePlural, recordIndexId } = useRecordIndexContextOrThrow();
 
   if (!objectNamePlural) {
     return;
   }
 
-  return (
-    <ViewScope
-      viewScopeId={viewBarId}
-      onCurrentViewChange={onCurrentViewChange}
-    >
-      <ViewBarEffect viewBarId={viewBarId} />
-      <ViewBarFilterEffect filterDropdownId={filterDropdownId} />
-      <ViewBarSortEffect sortDropdownId={sortDropdownId} />
-      <QueryParamsFiltersEffect />
-      <QueryParamsViewIdEffect />
+  if (isReadOnly) {
+    return (
+      <TopBar className={className} leftComponent={<ViewPickerDropdown />} />
+    );
+  }
 
-      <ViewBarPageTitle viewBarId={viewBarId} />
+  return (
+    <ObjectSortDropdownComponentInstanceContext.Provider
+      value={{ instanceId: getObjectSortDropdownId(recordIndexId) }}
+    >
+      <ViewBarRecordFilterGroupEffect />
+      <ViewBarAnyFieldFilterEffect />
+      <ViewBarRecordFieldEffect />
+      <ViewBarRecordFilterEffect />
+      <ViewBarRecordSortEffect />
+      <QueryParamsFiltersEffect />
+      <QueryParamsSortsEffect />
+      <QueryParamsCleanupEffect />
+      <ViewBarPageTitle />
       <TopBar
         className={className}
-        leftComponent={
-          <>
-            <ViewPickerDropdown />
-          </>
-        }
-        displayBottomBorder={false}
+        leftComponent={<ViewPickerDropdown />}
         rightComponent={
           <>
-            <ObjectFilterDropdownButton
-              filterDropdownId={filterDropdownId}
-              hotkeyScope={{
-                scope: FiltersHotkeyScope.ObjectFilterDropdownButton,
-              }}
-            />
-            <ObjectSortDropdownButton
-              sortDropdownId={sortDropdownId}
-              hotkeyScope={{
-                scope: FiltersHotkeyScope.ObjectSortDropdownButton,
-              }}
-            />
+            <ObjectFilterDropdownComponentInstanceContext.Provider
+              value={{ instanceId: getViewBarFilterDropdownId(recordIndexId) }}
+            >
+              <ViewBarFilterDropdown />
+            </ObjectFilterDropdownComponentInstanceContext.Provider>
+            <ObjectSortDropdownButton />
             {optionsDropdownButton}
           </>
         }
         bottomComponent={
           <ViewBarDetails
-            filterDropdownId={filterDropdownId}
             hasFilterButton
             viewBarId={viewBarId}
-            rightComponent={
-              <UpdateViewButtonGroup
-                hotkeyScope={{
-                  scope: ViewsHotkeyScope.UpdateViewButtonDropdown,
-                }}
-              />
-            }
+            objectNamePlural={objectNamePlural}
+            rightComponent={<UpdateViewButtonGroup />}
           />
         }
       />
-    </ViewScope>
+    </ObjectSortDropdownComponentInstanceContext.Provider>
   );
 };

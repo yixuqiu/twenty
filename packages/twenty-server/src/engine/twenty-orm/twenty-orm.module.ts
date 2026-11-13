@@ -1,41 +1,29 @@
-import { DynamicModule, Global, Module } from '@nestjs/common';
-import { ConfigurableModuleClass } from '@nestjs/common/cache/cache.module-definition';
-import { EntityClassOrSchema } from '@nestjs/typeorm/dist/interfaces/entity-class-or-schema.type';
+import { Global, Module } from '@nestjs/common';
 
-import {
-  TwentyORMModuleAsyncOptions,
-  TwentyORMOptions,
-} from 'src/engine/twenty-orm/interfaces/twenty-orm-options.interface';
-
-import { createTwentyORMProviders } from 'src/engine/twenty-orm/twenty-orm.providers';
-import { TwentyORMCoreModule } from 'src/engine/twenty-orm/twenty-orm-core.module';
+import { TypeORMModule } from 'src/database/typeorm/typeorm.module';
+import { WorkspaceBillingEntitlementsCacheModule } from 'src/engine/core-modules/billing/workspace-billing-entitlements-cache.module';
+import { EnterpriseModule } from 'src/engine/core-modules/enterprise/enterprise.module';
+import { UsageLimitModule } from 'src/engine/core-modules/usage-limit/usage-limit.module';
+import { WorkspaceFeatureFlagsMapCacheModule } from 'src/engine/metadata-modules/workspace-feature-flags-map-cache/workspace-feature-flags-map-cache.module';
+import { PermissionsModule } from 'src/engine/permissions/permissions.module';
+import { WorkspaceOrmManager } from 'src/engine/twenty-orm/workspace-orm.manager';
+import { WorkspaceDataSourceService } from 'src/engine/twenty-orm/datasource/workspace-data-source.service';
+import { WorkspaceCacheModule } from 'src/engine/workspace-cache/workspace-cache.module';
+import { WorkspaceQueryExecutorModule } from 'src/engine/workspace-query-executor/workspace-query-executor.module';
 
 @Global()
-@Module({})
-export class TwentyORMModule extends ConfigurableModuleClass {
-  static register(options: TwentyORMOptions): DynamicModule {
-    return {
-      module: TwentyORMModule,
-      imports: [TwentyORMCoreModule.register(options)],
-    };
-  }
-
-  static forFeature(objects: EntityClassOrSchema[] = []): DynamicModule {
-    const providers = createTwentyORMProviders(objects);
-
-    return {
-      module: TwentyORMModule,
-      providers: providers,
-      exports: providers,
-    };
-  }
-
-  static registerAsync(
-    asyncOptions: TwentyORMModuleAsyncOptions,
-  ): DynamicModule {
-    return {
-      module: TwentyORMModule,
-      imports: [TwentyORMCoreModule.registerAsync(asyncOptions)],
-    };
-  }
-}
+@Module({
+  imports: [
+    TypeORMModule,
+    WorkspaceFeatureFlagsMapCacheModule,
+    WorkspaceBillingEntitlementsCacheModule,
+    EnterpriseModule,
+    UsageLimitModule,
+    WorkspaceCacheModule,
+    WorkspaceQueryExecutorModule,
+    PermissionsModule,
+  ],
+  providers: [WorkspaceOrmManager, WorkspaceDataSourceService],
+  exports: [WorkspaceOrmManager],
+})
+export class TwentyOrmModule {}

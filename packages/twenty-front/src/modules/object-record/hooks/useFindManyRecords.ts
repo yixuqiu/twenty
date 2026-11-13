@@ -1,230 +1,142 @@
-import { useCallback, useMemo } from 'react';
-import { useQuery, WatchQueryFetchPolicy } from '@apollo/client';
-import { isNonEmptyArray } from '@apollo/client/utilities';
-import { isNonEmptyString } from '@sniptt/guards';
-import { useRecoilState, useRecoilValue, useSetRecoilState } from 'recoil';
+import { type WatchQueryFetchPolicy } from '@apollo/client';
+import { useQuery } from '@apollo/client/react';
+import { useEffect } from 'react';
+import {
+  canAccessThroughAllRecordsOrRlsPermission,
+  isDefined,
+} from 'twenty-shared/utils';
 
-import { currentWorkspaceMemberState } from '@/auth/states/currentWorkspaceMemberState';
+import { useApolloCoreClient } from '@/object-metadata/hooks/useApolloCoreClient';
 import { useObjectMetadataItem } from '@/object-metadata/hooks/useObjectMetadataItem';
-import { ObjectMetadataItemIdentifier } from '@/object-metadata/types/ObjectMetadataItemIdentifier';
-import { getRecordsFromRecordConnection } from '@/object-record/cache/utils/getRecordsFromRecordConnection';
-import { RecordGqlConnection } from '@/object-record/graphql/types/RecordGqlConnection';
-import { RecordGqlEdge } from '@/object-record/graphql/types/RecordGqlEdge';
-import { RecordGqlOperationFindManyResult } from '@/object-record/graphql/types/RecordGqlOperationFindManyResult';
-import { RecordGqlOperationGqlRecordFields } from '@/object-record/graphql/types/RecordGqlOperationGqlRecordFields';
-import { RecordGqlOperationVariables } from '@/object-record/graphql/types/RecordGqlOperationVariables';
+import { type ObjectMetadataItemIdentifier } from '@/object-metadata/types/ObjectMetadataItemIdentifier';
+import { type RecordGqlOperationFindManyResult } from '@/object-record/graphql/types/RecordGqlOperationFindManyResult';
+import { useFetchMoreRecordsWithPagination } from '@/object-record/hooks/useFetchMoreRecordsWithPagination';
 import { useFindManyRecordsQuery } from '@/object-record/hooks/useFindManyRecordsQuery';
-import { ObjectRecord } from '@/object-record/types/ObjectRecord';
-import { filterUniqueRecordEdgesByCursor } from '@/object-record/utils/filterUniqueRecordEdgesByCursor';
-import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
-import { isDefined } from '~/utils/isDefined';
-import { logError } from '~/utils/logError';
-import { capitalize } from '~/utils/string/capitalize';
+import { useHandleFindManyRecordsCompleted } from '@/object-record/hooks/useHandleFindManyRecordsCompleted';
+import { useHandleFindManyRecordsError } from '@/object-record/hooks/useHandleFindManyRecordsError';
+import { useObjectPermissionsForObject } from '@/object-record/hooks/useObjectPermissionsForObject';
+import { type ObjectRecord } from '@/object-record/types/ObjectRecord';
+import { type OnFindManyRecordsCompleted } from '@/object-record/types/OnFindManyRecordsCompleted';
+import { getQueryIdentifier } from '@/object-record/utils/getQueryIdentifier';
+import {
+  type RecordGqlOperationFilter,
+  type RecordGqlFields,
+  type RecordGqlOperationVariables,
+} from 'twenty-shared/types';
 
-import { cursorFamilyState } from '../states/cursorFamilyState';
-import { hasNextPageFamilyState } from '../states/hasNextPageFamilyState';
-import { isFetchingMoreRecordsFamilyState } from '../states/isFetchingMoreRecordsFamilyState';
+import { QUERY_DEFAULT_LIMIT_RECORDS } from 'twenty-shared/constants';
+
+export type UseFindManyRecordsParams<T> = ObjectMetadataItemIdentifier &
+  RecordGqlOperationVariables & {
+    onError?: (error?: Error) => void;
+    onCompleted?: OnFindManyRecordsCompleted<T>;
+    skip?: boolean;
+    recordGqlFields?: RecordGqlFields;
+    fetchPolicy?: WatchQueryFetchPolicy;
+    withSoftDeleted?: boolean;
+  };
 
 export const useFindManyRecords = <T extends ObjectRecord = ObjectRecord>({
   objectNameSingular,
   filter,
   orderBy,
-  limit,
-  onCompleted,
   skip,
   recordGqlFields,
   fetchPolicy,
-}: ObjectMetadataItemIdentifier &
-  RecordGqlOperationVariables & {
-    onCompleted?: (
-      records: T[],
-      options?: {
-        pageInfo?: RecordGqlConnection['pageInfo'];
-        totalCount?: number;
-      },
-    ) => void;
-    skip?: boolean;
-    recordGqlFields?: RecordGqlOperationGqlRecordFields;
-    fetchPolicy?: WatchQueryFetchPolicy;
-  }) => {
-  const findManyQueryStateIdentifier =
-    objectNameSingular +
-    JSON.stringify(filter) +
-    JSON.stringify(orderBy) +
-    limit;
-
-  const [lastCursor, setLastCursor] = useRecoilState(
-    cursorFamilyState(findManyQueryStateIdentifier),
-  );
-
-  const [hasNextPage, setHasNextPage] = useRecoilState(
-    hasNextPageFamilyState(findManyQueryStateIdentifier),
-  );
-
-  const setIsFetchingMoreObjects = useSetRecoilState(
-    isFetchingMoreRecordsFamilyState(findManyQueryStateIdentifier),
-  );
-
+  onError,
+  onCompleted,
+  cursorFilter,
+  limit = QUERY_DEFAULT_LIMIT_RECORDS,
+  withSoftDeleted = false,
+}: UseFindManyRecordsParams<T>) => {
   const { objectMetadataItem } = useObjectMetadataItem({
     objectNameSingular,
   });
-
+  const apolloCoreClient = useApolloCoreClient();
   const { findManyRecordsQuery } = useFindManyRecordsQuery({
     objectNameSingular,
     recordGqlFields,
+    cursorDirection: cursorFilter?.cursorDirection,
   });
 
-  const { enqueueSnackBar } = useSnackBar();
-  const currentWorkspaceMember = useRecoilValue(currentWorkspaceMemberState);
+  const { handleFindManyRecordsError } = useHandleFindManyRecordsError({
+    objectMetadataItem,
+    handleError: onError,
+  });
 
-  const { data, loading, error, fetchMore } =
+  const softDeleteFilter: RecordGqlOperationFilter = {
+    or: [{ deletedAt: { is: 'NULL' } }, { deletedAt: { is: 'NOT_NULL' } }],
+  };
+
+  const withSoftDeleteFilter = withSoftDeleted
+    ? {
+        and: [...(filter ? [filter] : []), softDeleteFilter],
+      }
+    : filter;
+
+  const queryIdentifier = getQueryIdentifier({
+    objectNameSingular,
+    filter: withSoftDeleteFilter,
+    orderBy,
+    limit,
+  });
+
+  const { handleFindManyRecordsCompleted } = useHandleFindManyRecordsCompleted({
+    objectMetadataItem,
+    queryIdentifier,
+    onCompleted,
+  });
+
+  const objectPermissions = useObjectPermissionsForObject(
+    objectMetadataItem.id,
+  );
+
+  const hasReadPermission = canAccessThroughAllRecordsOrRlsPermission({
+    objectRecordsPermissions: objectPermissions,
+    operationType: 'read',
+  });
+
+  const { data, loading, error, fetchMore, refetch } =
     useQuery<RecordGqlOperationFindManyResult>(findManyRecordsQuery, {
-      skip: skip || !objectMetadataItem || !currentWorkspaceMember,
+      skip: skip || !isDefined(objectMetadataItem) || !hasReadPermission,
       variables: {
-        filter,
-        limit,
+        filter: withSoftDeleteFilter,
         orderBy,
+        lastCursor: cursorFilter?.cursor ?? undefined,
+        limit,
       },
       fetchPolicy: fetchPolicy,
-      onCompleted: (data) => {
-        if (!isDefined(data)) {
-          onCompleted?.([]);
-        }
-
-        const pageInfo = data?.[objectMetadataItem.namePlural]?.pageInfo;
-
-        const records = getRecordsFromRecordConnection({
-          recordConnection: data?.[objectMetadataItem.namePlural],
-        }) as T[];
-
-        onCompleted?.(records, {
-          pageInfo,
-          totalCount: data?.[objectMetadataItem.namePlural]?.totalCount,
-        });
-
-        if (isDefined(data?.[objectMetadataItem.namePlural])) {
-          setLastCursor(pageInfo.endCursor ?? '');
-          setHasNextPage(pageInfo.hasNextPage ?? false);
-        }
-      },
-      onError: (error) => {
-        logError(
-          `useFindManyRecords for "${objectMetadataItem.namePlural}" error : ` +
-            error,
-        );
-        enqueueSnackBar(
-          `Error during useFindManyRecords for "${objectMetadataItem.namePlural}", ${error.message}`,
-          {
-            variant: 'error',
-          },
-        );
-      },
+      client: apolloCoreClient,
     });
 
-  const fetchMoreRecords = useCallback(async () => {
-    if (hasNextPage) {
-      setIsFetchingMoreObjects(true);
-
-      try {
-        await fetchMore({
-          variables: {
-            filter,
-            orderBy,
-            lastCursor: isNonEmptyString(lastCursor) ? lastCursor : undefined,
-          },
-          updateQuery: (prev, { fetchMoreResult }) => {
-            const previousEdges = prev?.[objectMetadataItem.namePlural]?.edges;
-            const nextEdges =
-              fetchMoreResult?.[objectMetadataItem.namePlural]?.edges;
-
-            let newEdges: RecordGqlEdge[] = [];
-
-            if (isNonEmptyArray(previousEdges) && isNonEmptyArray(nextEdges)) {
-              newEdges = filterUniqueRecordEdgesByCursor([
-                ...(prev?.[objectMetadataItem.namePlural]?.edges ?? []),
-                ...(fetchMoreResult?.[objectMetadataItem.namePlural]?.edges ??
-                  []),
-              ]);
-            }
-
-            const pageInfo =
-              fetchMoreResult?.[objectMetadataItem.namePlural]?.pageInfo;
-
-            if (isDefined(data?.[objectMetadataItem.namePlural])) {
-              setLastCursor(pageInfo.endCursor ?? '');
-              setHasNextPage(pageInfo.hasNextPage ?? false);
-            }
-
-            const records = getRecordsFromRecordConnection({
-              recordConnection: {
-                edges: newEdges,
-                pageInfo,
-              },
-            }) as T[];
-
-            onCompleted?.(records, {
-              pageInfo,
-              totalCount:
-                fetchMoreResult?.[objectMetadataItem.namePlural]?.totalCount,
-            });
-
-            return Object.assign({}, prev, {
-              [objectMetadataItem.namePlural]: {
-                __typename: `${capitalize(
-                  objectMetadataItem.nameSingular,
-                )}Connection`,
-                edges: newEdges,
-                pageInfo:
-                  fetchMoreResult?.[objectMetadataItem.namePlural].pageInfo,
-                totalCount:
-                  fetchMoreResult?.[objectMetadataItem.namePlural].totalCount,
-              },
-            } as RecordGqlOperationFindManyResult);
-          },
-        });
-      } catch (error) {
-        logError(
-          `fetchMoreObjects for "${objectMetadataItem.namePlural}" error : ` +
-            error,
-        );
-        enqueueSnackBar(
-          `Error during fetchMoreObjects for "${objectMetadataItem.namePlural}", ${error}`,
-          {
-            variant: 'error',
-          },
-        );
-      } finally {
-        setIsFetchingMoreObjects(false);
-      }
+  // TODO: Refactor these useEffects to avoid unnecessary re-renders (see PR #18584 review)
+  useEffect(() => {
+    if (data) {
+      handleFindManyRecordsCompleted(data);
     }
-  }, [
-    hasNextPage,
-    setIsFetchingMoreObjects,
-    fetchMore,
-    filter,
-    orderBy,
-    lastCursor,
-    objectMetadataItem.namePlural,
-    objectMetadataItem.nameSingular,
-    onCompleted,
-    data,
-    setLastCursor,
-    setHasNextPage,
-    enqueueSnackBar,
-  ]);
+  }, [data, handleFindManyRecordsCompleted]);
 
-  const totalCount = data?.[objectMetadataItem.namePlural].totalCount ?? 0;
+  useEffect(() => {
+    if (error) {
+      handleFindManyRecordsError(error);
+    }
+  }, [error, handleFindManyRecordsError]);
 
-  const records = useMemo(
-    () =>
-      data?.[objectMetadataItem.namePlural]
-        ? getRecordsFromRecordConnection<T>({
-            recordConnection: data?.[objectMetadataItem.namePlural],
-          })
-        : ([] as T[]),
+  const { fetchMoreRecords, records, hasNextPage } =
+    useFetchMoreRecordsWithPagination<T>({
+      objectNameSingular,
+      filter: withSoftDeleteFilter,
+      orderBy,
+      limit,
+      fetchMore,
+      data,
+      error,
+      objectMetadataItem,
+    });
 
-    [data, objectMetadataItem.namePlural],
-  );
+  const pageInfo = data?.[objectMetadataItem.namePlural]?.pageInfo;
+
+  const totalCount = data?.[objectMetadataItem.namePlural]?.totalCount;
 
   return {
     objectMetadataItem,
@@ -233,6 +145,9 @@ export const useFindManyRecords = <T extends ObjectRecord = ObjectRecord>({
     loading,
     error,
     fetchMoreRecords,
-    queryStateIdentifier: findManyQueryStateIdentifier,
+    queryIdentifier,
+    hasNextPage,
+    pageInfo,
+    refetch,
   };
 };

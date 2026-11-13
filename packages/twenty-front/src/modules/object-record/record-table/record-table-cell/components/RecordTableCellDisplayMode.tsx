@@ -1,31 +1,36 @@
-import { useContext } from 'react';
-
-import { useIsFieldInputOnly } from '@/object-record/record-field/hooks/useIsFieldInputOnly';
-import { RecordTableContext } from '@/object-record/record-table/contexts/RecordTableContext';
-import { useCurrentTableCellPosition } from '@/object-record/record-table/record-table-cell/hooks/useCurrentCellPosition';
+import { FieldContext } from '@/object-record/record-field/ui/contexts/FieldContext';
+import { useIsFieldInputOnly } from '@/object-record/record-field/ui/hooks/useIsFieldInputOnly';
+import { useRecordTableBodyContextOrThrow } from '@/object-record/record-table/contexts/RecordTableBodyContext';
 import { useOpenRecordTableCellFromCell } from '@/object-record/record-table/record-table-cell/hooks/useOpenRecordTableCellFromCell';
-
+import { useContext, type ReactNode } from 'react';
 import { RecordTableCellDisplayContainer } from './RecordTableCellDisplayContainer';
 
 export const RecordTableCellDisplayMode = ({
   children,
-}: React.PropsWithChildren<unknown>) => {
-  const cellPosition = useCurrentTableCellPosition();
-  const { onMoveSoftFocusToCell } = useContext(RecordTableContext);
+}: {
+  children: ReactNode;
+}) => {
+  const { recordId, isRecordFieldReadOnly: isReadOnly } =
+    useContext(FieldContext);
+
+  const { openRecordContextMenu } = useRecordTableBodyContextOrThrow();
+
   const { openTableCell } = useOpenRecordTableCellFromCell();
 
   const isFieldInputOnly = useIsFieldInputOnly();
 
-  const handleClick = () => {
-    onMoveSoftFocusToCell(cellPosition);
-
-    if (!isFieldInputOnly) {
+  const handleClick = (event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (!isFieldInputOnly && !isReadOnly) {
       openTableCell();
     }
   };
 
   return (
-    <RecordTableCellDisplayContainer onClick={handleClick}>
+    <RecordTableCellDisplayContainer
+      onContextMenu={(event) => openRecordContextMenu({ event, recordId })}
+      onClick={handleClick}
+    >
       {children}
     </RecordTableCellDisplayContainer>
   );

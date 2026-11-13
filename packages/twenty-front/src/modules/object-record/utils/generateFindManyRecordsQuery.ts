@@ -1,42 +1,54 @@
 import gql from 'graphql-tag';
 
-import { ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
+import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/EnrichedObjectMetadataItem';
 import { mapObjectMetadataToGraphQLQuery } from '@/object-metadata/utils/mapObjectMetadataToGraphQLQuery';
-import { RecordGqlOperationGqlRecordFields } from '@/object-record/graphql/types/RecordGqlOperationGqlRecordFields';
-import { capitalize } from '~/utils/string/capitalize';
+import {
+  type ObjectRecordsPermissions,
+  type QueryCursorDirection,
+  type RecordGqlFields,
+} from 'twenty-shared/types';
+import { capitalize } from 'twenty-shared/utils';
 
 export const generateFindManyRecordsQuery = ({
   objectMetadataItem,
   objectMetadataItems,
   recordGqlFields,
   computeReferences,
+  cursorDirection,
+  objectPermissionsByObjectMetadataId,
 }: {
-  objectMetadataItem: ObjectMetadataItem;
-  objectMetadataItems: ObjectMetadataItem[];
-  recordGqlFields?: RecordGqlOperationGqlRecordFields;
+  objectMetadataItem: EnrichedObjectMetadataItem;
+  objectMetadataItems: EnrichedObjectMetadataItem[];
+  recordGqlFields?: RecordGqlFields;
   computeReferences?: boolean;
+  cursorDirection?: QueryCursorDirection;
+  objectPermissionsByObjectMetadataId: Record<string, ObjectRecordsPermissions>;
 }) => gql`
 query FindMany${capitalize(
   objectMetadataItem.namePlural,
 )}($filter: ${capitalize(
   objectMetadataItem.nameSingular,
-)}FilterInput, $orderBy: ${capitalize(
+)}FilterInput, $orderBy: [${capitalize(
   objectMetadataItem.nameSingular,
-)}OrderByInput, $lastCursor: String, $limit: Int) {
-  ${
-    objectMetadataItem.namePlural
-  }(filter: $filter, orderBy: $orderBy, first: $limit, after: $lastCursor){
+)}OrderByInput], $lastCursor: String, $limit: Int, $offset: Int) {
+  ${objectMetadataItem.namePlural}(filter: $filter, orderBy: $orderBy, ${
+    cursorDirection === 'before'
+      ? 'last: $limit, before: $lastCursor'
+      : 'first: $limit, after: $lastCursor'
+  }, offset: $offset){
     edges {
       node ${mapObjectMetadataToGraphQLQuery({
         objectMetadataItems,
         objectMetadataItem,
         recordGqlFields,
         computeReferences,
+        objectPermissionsByObjectMetadataId,
       })}
       cursor
     }
     pageInfo {
       hasNextPage
+      hasPreviousPage
       startCursor
       endCursor
     }

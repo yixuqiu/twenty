@@ -1,11 +1,15 @@
-import { createState } from 'twenty-ui';
+import { type WorkspaceMember } from '@/workspace-member/types/WorkspaceMember';
+import { createAtomState } from '@/ui/utilities/state/jotai/utils/createAtomState';
 
-import { WorkspaceMember } from '@/workspace-member/types/WorkspaceMember';
-
-export const currentWorkspaceMemberState = createState<Omit<
+export type CurrentWorkspaceMember = Omit<
   WorkspaceMember,
-  'createdAt' | 'updatedAt' | 'userId' | 'userEmail' | '__typename'
-> | null>({
-  key: 'currentWorkspaceMemberState',
-  defaultValue: null,
-});
+  'createdAt' | 'updatedAt' | 'userId' | '__typename'
+>;
+
+export const currentWorkspaceMemberState =
+  createAtomState<CurrentWorkspaceMember | null>({
+    key: 'currentWorkspaceMemberState',
+    defaultValue: null,
+    useLocalStorage: true,
+    localStorageOptions: { getOnInit: true },
+  });

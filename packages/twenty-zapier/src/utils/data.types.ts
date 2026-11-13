@@ -1,14 +1,22 @@
+import { type FieldMetadataType } from 'twenty-shared/types';
+
 export type InputData = { [x: string]: any };
 
-export type ObjectData = { id: string } | { [x: string]: any };
+export type NodeFieldOption = {
+  value: string;
+  label: string;
+};
 
 export type NodeField = {
-  type: string;
+  type: FieldMetadataType;
   name: string;
   label: string;
   description: string | null;
   isNullable: boolean;
-  defaultValue: object | null;
+  defaultValue: boolean | object | null;
+  list?: boolean;
+  placeholder?: string;
+  options?: NodeFieldOption[] | null;
 };
 
 export type Node = {
@@ -28,28 +36,10 @@ export type InputField = {
   type: string;
   helpText: string | null;
   required: boolean;
+  list?: boolean;
+  placeholder?: string;
+  choices?: { [value: string]: string };
 };
-
-export enum FieldMetadataType {
-  UUID = 'UUID',
-  TEXT = 'TEXT',
-  PHONE = 'PHONE',
-  EMAIL = 'EMAIL',
-  DATE_TIME = 'DATE_TIME',
-  DATE = 'DATE',
-  BOOLEAN = 'BOOLEAN',
-  NUMBER = 'NUMBER',
-  NUMERIC = 'NUMERIC',
-  PROBABILITY = 'PROBABILITY',
-  LINK = 'LINK',
-  CURRENCY = 'CURRENCY',
-  FULL_NAME = 'FULL_NAME',
-  RATING = 'RATING',
-  SELECT = 'SELECT',
-  MULTI_SELECT = 'MULTI_SELECT',
-  RELATION = 'RELATION',
-  ADDRESS = 'ADDRESS',
-}
 
 export type Schema = {
   data: {

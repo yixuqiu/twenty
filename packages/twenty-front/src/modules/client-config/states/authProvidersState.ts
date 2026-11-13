@@ -1,13 +1,13 @@
-import { createState } from 'twenty-ui';
+import { type AuthProviders } from '~/generated-metadata/graphql';
+import { createAtomState } from '@/ui/utilities/state/jotai/utils/createAtomState';
 
-import { AuthProviders } from '~/generated/graphql';
-
-export const authProvidersState = createState<AuthProviders>({
+export const authProvidersState = createAtomState<AuthProviders>({
   key: 'authProvidersState',
   defaultValue: {
-    google: false,
+    google: true,
     magicLink: false,
-    password: false,
+    password: true,
     microsoft: false,
+    sso: [],
   },
 });

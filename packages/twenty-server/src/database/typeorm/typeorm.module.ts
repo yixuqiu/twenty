@@ -1,36 +1,35 @@
 import { Module } from '@nestjs/common';
-import { TypeOrmModule, TypeOrmModuleOptions } from '@nestjs/typeorm';
+import { TypeOrmModule } from '@nestjs/typeorm';
+
+import { DataSource, type DataSourceOptions } from 'typeorm';
 
 import { typeORMCoreModuleOptions } from 'src/database/typeorm/core/core.datasource';
-import { EnvironmentModule } from 'src/engine/integrations/environment/environment.module';
-
-import { TypeORMService } from './typeorm.service';
-
-import { typeORMMetadataModuleOptions } from './metadata/metadata.datasource';
-
-const metadataTypeORMFactory = async (): Promise<TypeOrmModuleOptions> => ({
-  ...typeORMMetadataModuleOptions,
-  name: 'metadata',
-});
-
-const coreTypeORMFactory = async (): Promise<TypeOrmModuleOptions> => ({
-  ...typeORMCoreModuleOptions,
-  name: 'core',
-});
+import { DatabaseGaugeService } from 'src/database/typeorm/database-gauge.service';
+import { DatabasePoolMetricsService } from 'src/database/typeorm/database-pool-metrics.service';
+import { PostgresAdvisoryLockService } from 'src/database/typeorm/postgres-advisory-lock.service';
+import { MetricsModule } from 'src/engine/core-modules/metrics/metrics.module';
+import { installUpgradeAwareRepositoryProxy } from 'src/engine/twenty-orm/upgrade-aware/install-upgrade-aware-repository-proxy';
 
 @Module({
   imports: [
     TypeOrmModule.forRootAsync({
-      useFactory: metadataTypeORMFactory,
-      name: 'metadata',
+      useFactory: () => typeORMCoreModuleOptions,
+      dataSourceFactory: async (options) => {
+        const dataSource = new DataSource(options as DataSourceOptions);
+
+        await dataSource.initialize();
+        installUpgradeAwareRepositoryProxy(dataSource);
+
+        return dataSource;
+      },
     }),
-    TypeOrmModule.forRootAsync({
-      useFactory: coreTypeORMFactory,
-      name: 'core',
-    }),
-    EnvironmentModule,
+    MetricsModule,
   ],
-  providers: [TypeORMService],
-  exports: [TypeORMService],
+  providers: [
+    DatabasePoolMetricsService,
+    DatabaseGaugeService,
+    PostgresAdvisoryLockService,
+  ],
+  exports: [DatabasePoolMetricsService, PostgresAdvisoryLockService],
 })
 export class TypeORMModule {}

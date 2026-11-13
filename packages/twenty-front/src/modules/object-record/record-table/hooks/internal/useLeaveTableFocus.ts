@@ -1,44 +1,58 @@
-import { useRecoilCallback } from 'recoil';
-
-import { useRecordTableStates } from '@/object-record/record-table/hooks/internal/useRecordTableStates';
-import { currentHotkeyScopeState } from '@/ui/utilities/hotkey/states/internal/currentHotkeyScopeState';
-import { getSnapshotValue } from '@/ui/utilities/recoil-scope/utils/getSnapshotValue';
-
-import { TableHotkeyScope } from '../../types/TableHotkeyScope';
-
-import { useCloseCurrentTableCellInEditMode } from './useCloseCurrentTableCellInEditMode';
-import { useDisableSoftFocus } from './useDisableSoftFocus';
+import { useResetFocusStackToRecordIndex } from '@/object-record/record-index/hooks/useResetFocusStackToRecordIndex';
+import { useResetRecordSelection } from '@/object-record/record-selection/hooks/useResetRecordSelection';
+import { useActiveRecordTableRow } from '@/object-record/record-table/hooks/useActiveRecordTableRow';
+import { useFocusedRecordTableRow } from '@/object-record/record-table/hooks/useFocusedRecordTableRow';
+import { useUnfocusRecordTableCell } from '@/object-record/record-table/record-table-cell/hooks/useUnfocusRecordTableCell';
+import { RecordTableComponentInstanceContext } from '@/object-record/record-table/states/context/RecordTableComponentInstanceContext';
+import { recordTableFocusPositionComponentState } from '@/object-record/record-table/states/recordTableFocusPositionComponentState';
+import { recordTableHoverPositionComponentState } from '@/object-record/record-table/states/recordTableHoverPositionComponentState';
+import { useAvailableComponentInstanceIdOrThrow } from '@/ui/utilities/state/component-state/hooks/useAvailableComponentInstanceIdOrThrow';
+import { useSetAtomComponentState } from '@/ui/utilities/state/jotai/hooks/useSetAtomComponentState';
 
 export const useLeaveTableFocus = (recordTableId?: string) => {
-  const disableSoftFocus = useDisableSoftFocus(recordTableId);
-  const closeCurrentCellInEditMode =
-    useCloseCurrentTableCellInEditMode(recordTableId);
-
-  const { isSoftFocusActiveState } = useRecordTableStates(recordTableId);
-
-  return useRecoilCallback(
-    ({ snapshot }) =>
-      () => {
-        const isSoftFocusActive = getSnapshotValue(
-          snapshot,
-          isSoftFocusActiveState,
-        );
-
-        const currentHotkeyScope = snapshot
-          .getLoadable(currentHotkeyScopeState)
-          .getValue();
-
-        if (!isSoftFocusActive) {
-          return;
-        }
-
-        if (currentHotkeyScope?.scope === TableHotkeyScope.Table) {
-          return;
-        }
-
-        closeCurrentCellInEditMode();
-        disableSoftFocus();
-      },
-    [closeCurrentCellInEditMode, disableSoftFocus, isSoftFocusActiveState],
+  const recordTableIdFromContext = useAvailableComponentInstanceIdOrThrow(
+    RecordTableComponentInstanceContext,
+    recordTableId,
   );
+
+  const { resetRecordSelection } = useResetRecordSelection();
+
+  const setRecordTableHoverPosition = useSetAtomComponentState(
+    recordTableHoverPositionComponentState,
+    recordTableIdFromContext,
+  );
+
+  const setRecordTableFocusPosition = useSetAtomComponentState(
+    recordTableFocusPositionComponentState,
+    recordTableIdFromContext,
+  );
+
+  const { unfocusRecordTableRow } = useFocusedRecordTableRow(
+    recordTableIdFromContext,
+  );
+
+  const { deactivateRecordTableRow } = useActiveRecordTableRow(
+    recordTableIdFromContext,
+  );
+
+  const { resetFocusStackToRecordIndex } = useResetFocusStackToRecordIndex();
+
+  const { unfocusRecordTableCell } = useUnfocusRecordTableCell(
+    recordTableIdFromContext,
+  );
+
+  return () => {
+    unfocusRecordTableCell();
+
+    resetRecordSelection();
+
+    unfocusRecordTableRow();
+
+    deactivateRecordTableRow();
+
+    setRecordTableHoverPosition(null);
+    setRecordTableFocusPosition(null);
+
+    resetFocusStackToRecordIndex();
+  };
 };

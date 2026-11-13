@@ -1,20 +1,20 @@
+import { type Meta, type StoryObj } from '@storybook/react-vite';
 import { useEffect } from 'react';
 import { MemoryRouter } from 'react-router-dom';
-import { Meta, StoryObj } from '@storybook/react';
-import { useSetRecoilState } from 'recoil';
 
 import { currentMobileNavigationDrawerState } from '@/navigation/states/currentMobileNavigationDrawerState';
-import { AppPath } from '@/types/AppPath';
-import { isNavigationDrawerOpenState } from '@/ui/navigation/states/isNavigationDrawerOpenState';
-import { useIsMobile } from '@/ui/utilities/responsive/hooks/useIsMobile';
+import { isNavigationDrawerExpandedState } from '@/ui/navigation/states/isNavigationDrawerExpanded';
+import { useIsMobile } from 'twenty-ui/utilities';
+import { useSetAtomState } from '@/ui/utilities/state/jotai/hooks/useSetAtomState';
 import { IconsProviderDecorator } from '~/testing/decorators/IconsProviderDecorator';
 import { ObjectMetadataItemsDecorator } from '~/testing/decorators/ObjectMetadataItemsDecorator';
-import { SnackBarDecorator } from '~/testing/decorators/SnackBarDecorator';
+import { ToastDecorator } from '~/testing/decorators/ToastDecorator';
 
 import {
   AppNavigationDrawer,
-  AppNavigationDrawerProps,
-} from '../AppNavigationDrawer';
+  type AppNavigationDrawerProps,
+} from '@/navigation/components/AppNavigationDrawer';
+import { AppPath } from 'twenty-shared/types';
 
 const MobileNavigationDrawerStateSetterEffect = ({
   mobileNavigationDrawer = 'main',
@@ -22,23 +22,23 @@ const MobileNavigationDrawerStateSetterEffect = ({
   mobileNavigationDrawer?: 'main' | 'settings';
 }) => {
   const isMobile = useIsMobile();
-  const setIsNavigationDrawerOpen = useSetRecoilState(
-    isNavigationDrawerOpenState,
+  const setIsNavigationDrawerExpanded = useSetAtomState(
+    isNavigationDrawerExpandedState,
   );
-  const setCurrentMobileNavigationDrawer = useSetRecoilState(
+  const setCurrentMobileNavigationDrawer = useSetAtomState(
     currentMobileNavigationDrawerState,
   );
 
   useEffect(() => {
     if (!isMobile) return;
 
-    setIsNavigationDrawerOpen(true);
+    setIsNavigationDrawerExpanded(true);
     setCurrentMobileNavigationDrawer(mobileNavigationDrawer);
   }, [
     isMobile,
     mobileNavigationDrawer,
     setCurrentMobileNavigationDrawer,
-    setIsNavigationDrawerOpen,
+    setIsNavigationDrawerExpanded,
   ]);
 
   return null;
@@ -62,7 +62,7 @@ const meta: Meta<StoryArgs> = {
         />
       </MemoryRouter>
     ),
-    SnackBarDecorator,
+    ToastDecorator,
   ],
   component: AppNavigationDrawer,
   args: { routePath: AppPath.Index },
@@ -76,6 +76,6 @@ export const Main: Story = {};
 export const Settings: Story = {
   args: {
     mobileNavigationDrawer: 'settings',
-    routePath: '/settings/appearance',
+    routePath: '/settings/experience',
   },
 };

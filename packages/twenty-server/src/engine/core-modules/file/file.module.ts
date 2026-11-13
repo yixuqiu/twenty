@@ -1,17 +1,39 @@
 import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
 
-import { EnvironmentService } from 'src/engine/integrations/environment/environment.service';
-import { FilePathGuard } from 'src/engine/core-modules/file/guards/file-path-guard';
-import { AuthModule } from 'src/engine/core-modules/auth/auth.module';
-import { FileUploadModule } from 'src/engine/core-modules/file/file-upload/file-upload.module';
-
+import { ApplicationEntity } from 'src/engine/core-modules/application/application.entity';
+import { FileDeletionJob } from 'src/engine/core-modules/file/jobs/file-deletion.job';
+import { FileWorkspaceFolderDeletionJob } from 'src/engine/core-modules/file/jobs/file-workspace-folder-deletion.job';
+import { JwtModule } from 'src/engine/core-modules/jwt/jwt.module';
+import { provideWorkspaceScopedRepository } from 'src/engine/twenty-orm/workspace-scoped-repository/provide-workspace-scoped-repository';
+import { FileEntity } from './entities/file.entity';
+import { FileCorePictureModule } from './file-core-picture/file-core-picture.module';
+import { FileUploadModule } from './file-upload/file-upload.module';
+import { FileUrlModule } from './file-url/file-url.module';
+import { FileRemoteContentModule } from './file-remote-content/file-remote-content.module';
 import { FileService } from './services/file.service';
-import { FileController } from './controllers/file.controller';
 
 @Module({
-  imports: [FileUploadModule, AuthModule],
-  providers: [FileService, EnvironmentService, FilePathGuard],
-  exports: [FileService],
-  controllers: [FileController],
+  imports: [
+    JwtModule,
+    TypeOrmModule.forFeature([FileEntity, ApplicationEntity]),
+    FileUrlModule,
+    FileCorePictureModule,
+    FileUploadModule,
+    FileRemoteContentModule,
+  ],
+  providers: [
+    FileService,
+    FileWorkspaceFolderDeletionJob,
+    FileDeletionJob,
+    provideWorkspaceScopedRepository(FileEntity),
+    provideWorkspaceScopedRepository(ApplicationEntity),
+  ],
+  exports: [
+    FileService,
+    FileUrlModule,
+    FileCorePictureModule,
+    FileUploadModule,
+  ],
 })
 export class FileModule {}

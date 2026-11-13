@@ -1,23 +1,49 @@
-import { useRecoilValue } from 'recoil';
-
-import { objectMetadataItemsState } from '@/object-metadata/states/objectMetadataItemsState';
-
-import { getObjectSlug } from '../utils/getObjectSlug';
+import { objectMetadataItemsWithFieldsSelector } from '@/object-metadata/states/objectMetadataItemsWithFieldsSelector';
+import { useMemo } from 'react';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
 
 export const useFilteredObjectMetadataItems = () => {
-  const objectMetadataItems = useRecoilValue(objectMetadataItemsState);
-
-  const activeObjectMetadataItems = objectMetadataItems.filter(
-    ({ isActive, isSystem }) => isActive && !isSystem,
+  const objectMetadataItemsWithFields = useAtomStateValue(
+    objectMetadataItemsWithFieldsSelector,
   );
-  const inactiveObjectMetadataItems = objectMetadataItems.filter(
+  const objectMetadataItems = objectMetadataItemsWithFields;
+
+  const activeNonSystemObjectMetadataItems = useMemo(
+    () =>
+      objectMetadataItems.filter(
+        ({ isActive, isSystem }) => isActive && !isSystem,
+      ),
+    [objectMetadataItems],
+  );
+
+  const activeObjectMetadataItems = useMemo(
+    () =>
+      objectMetadataItems
+        .filter(({ isActive }) => isActive)
+        .sort((a, b) => a.labelSingular.localeCompare(b.labelSingular)),
+    [objectMetadataItems],
+  );
+
+  const alphaSortedActiveNonSystemObjectMetadataItems = [
+    ...activeNonSystemObjectMetadataItems,
+  ].sort((a, b) => {
+    if (a.nameSingular < b.nameSingular) {
+      return -1;
+    }
+    if (a.nameSingular > b.nameSingular) {
+      return 1;
+    }
+    return 0;
+  });
+
+  const inactiveNonSystemObjectMetadataItems = objectMetadataItems.filter(
     ({ isActive, isSystem }) => !isActive && !isSystem,
   );
 
-  const findActiveObjectMetadataItemBySlug = (slug: string) =>
-    activeObjectMetadataItems.find(
+  const findActiveObjectMetadataItemByNamePlural = (namePlural: string) =>
+    activeNonSystemObjectMetadataItems.find(
       (activeObjectMetadataItem) =>
-        getObjectSlug(activeObjectMetadataItem) === slug,
+        activeObjectMetadataItem.namePlural === namePlural,
     );
 
   const findObjectMetadataItemById = (id: string) =>
@@ -31,11 +57,13 @@ export const useFilteredObjectMetadataItems = () => {
     );
 
   return {
+    activeNonSystemObjectMetadataItems,
     activeObjectMetadataItems,
-    findActiveObjectMetadataItemBySlug,
     findObjectMetadataItemById,
     findObjectMetadataItemByNamePlural,
-    inactiveObjectMetadataItems,
+    findActiveObjectMetadataItemByNamePlural,
+    inactiveNonSystemObjectMetadataItems,
     objectMetadataItems,
+    alphaSortedActiveNonSystemObjectMetadataItems,
   };
 };

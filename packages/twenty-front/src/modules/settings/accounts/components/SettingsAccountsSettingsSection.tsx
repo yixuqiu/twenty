@@ -1,48 +1,65 @@
-import { useNavigate } from 'react-router-dom';
-import styled from '@emotion/styled';
-import { IconCalendarEvent, IconMailCog } from 'twenty-ui';
+import { styled } from '@linaria/react';
 
-import { SettingsNavigationCard } from '@/settings/components/SettingsNavigationCard';
-import { getSettingsPagePath } from '@/settings/utils/getSettingsPagePath';
-import { SettingsPath } from '@/types/SettingsPath';
-import { H2Title } from '@/ui/display/typography/components/H2Title';
-import { Section } from '@/ui/layout/section/components/Section';
+import { SettingsCard } from '@/settings/components/SettingsCard';
+import { useLingui } from '@lingui/react/macro';
+import { SettingsPath } from 'twenty-shared/types';
+import { getSettingsPath } from 'twenty-shared/utils';
+import { Section } from 'twenty-ui/components/layout';
+import { IconCalendarEvent, IconMailCog } from 'twenty-ui/icon';
+import { MOBILE_VIEWPORT, useTheme, themeCssVariables } from 'twenty-ui/theme';
 
 const StyledCardsContainer = styled.div`
   display: flex;
-  gap: ${({ theme }) => theme.spacing(4)};
-  margin-top: ${({ theme }) => theme.spacing(6)};
+  gap: ${themeCssVariables.spacing[4]};
+  margin-top: ${themeCssVariables.spacing[6]};
+
+  @media (max-width: ${MOBILE_VIEWPORT}px) {
+    flex-direction: column;
+  }
+`;
+
+const StyledCardSlot = styled.div`
+  flex: 1 1 0;
+  min-width: 0;
 `;
 
 export const SettingsAccountsSettingsSection = () => {
-  const navigate = useNavigate();
-
+  const theme = useTheme();
+  const { t } = useLingui();
   return (
-    <Section>
-      <H2Title
-        title="Settings"
-        description="Configure your emails and calendar settings."
+    <Section.Root>
+      <Section.Header
+        title={t`Settings`}
+        description={t`Configure your emails and calendar settings.`}
       />
       <StyledCardsContainer>
-        <SettingsNavigationCard
-          Icon={IconMailCog}
-          title="Emails"
-          onClick={() =>
-            navigate(getSettingsPagePath(SettingsPath.AccountsEmails))
-          }
-        >
-          Set email visibility, manage your blocklist and more.
-        </SettingsNavigationCard>
-        <SettingsNavigationCard
-          Icon={IconCalendarEvent}
-          title="Calendar"
-          onClick={() =>
-            navigate(getSettingsPagePath(SettingsPath.AccountsCalendars))
-          }
-        >
-          Configure and customize your calendar preferences.
-        </SettingsNavigationCard>
+        <StyledCardSlot>
+          <SettingsCard
+            to={getSettingsPath(SettingsPath.AccountsEmails)}
+            Icon={
+              <IconMailCog
+                size={theme.icon.size.lg}
+                stroke={theme.icon.stroke.sm}
+              />
+            }
+            title={t`Emails`}
+            description={t`Set email visibility, manage your blocklist and more.`}
+          />
+        </StyledCardSlot>
+        <StyledCardSlot>
+          <SettingsCard
+            to={getSettingsPath(SettingsPath.AccountsCalendars)}
+            Icon={
+              <IconCalendarEvent
+                size={theme.icon.size.lg}
+                stroke={theme.icon.stroke.sm}
+              />
+            }
+            title={t`Calendar`}
+            description={t`Configure and customize your calendar preferences.`}
+          />
+        </StyledCardSlot>
       </StyledCardsContainer>
-    </Section>
+    </Section.Root>
   );
 };

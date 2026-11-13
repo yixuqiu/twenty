@@ -1,108 +1,302 @@
-import React, { useContext, useState } from 'react';
-import styled from '@emotion/styled';
-import { IconDotsVertical } from 'twenty-ui';
+import { styled } from '@linaria/react';
+import { useContext } from 'react';
+import { themeCssVariables } from 'twenty-ui/theme';
 
+import { getFieldMetadataItemGqlFieldName } from '@/object-metadata/utils/getFieldMetadataItemGqlFieldName';
+import { useObjectPermissionsForObject } from '@/object-record/hooks/useObjectPermissionsForObject';
+import { RECORD_BOARD_COLUMN_WIDTH } from '@/object-record/record-board/constants/RecordBoardColumnWidth';
+import { RECORD_BOARD_COLUMN_WIDTH_CSS_VARIABLE_NAME } from '@/object-record/record-board/constants/RecordBoardColumnWidthCssVariableName';
+import { RecordBoardContext } from '@/object-record/record-board/contexts/RecordBoardContext';
 import { RecordBoardColumnDropdownMenu } from '@/object-record/record-board/record-board-column/components/RecordBoardColumnDropdownMenu';
+import { RecordBoardColumnResizeHandler } from '@/object-record/record-board/record-board-column/components/RecordBoardColumnResizeHandler';
 import { RecordBoardColumnContext } from '@/object-record/record-board/record-board-column/contexts/RecordBoardColumnContext';
-import { RecordBoardColumnHotkeyScope } from '@/object-record/record-board/types/BoardColumnHotkeyScope';
-import { Tag } from '@/ui/display/tag/components/Tag';
-import { LightIconButton } from '@/ui/input/button/components/LightIconButton';
-import { usePreviousHotkeyScope } from '@/ui/utilities/hotkey/hooks/usePreviousHotkeyScope';
+import { isRecordBoardCellsNonEditableComponentState } from '@/object-record/record-board/states/isRecordBoardCellsNonEditableComponentState';
+import { isRecordBoardViewSettingsReadOnlyComponentState } from '@/object-record/record-board/states/isRecordBoardViewSettingsReadOnlyComponentState';
+import { hasAnySoftDeleteFilterOnViewComponentSelector } from '@/object-record/record-filter/states/hasAnySoftDeleteFilterOnView';
+import { RecordGroupAggregateDropdown } from '@/object-record/record-group/components/RecordGroupAggregateDropdown';
+import { RecordGroupChip } from '@/object-record/record-group/components/RecordGroupChip';
+import { recordIndexAggregateDisplayLabelComponentState } from '@/object-record/record-index/states/recordIndexAggregateDisplayLabelComponentState';
+import { recordIndexAggregateDisplayValueForGroupValueComponentFamilyState } from '@/object-record/record-index/states/recordIndexAggregateDisplayValueForGroupValueComponentFamilyState';
+import { RecordTableWidgetContext } from '@/object-record/record-table-widget/contexts/RecordTableWidgetContext';
+import { useIsRecordTableWidgetAggregateNonInteractive } from '@/object-record/record-table-widget/hooks/useIsRecordTableWidgetAggregateNonInteractive';
+import { useCreateNewIndexRecord } from '@/object-record/record-table/hooks/useCreateNewIndexRecord';
+import { canCreateRecordsForObjectMetadataItem } from '@/object-record/utils/canCreateRecordsForObjectMetadataItem';
+import { DropdownContent } from '@/ui/layout/dropdown/components/DropdownContent';
+import { DropdownRoot } from '@/ui/layout/dropdown/components/DropdownRoot';
+import { useOpenDropdown } from '@/ui/layout/dropdown/hooks/useOpenDropdown';
+import { isDropdownOpenComponentState } from '@/ui/layout/dropdown/states/isDropdownOpenComponentState';
+import { DragDropItemSortableHandle } from '@/ui/utilities/drag-and-drop/components/DragDropItemSortableHandle';
+import { useDisableDragSelectOnPointerDown } from '@/ui/utilities/drag-select/hooks/useDisableDragSelectOnPointerDown';
+import { useAtomComponentFamilyStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentFamilyStateValue';
+import { useAtomComponentSelectorValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentSelectorValue';
+import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
+import { isDefined } from 'twenty-shared/utils';
+import { LightIconButton } from 'twenty-ui/components/input';
+import { Dropdown } from 'twenty-ui/components/navigation';
+import { IconDotsVertical, IconPlus } from 'twenty-ui/icon';
+import { useLingui } from '@lingui/react/macro';
 
-const StyledHeader = styled.div`
+const StyledHeader = styled.div<{ isReadOnly: boolean }>`
   align-items: center;
-  cursor: pointer;
+  cursor: ${({ isReadOnly }) => (isReadOnly ? 'default' : 'pointer')};
   display: flex;
   flex-direction: row;
+  height: 100%;
   justify-content: left;
-  margin-bottom: ${({ theme }) => theme.spacing(2)};
   width: 100%;
 `;
 
-const StyledAmount = styled.div`
-  color: ${({ theme }) => theme.font.color.tertiary};
-  margin-left: ${({ theme }) => theme.spacing(2)};
-`;
-
-const StyledNumChildren = styled.div`
-  align-items: center;
-  background-color: ${({ theme }) => theme.background.tertiary};
-  border-radius: ${({ theme }) => theme.border.radius.rounded};
-  color: ${({ theme }) => theme.font.color.tertiary};
-  display: flex;
-  height: 24px;
-  justify-content: center;
-  line-height: ${({ theme }) => theme.text.lineHeight.lg};
-  margin-left: auto;
-  width: 16px;
-`;
-
 const StyledHeaderActions = styled.div`
+  align-items: center;
   display: flex;
-  margin-left: auto;
+  flex-shrink: 0;
+  // Padding and negative margin cancel out in layout; they only let overflow:hidden keep LightIconButton's 3px focus ring.
+  margin: calc(-1 * ${themeCssVariables.spacing[1]});
+  max-width: 0;
+  min-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  padding: ${themeCssVariables.spacing[1]};
+  pointer-events: none;
+  transition:
+    max-width ease-in-out
+      calc(${themeCssVariables.animation.duration.fast} * 1s),
+    opacity ease-in-out calc(${themeCssVariables.animation.duration.fast} * 1s);
+
+  &[data-dropdown-open='true'],
+  ${StyledHeader}:hover &,
+  ${StyledHeader}:focus-within & {
+    max-width: ${themeCssVariables.spacing[14]};
+    opacity: 1;
+    pointer-events: auto;
+  }
+`;
+
+const StyledHeaderContainer = styled.div`
+  background: ${themeCssVariables.background.primary};
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+`;
+const StyledLeftContainer = styled.div`
+  align-items: center;
+  display: flex;
+  gap: ${themeCssVariables.spacing[1]};
+  overflow: hidden;
+`;
+
+const StyledColumn = styled.div`
+  background-color: ${themeCssVariables.background.primary};
+  display: flex;
+  flex-direction: column;
+  max-width: var(
+    ${RECORD_BOARD_COLUMN_WIDTH_CSS_VARIABLE_NAME},
+    ${RECORD_BOARD_COLUMN_WIDTH}px
+  );
+  min-width: var(
+    ${RECORD_BOARD_COLUMN_WIDTH_CSS_VARIABLE_NAME},
+    ${RECORD_BOARD_COLUMN_WIDTH}px
+  );
+
+  padding: ${themeCssVariables.spacing[2]};
+
+  position: relative;
+
+  &[data-has-left-border='true'] {
+    border-left: 1px solid ${themeCssVariables.border.color.light};
+  }
+`;
+
+const StyledTagContainer = styled.div`
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+`;
+
+const StyledAggregateDropdownContainer = styled.div<{
+  isNonInteractive: boolean;
+}>`
+  display: flex;
+  pointer-events: ${({ isNonInteractive }) =>
+    isNonInteractive ? 'none' : 'auto'};
+`;
+
+const StyledDropdownContainer = styled.div`
+  min-width: 0;
+  overflow: hidden;
 `;
 
 export const RecordBoardColumnHeader = () => {
-  const [isBoardColumnMenuOpen, setIsBoardColumnMenuOpen] = useState(false);
-  const [isHeaderHovered, setIsHeaderHovered] = useState(false);
-
-  const { columnDefinition, recordCount } = useContext(
+  const { t } = useLingui();
+  const { columnDefinition, columnIndex } = useContext(
     RecordBoardColumnContext,
   );
 
   const {
-    setHotkeyScopeAndMemorizePreviousScope,
-    goBackToPreviousHotkeyScope,
-  } = usePreviousHotkeyScope();
+    onPointerCancel: handlePointerCancel,
+    onPointerDown: handlePointerDown,
+    onPointerUp: handlePointerUp,
+  } = useDisableDragSelectOnPointerDown();
 
-  const handleBoardColumnMenuOpen = () => {
-    setIsBoardColumnMenuOpen(true);
-    setHotkeyScopeAndMemorizePreviousScope(
-      RecordBoardColumnHotkeyScope.BoardColumn,
-      {
-        goto: false,
-      },
+  const { objectMetadataItem, selectFieldMetadataItem } =
+    useContext(RecordBoardContext);
+
+  const isRecordBoardViewSettingsReadOnly = useAtomComponentStateValue(
+    isRecordBoardViewSettingsReadOnlyComponentState,
+  );
+
+  const objectPermissions = useObjectPermissionsForObject(
+    objectMetadataItem.id,
+  );
+
+  const recordTableWidgetContext = useContext(RecordTableWidgetContext);
+
+  // Creating through a nested relation or junction needs a record picker only the table layout offers.
+  const isCreateThroughRelationWidget =
+    isDefined(recordTableWidgetContext?.nestedRelationCreateThrough) ||
+    isDefined(recordTableWidgetContext?.junctionCreateThrough);
+
+  const isRecordBoardCellsNonEditable = useAtomComponentStateValue(
+    isRecordBoardCellsNonEditableComponentState,
+  );
+
+  const canCreateRecords =
+    !isCreateThroughRelationWidget &&
+    !isRecordBoardCellsNonEditable &&
+    canCreateRecordsForObjectMetadataItem({
+      objectPermissions,
+      objectMetadataItem,
+    });
+
+  const isAggregateDropdownNonInteractive =
+    useIsRecordTableWidgetAggregateNonInteractive() ?? false;
+
+  const isColumnResizable = isDefined(recordTableWidgetContext)
+    ? recordTableWidgetContext.isPageLayoutInEditMode
+    : !isRecordBoardViewSettingsReadOnly;
+
+  const hasAnySoftDeleteFilterOnView = useAtomComponentSelectorValue(
+    hasAnySoftDeleteFilterOnViewComponentSelector,
+  );
+
+  const { createNewIndexRecord } = useCreateNewIndexRecord({
+    objectMetadataItem: objectMetadataItem,
+  });
+
+  const recordIndexAggregateDisplayValueForGroupValue =
+    useAtomComponentFamilyStateValue(
+      recordIndexAggregateDisplayValueForGroupValueComponentFamilyState,
+      { groupValue: columnDefinition?.value ?? '' },
     );
-  };
 
-  const handleBoardColumnMenuClose = () => {
-    goBackToPreviousHotkeyScope();
-    setIsBoardColumnMenuOpen(false);
-  };
+  const recordIndexAggregateDisplayLabel = useAtomComponentStateValue(
+    recordIndexAggregateDisplayLabelComponentState,
+  );
 
-  const boardColumnTotal = 0;
+  const { openDropdown } = useOpenDropdown();
+
+  const dropdownId = `record-board-column-dropdown-${columnDefinition.id}`;
+
+  const isDropdownOpen = useAtomComponentStateValue(
+    isDropdownOpenComponentState,
+    dropdownId,
+  );
+
+  const handleCreateNewRecordClick = async () => {
+    await createNewIndexRecord({
+      position: 'first',
+      [getFieldMetadataItemGqlFieldName(selectFieldMetadataItem)]:
+        columnDefinition.value,
+    });
+  };
 
   return (
-    <>
-      <StyledHeader
-        onMouseEnter={() => setIsHeaderHovered(true)}
-        onMouseLeave={() => setIsHeaderHovered(false)}
+    <StyledColumn data-has-left-border={columnIndex > 0 ? 'true' : undefined}>
+      <DragDropItemSortableHandle
+        fill
+        disabled={isRecordBoardViewSettingsReadOnly}
       >
-        <Tag
-          onClick={handleBoardColumnMenuOpen}
-          color={columnDefinition.color}
-          text={columnDefinition.title}
-        />
-        {!!boardColumnTotal && <StyledAmount>${boardColumnTotal}</StyledAmount>}
-        {!isHeaderHovered && (
-          <StyledNumChildren>{recordCount}</StyledNumChildren>
-        )}
-        {isHeaderHovered && (
-          <StyledHeaderActions>
-            <LightIconButton
-              accent="tertiary"
-              Icon={IconDotsVertical}
-              onClick={handleBoardColumnMenuOpen}
-            />
-          </StyledHeaderActions>
-        )}
-      </StyledHeader>
-      {isBoardColumnMenuOpen && (
-        <RecordBoardColumnDropdownMenu
-          onClose={handleBoardColumnMenuClose}
-          stageId={columnDefinition.id}
-        />
-      )}
-    </>
+        <StyledHeader
+          isReadOnly={isRecordBoardViewSettingsReadOnly}
+          onPointerCancel={handlePointerCancel}
+          onPointerDown={handlePointerDown}
+          onPointerUp={handlePointerUp}
+        >
+          <StyledHeaderContainer>
+            <StyledLeftContainer>
+              <StyledDropdownContainer>
+                {isRecordBoardViewSettingsReadOnly ? (
+                  <StyledTagContainer>
+                    <RecordGroupChip
+                      recordGroupDefinition={columnDefinition}
+                      fieldMetadataItem={selectFieldMetadataItem}
+                    />
+                  </StyledTagContainer>
+                ) : (
+                  <DropdownRoot dropdownId={dropdownId} type="menu">
+                    <Dropdown.Trigger
+                      nativeButton={false}
+                      render={<StyledTagContainer />}
+                    >
+                      <RecordGroupChip
+                        recordGroupDefinition={columnDefinition}
+                        fieldMetadataItem={selectFieldMetadataItem}
+                      />
+                    </Dropdown.Trigger>
+                    <DropdownContent
+                      aria-label={t`Column options`}
+                      side="bottom"
+                      align="start"
+                      sideOffset={10}
+                    >
+                      <RecordBoardColumnDropdownMenu />
+                    </DropdownContent>
+                  </DropdownRoot>
+                )}
+              </StyledDropdownContainer>
+
+              <StyledAggregateDropdownContainer
+                isNonInteractive={isAggregateDropdownNonInteractive}
+                inert={isAggregateDropdownNonInteractive || undefined}
+              >
+                <RecordGroupAggregateDropdown
+                  aggregateValue={recordIndexAggregateDisplayValueForGroupValue}
+                  dropdownId={`record-board-column-aggregate-dropdown-${columnDefinition.id}`}
+                  objectMetadataItem={objectMetadataItem}
+                  aggregateLabel={recordIndexAggregateDisplayLabel}
+                />
+              </StyledAggregateDropdownContainer>
+            </StyledLeftContainer>
+            {!isRecordBoardViewSettingsReadOnly && (
+              <StyledHeaderActions
+                data-dropdown-open={isDropdownOpen ? 'true' : undefined}
+              >
+                <LightIconButton
+                  emphasis="subtle"
+                  aria-label={t`More options`}
+                  onClick={() => {
+                    openDropdown({
+                      dropdownComponentInstanceIdFromProps: dropdownId,
+                    });
+                  }}
+                >
+                  <IconDotsVertical />
+                </LightIconButton>
+                {canCreateRecords && !hasAnySoftDeleteFilterOnView && (
+                  <LightIconButton
+                    emphasis="subtle"
+                    aria-label={t`Add new`}
+                    onClick={handleCreateNewRecordClick}
+                  >
+                    <IconPlus />
+                  </LightIconButton>
+                )}
+              </StyledHeaderActions>
+            )}
+          </StyledHeaderContainer>
+        </StyledHeader>
+      </DragDropItemSortableHandle>
+      {isColumnResizable && <RecordBoardColumnResizeHandler />}
+    </StyledColumn>
   );
 };

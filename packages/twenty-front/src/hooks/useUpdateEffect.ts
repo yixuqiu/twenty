@@ -1,4 +1,4 @@
-import { DependencyList, EffectCallback, useEffect } from 'react';
+import { type DependencyList, type EffectCallback, useEffect } from 'react';
 
 import { useFirstMountState } from './useFirstMountState';
 
@@ -12,6 +12,6 @@ export const useUpdateEffect = (
     if (!isFirst) {
       return effect();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
 };

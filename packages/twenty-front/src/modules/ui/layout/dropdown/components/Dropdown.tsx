@@ -1,148 +1,260 @@
-import { useRef } from 'react';
-import { Keys } from 'react-hotkeys-hook';
+import { DropdownOnToggleEffect } from '@/ui/layout/dropdown/components/DropdownOnToggleEffect';
+import { DropdownInternalContainer } from '@/ui/layout/dropdown/components/internal/DropdownInternalContainer';
+import { DROPDOWN_BOUNDARY_BOTTOM_PADDING_DESKTOP } from '@/ui/layout/dropdown/constants/DropdownBoundaryBottomPaddingDesktop';
+import { DROPDOWN_BOUNDARY_BOTTOM_PADDING_MOBILE } from '@/ui/layout/dropdown/constants/DropdownBoundaryBottomPaddingMobile';
+import { DROPDOWN_BOUNDARY_HORIZONTAL_PADDING } from '@/ui/layout/dropdown/constants/DropdownBoundaryHorizontalPadding';
+import { DROPDOWN_RESIZE_MIN_HEIGHT } from '@/ui/layout/dropdown/constants/DropdownResizeMinHeight';
+import { DROPDOWN_RESIZE_MIN_WIDTH } from '@/ui/layout/dropdown/constants/DropdownResizeMinWidth';
+import { DropdownComponentInstanceContext } from '@/ui/layout/dropdown/contexts/DropdownComponentInstanceContext';
+import { useToggleDropdown } from '@/ui/layout/dropdown/hooks/useToggleDropdown';
+import { dropdownMaxHeightComponentState } from '@/ui/layout/dropdown/states/internal/dropdownMaxHeightComponentState';
+import { dropdownMaxWidthComponentState } from '@/ui/layout/dropdown/states/internal/dropdownMaxWidthComponentState';
+import { dropdownYPositionComponentState } from '@/ui/layout/dropdown/states/internal/dropdownYPositionComponentState';
+import { isDropdownOpenComponentState } from '@/ui/layout/dropdown/states/isDropdownOpenComponentState';
+import { type DropdownOffset } from '@/ui/layout/dropdown/types/DropdownOffset';
+import { type GlobalHotkeysConfig } from '@/ui/utilities/hotkey/types/GlobalHotkeysConfig';
+import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
+import { useSetAtomComponentState } from '@/ui/utilities/state/jotai/hooks/useSetAtomComponentState';
 import {
+  type Placement,
   autoUpdate,
   flip,
   offset,
-  Placement,
+  size,
   useFloating,
 } from '@floating-ui/react';
-import { Key } from 'ts-key-enum';
+import { styled } from '@linaria/react';
+import {
+  type MouseEvent,
+  type ReactNode,
+  useCallback,
+  useLayoutEffect,
+} from 'react';
+import { flushSync } from 'react-dom';
+import { type Keys } from 'react-hotkeys-hook';
+import { isDefined } from 'twenty-shared/utils';
+import { useIsMobile } from 'twenty-ui/utilities';
 
-import { DropdownScope } from '@/ui/layout/dropdown/scopes/DropdownScope';
-import { HotkeyEffect } from '@/ui/utilities/hotkey/components/HotkeyEffect';
-import { useScopedHotkeys } from '@/ui/utilities/hotkey/hooks/useScopedHotkeys';
-import { HotkeyScope } from '@/ui/utilities/hotkey/types/HotkeyScope';
-import { useListenClickOutside } from '@/ui/utilities/pointer-event/hooks/useListenClickOutside';
-import { getScopeIdFromComponentId } from '@/ui/utilities/recoil-scope/utils/getScopeIdFromComponentId';
-import { isDefined } from '~/utils/isDefined';
+type Width = `${string}px` | `${number}%` | 'auto' | number;
+const StyledDropdownFallbackAnchor = styled.div`
+  left: 0;
+  position: fixed;
+  top: 0;
+`;
 
-import { useDropdown } from '../hooks/useDropdown';
-import { useInternalHotkeyScopeManagement } from '../hooks/useInternalHotkeyScopeManagement';
+const StyledClickableComponent = styled.div<{
+  width?: Width;
+}>`
+  height: fit-content;
+  width: ${({ width }) => width ?? 'auto'};
+`;
 
-import { DropdownMenu } from './DropdownMenu';
-import { DropdownOnToggleEffect } from './DropdownOnToggleEffect';
-
-type DropdownProps = {
-  className?: string;
-  clickableComponent?: JSX.Element | JSX.Element[];
-  dropdownComponents: JSX.Element | JSX.Element[];
+export type DropdownProps = {
+  clickableComponent?: ReactNode;
+  clickableComponentWidth?: Width;
+  clickableComponentRole?: 'button' | 'presentation';
+  dropdownComponents: ReactNode;
   hotkey?: {
     key: Keys;
-    scope: string;
   };
-  dropdownHotkeyScope: HotkeyScope;
+  globalHotkeysConfig?: Partial<GlobalHotkeysConfig>;
   dropdownId: string;
   dropdownPlacement?: Placement;
-  dropdownMenuWidth?: `${string}px` | `${number}%` | 'auto' | number;
-  dropdownOffset?: { x?: number; y?: number };
-  disableBlur?: boolean;
+  positionReference?: HTMLElement | null;
+  dropdownOffset?: DropdownOffset;
   onClickOutside?: () => void;
   onClose?: () => void;
   onOpen?: () => void;
+  excludedClickOutsideIds?: string[];
+  isDropdownInModal?: boolean;
+  disableClickForClickableComponent?: boolean;
+  middlewareBoundaryPadding?: {
+    right?: number;
+    left?: number;
+    bottomDesktop?: number;
+    bottomMobile?: number;
+  };
 };
 
 export const Dropdown = ({
-  className,
   clickableComponent,
   dropdownComponents,
-  dropdownMenuWidth,
   hotkey,
   dropdownId,
-  dropdownHotkeyScope,
+  globalHotkeysConfig,
   dropdownPlacement = 'bottom-end',
-  dropdownOffset = { x: 0, y: 0 },
-  disableBlur = false,
+  positionReference,
+  dropdownOffset,
   onClickOutside,
   onClose,
   onOpen,
+  clickableComponentWidth = 'auto',
+  clickableComponentRole = 'button',
+  excludedClickOutsideIds,
+  isDropdownInModal = false,
+  disableClickForClickableComponent = false,
+  middlewareBoundaryPadding = {},
 }: DropdownProps) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  const { isDropdownOpen, toggleDropdown, closeDropdown, dropdownWidth } =
-    useDropdown(dropdownId);
-  const offsetMiddlewares = [];
-
-  if (isDefined(dropdownOffset.x)) {
-    offsetMiddlewares.push(offset({ crossAxis: dropdownOffset.x }));
-  }
-
-  if (isDefined(dropdownOffset.y)) {
-    offsetMiddlewares.push(offset({ mainAxis: dropdownOffset.y }));
-  }
-
-  const { refs, floatingStyles } = useFloating({
-    placement: dropdownPlacement,
-    middleware: [flip(), ...offsetMiddlewares],
-    whileElementsMounted: autoUpdate,
-  });
-
-  const handleHotkeyTriggered = () => {
-    toggleDropdown();
-  };
-
-  useListenClickOutside({
-    refs: [containerRef],
-    callback: () => {
-      onClickOutside?.();
-
-      if (isDropdownOpen) {
-        closeDropdown();
-      }
-    },
-  });
-
-  useInternalHotkeyScopeManagement({
-    dropdownScopeId: getScopeIdFromComponentId(dropdownId),
-    dropdownHotkeyScopeFromParent: dropdownHotkeyScope,
-  });
-
-  useScopedHotkeys(
-    [Key.Escape],
-    () => {
-      closeDropdown();
-    },
-    dropdownHotkeyScope.scope,
-    [closeDropdown],
+  const isDropdownOpen = useAtomComponentStateValue(
+    isDropdownOpenComponentState,
+    dropdownId,
   );
 
+  const { toggleDropdown } = useToggleDropdown();
+
+  const isUsingOffset =
+    isDefined(dropdownOffset?.x) || isDefined(dropdownOffset?.y);
+
+  const offsetMiddleware = isUsingOffset
+    ? [
+        offset({
+          crossAxis: dropdownOffset?.x ?? 0,
+          mainAxis: dropdownOffset?.y ?? 0,
+        }),
+      ]
+    : [];
+
+  const setDropdownMaxHeight = useSetAtomComponentState(
+    dropdownMaxHeightComponentState,
+    dropdownId,
+  );
+
+  const setDropdownMaxWidth = useSetAtomComponentState(
+    dropdownMaxWidthComponentState,
+    dropdownId,
+  );
+
+  const setDropdownYPosition = useSetAtomComponentState(
+    dropdownYPositionComponentState,
+    dropdownId,
+  );
+
+  const isMobile = useIsMobile();
+  const bottomAutoresizePadding = isMobile
+    ? (middlewareBoundaryPadding.bottomMobile ??
+      DROPDOWN_BOUNDARY_BOTTOM_PADDING_MOBILE)
+    : (middlewareBoundaryPadding.bottomDesktop ??
+      DROPDOWN_BOUNDARY_BOTTOM_PADDING_DESKTOP);
+
+  const boundaryOptions = {
+    boundary: document.querySelector('#root') ?? undefined,
+    padding: {
+      right:
+        middlewareBoundaryPadding.right ?? DROPDOWN_BOUNDARY_HORIZONTAL_PADDING,
+      left:
+        middlewareBoundaryPadding.left ?? DROPDOWN_BOUNDARY_HORIZONTAL_PADDING,
+      bottom: bottomAutoresizePadding,
+    },
+  };
+
+  const { refs, floatingStyles, placement } = useFloating({
+    placement: dropdownPlacement,
+    middleware: [
+      ...offsetMiddleware,
+      flip({
+        ...boundaryOptions,
+      }),
+      size({
+        apply: ({ availableHeight, availableWidth, y: floatingY }) => {
+          flushSync(() => {
+            const maxHeightToApply =
+              availableHeight < DROPDOWN_RESIZE_MIN_HEIGHT
+                ? DROPDOWN_RESIZE_MIN_HEIGHT
+                : availableHeight;
+
+            const maxWidthToApply =
+              availableWidth < DROPDOWN_RESIZE_MIN_WIDTH
+                ? DROPDOWN_RESIZE_MIN_WIDTH
+                : availableWidth;
+
+            setDropdownMaxHeight(maxHeightToApply);
+            setDropdownMaxWidth(maxWidthToApply);
+            setDropdownYPosition(floatingY);
+          });
+        },
+        ...boundaryOptions,
+      }),
+    ],
+    whileElementsMounted: autoUpdate,
+    strategy: 'fixed',
+  });
+
+  useLayoutEffect(() => {
+    if (!isDefined(positionReference)) {
+      return;
+    }
+    // Keep the original trigger for click-outside handling.
+    const trigger = refs.domReference.current;
+    refs.setPositionReference(positionReference);
+    return () => refs.setPositionReference(trigger);
+  }, [positionReference, refs]);
+
+  const handleClickableComponentClick = useCallback(
+    async (event: MouseEvent) => {
+      if (disableClickForClickableComponent) {
+        return;
+      }
+      event.stopPropagation();
+      event.preventDefault();
+
+      toggleDropdown({
+        dropdownComponentInstanceIdFromProps: dropdownId,
+        globalHotkeysConfig,
+      });
+    },
+    [
+      globalHotkeysConfig,
+      toggleDropdown,
+      dropdownId,
+      disableClickForClickableComponent,
+    ],
+  );
+
+  const hasInteractiveClickableComponent = clickableComponentRole === 'button';
+
   return (
-    <DropdownScope dropdownScopeId={getScopeIdFromComponentId(dropdownId)}>
-      <div ref={containerRef} className={className}>
-        {clickableComponent && (
-          <div
-            ref={refs.setReference}
-            onClick={() => {
-              toggleDropdown();
-              onClickOutside?.();
-            }}
-            className={className}
-          >
-            {clickableComponent}
-          </div>
-        )}
-        {hotkey && (
-          <HotkeyEffect
-            hotkey={hotkey}
-            onHotkeyTriggered={handleHotkeyTriggered}
-          />
-        )}
-        {isDropdownOpen && (
-          <DropdownMenu
-            disableBlur={disableBlur}
-            width={dropdownMenuWidth ?? dropdownWidth}
-            data-select-disable
-            ref={refs.setFloating}
-            style={floatingStyles}
-          >
-            {dropdownComponents}
-          </DropdownMenu>
-        )}
-        <DropdownOnToggleEffect
-          onDropdownClose={onClose}
-          onDropdownOpen={onOpen}
+    <DropdownComponentInstanceContext.Provider
+      value={{ instanceId: dropdownId }}
+    >
+      {isDefined(clickableComponent) ? (
+        <StyledClickableComponent
+          ref={refs.setReference}
+          onClick={handleClickableComponentClick}
+          aria-controls={
+            hasInteractiveClickableComponent
+              ? `${dropdownId}-options`
+              : undefined
+          }
+          aria-expanded={
+            hasInteractiveClickableComponent ? isDropdownOpen : undefined
+          }
+          aria-haspopup={hasInteractiveClickableComponent || undefined}
+          role={clickableComponentRole}
+          width={clickableComponentWidth}
+        >
+          {clickableComponent}
+        </StyledClickableComponent>
+      ) : (
+        <StyledDropdownFallbackAnchor ref={refs.setReference} />
+      )}
+      {isDropdownOpen && (
+        <DropdownInternalContainer
+          floatingStyles={floatingStyles}
+          dropdownComponents={dropdownComponents}
+          dropdownId={dropdownId}
+          dropdownPlacement={placement}
+          floatingUiRefs={refs}
+          hotkey={hotkey}
+          onClickOutside={onClickOutside}
+          onHotkeyTriggered={onOpen}
+          excludedClickOutsideIds={excludedClickOutsideIds}
+          isDropdownInModal={isDropdownInModal}
         />
-      </div>
-    </DropdownScope>
+      )}
+      <DropdownOnToggleEffect
+        onDropdownClose={onClose}
+        onDropdownOpen={onOpen}
+      />
+    </DropdownComponentInstanceContext.Provider>
   );
 };

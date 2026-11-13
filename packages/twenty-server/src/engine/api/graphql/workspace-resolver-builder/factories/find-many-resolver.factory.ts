@@ -1,22 +1,27 @@
 import { Injectable } from '@nestjs/common';
 
+import graphqlFields from 'graphql-fields';
+
+import { type WorkspaceResolverBuilderFactoryInterface } from 'src/engine/api/graphql/workspace-resolver-builder/interfaces/workspace-resolver-builder-factory.interface';
 import {
-  FindManyResolverArgs,
-  Resolver,
+  type FindManyResolverArgs,
+  type Resolver,
 } from 'src/engine/api/graphql/workspace-resolver-builder/interfaces/workspace-resolvers-builder.interface';
 import { WorkspaceSchemaBuilderContext } from 'src/engine/api/graphql/workspace-schema-builder/interfaces/workspace-schema-builder-context.interface';
-import { WorkspaceResolverBuilderFactoryInterface } from 'src/engine/api/graphql/workspace-resolver-builder/interfaces/workspace-resolver-builder-factory.interface';
 
-import { WorkspaceQueryRunnerService } from 'src/engine/api/graphql/workspace-query-runner/workspace-query-runner.service';
+import { CommonFindManyQueryRunnerService } from 'src/engine/api/common/common-query-runners/common-find-many-query-runner.service';
+import { getFindManyPageSize } from 'src/engine/api/common/common-query-runners/utils/get-find-many-page-size.util';
+import { ObjectRecordsToGraphqlConnectionHelper } from 'src/engine/api/graphql/graphql-query-runner/helpers/object-records-to-graphql-connection.helper';
+import { workspaceQueryRunnerGraphqlApiExceptionHandler } from 'src/engine/api/graphql/workspace-query-runner/utils/workspace-query-runner-graphql-api-exception-handler.util';
+import { RESOLVER_METHOD_NAMES } from 'src/engine/api/graphql/workspace-resolver-builder/constants/resolver-method-names';
+import { createQueryRunnerContext } from 'src/engine/api/graphql/workspace-resolver-builder/utils/create-query-runner-context.util';
 
 @Injectable()
-export class FindManyResolverFactory
-  implements WorkspaceResolverBuilderFactoryInterface
-{
-  public static methodName = 'findMany' as const;
+export class FindManyResolverFactory implements WorkspaceResolverBuilderFactoryInterface {
+  public static methodName = RESOLVER_METHOD_NAMES.FIND_MANY;
 
   constructor(
-    private readonly workspaceQueryRunnerService: WorkspaceQueryRunnerService,
+    private readonly commonFindManyQueryRunnerService: CommonFindManyQueryRunnerService,
   ) {}
 
   create(
@@ -24,15 +29,51 @@ export class FindManyResolverFactory
   ): Resolver<FindManyResolverArgs> {
     const internalContext = context;
 
-    return (_source, args, context, info) => {
-      return this.workspaceQueryRunnerService.findMany(args, {
-        objectMetadataItem: internalContext.objectMetadataItem,
-        workspaceId: internalContext.workspaceId,
-        userId: internalContext.userId,
-        info,
-        fieldMetadataCollection: internalContext.fieldMetadataCollection,
-        objectMetadataCollection: internalContext.objectMetadataCollection,
+    return async (_source, args, _requestContext, info) => {
+      const selectedFields = graphqlFields(info);
+
+      const resolverContext = createQueryRunnerContext({
+        workspaceSchemaBuilderContext: internalContext,
       });
+
+      try {
+        const {
+          results: {
+            records,
+            aggregatedValues,
+            totalCount,
+            pageInfo,
+            orderByValuesByRecordId,
+            selectedFieldsResult,
+          },
+          args: processedArgs,
+        } = await this.commonFindManyQueryRunnerService.execute(
+          { ...args, selectedFields },
+          resolverContext,
+        );
+
+        const typeORMObjectRecordsParser =
+          new ObjectRecordsToGraphqlConnectionHelper(
+            resolverContext.flatObjectMetadataMaps,
+            resolverContext.flatFieldMetadataMaps,
+            resolverContext.objectIdByNameSingular,
+          );
+
+        return typeORMObjectRecordsParser.createConnection({
+          objectRecords: records,
+          objectRecordsAggregatedValues: aggregatedValues,
+          selectedAggregatedFields: selectedFieldsResult.aggregate,
+          objectName: resolverContext.flatObjectMetadata.nameSingular,
+          take: getFindManyPageSize(args),
+          totalCount,
+          order: processedArgs.orderBy,
+          hasNextPage: pageInfo.hasNextPage,
+          hasPreviousPage: pageInfo.hasPreviousPage,
+          orderByValuesByRecordId,
+        });
+      } catch (error) {
+        workspaceQueryRunnerGraphqlApiExceptionHandler(error);
+      }
     };
   }
 }

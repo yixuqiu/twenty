@@ -1,4 +1,4 @@
-import { StorybookConfig } from '@storybook/react-vite';
+import type { StorybookConfig } from '@storybook/react-vite';
 
 const computeStoriesGlob = () => {
   if (process.env.STORYBOOK_SCOPE === 'pages') {
@@ -12,9 +12,13 @@ const computeStoriesGlob = () => {
 
   if (process.env.STORYBOOK_SCOPE === 'modules') {
     return [
-      '../src/modules/**/*.stories.@(js|jsx|ts|tsx)',
+      '../src/modules/**/!(perf)/*.stories.@(js|jsx|ts|tsx)',
       '../src/modules/**/*.docs.mdx',
     ];
+  }
+
+  if (process.env.STORYBOOK_SCOPE === 'performance') {
+    return ['../src/modules/**/perf/*.perf.stories.@(js|jsx|ts|tsx)'];
   }
 
   if (process.env.STORYBOOK_SCOPE === 'ui-docs') {
@@ -24,25 +28,42 @@ const computeStoriesGlob = () => {
   return ['../src/**/*.docs.mdx', '../src/**/*.stories.@(js|jsx|ts|tsx)'];
 };
 
+const isCoverageEnabled = process.env.STORYBOOK_COVERAGE === 'true';
+
 const config: StorybookConfig = {
   stories: computeStoriesGlob(),
-  staticDirs: ['../public'],
+
+  build: {
+    test: {
+      disabledAddons: [
+        '@storybook/addon-docs',
+        '@storybook/addon-essentials/docs',
+      ],
+    },
+  },
+
   addons: [
+    '@storybook-community/storybook-addon-cookie',
     '@storybook/addon-links',
-    '@storybook/addon-essentials',
-    '@storybook/addon-onboarding',
-    '@storybook/addon-interactions',
-    '@storybook/addon-coverage',
-    'storybook-dark-mode',
-    'storybook-addon-cookie',
+    ...(isCoverageEnabled ? ['@storybook/addon-coverage'] : []),
     'storybook-addon-pseudo-states',
+    'storybook-addon-mock-date',
+    '@storybook/addon-vitest',
   ],
-  framework: {
-    name: '@storybook/react-vite',
-    options: {},
+
+  framework: '@storybook/react-vite',
+
+  viteFinal: async (viteConfig) => {
+    const { mergeConfig } = await import('vite');
+
+    return mergeConfig(viteConfig, {
+      logLevel: 'warn',
+    });
   },
-  docs: {
-    autodocs: false,
-  },
+
+  logLevel: 'error',
+
+  docs: {},
 };
+
 export default config;

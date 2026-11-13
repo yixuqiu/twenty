@@ -1,5 +1,24 @@
-import { WorkspaceMember } from '@/workspace-member/types/WorkspaceMember';
-import { User, Workspace } from '~/generated/graphql';
+import { getMockedDateWithOffset } from '~/testing/utils/getMockedDateWithOffset';
+import { type CurrentUserWorkspace } from '@/auth/states/currentUserWorkspaceState';
+import { CUSTOM_WORKSPACE_APPLICATION_MOCK } from '@/object-metadata/hooks/__tests__/constants/CustomWorkspaceApplicationMock.test.constant';
+import { type WorkspaceMember } from '@/workspace-member/types/WorkspaceMember';
+import { DEFAULT_AI_CHAT_ASSISTANT_PROFILE } from 'twenty-shared/ai';
+import {
+  AiChatAssistantMode,
+  AiModelTier,
+  OnboardingStatus,
+  PermissionFlagType,
+  SubscriptionInterval,
+  SubscriptionStatus,
+  type User,
+  type Workspace,
+  WorkspaceActivationStatus,
+  WorkspaceDiscoverability,
+  WorkspaceMemberDateFormatEnum,
+  WorkspaceMemberTimeFormatEnum,
+} from '~/generated-metadata/graphql';
+import { mockBillingPlans } from '~/testing/mock-data/billing-plans';
+import { getTestEnrichedObjectMetadataItemsMock } from '~/testing/utils/getTestEnrichedObjectMetadataItemsMock';
 
 type MockedUser = Pick<
   User,
@@ -7,14 +26,21 @@ type MockedUser = Pick<
   | 'email'
   | 'firstName'
   | 'lastName'
+  | 'canAccessFullAdminPanel'
   | 'canImpersonate'
   | '__typename'
   | 'supportUserHash'
+  | 'onboardingStatus'
+  | 'userVars'
+  | 'availableWorkspaces'
+  | 'hasPassword'
 > & {
   workspaceMember: WorkspaceMember | null;
   locale: string;
-  defaultWorkspace: Workspace;
+  currentWorkspace: Workspace;
   workspaces: Array<{ workspace: Workspace }>;
+  workspaceMembers: WorkspaceMember[];
+  currentUserWorkspace: CurrentUserWorkspace;
 };
 
 export const avatarUrl =
@@ -22,45 +48,138 @@ export const avatarUrl =
 export const workspaceLogoUrl =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAA7EAAAOxAGVKw4bAAACb0lEQVR4nO2VO4taQRTHr3AblbjxEVlwCwVhg7BoqqCIjy/gAyyFWNlYBOxsfH0KuxgQGwXRUkGuL2S7i1barGAgiwbdW93SnGOc4BonPiKahf3DwXFmuP/fPM4ZlvmlTxAhCBdzHnEQWYiv7Mr4C3NeuVYhQYDPzOUUQgDLBQGcLHNhvQK8DACPx8PTxiqVyvISG43GbyaT6Qfpn06n0m63e/tPAPF4vJ1MJu8kEsnWTCkWi1yr1RKGw+GDRqPBOTfr44vFQvD7/Q/lcpmaaVQAr9fLp1IpO22c47hGOBz+MB6PH+Vy+VYDAL8qlUoGtVotzOfzq4MAgsHgE/6KojiQyWR/bKVSqbSszHFM8Pl8z1YK48JsNltCOBwOnrYLO+8AAIjb+nHbycoTiUQfDJ7tFq4YAHiVSmXBxcD41u8flQU8z7fhzO0r83atVns3Go3u9Xr9x0O/RQXo9/tsIBBg6vX606a52Wz+bZ7P5/WwG29gxSJzhKgA6XTaDoFNF+krFAocmC//4yWEcSf2wTm7mCO19xFgSsKOLI16vV7b7XY7mRNoLwA0JymJ5uQIzgIAuX5PzDElT2m+E8BqtQ4ymcx7Yq7T6a6ZE4sKgOadTucaCwkxp1UzlEKh0GDxIXOwDWHAdi6Xe3swQDQa/Q7mywoolUpvsaptymazDWKxmBHTlWXZm405BFZoNpuGgwEmk4mE2SGtVivii4f1AO7J3ZopkQCQj7Ar1FeRChCJRJzVapX6DKNIfSc1Ax+wtQWQ55h6bH8FWDfYV4fO3wlwDr0C/BcADYiTPCxHqIEA2QsCZAkAKnRGkMbKN/sTX5YHPQ1e7SkAAAAASUVORK5CYII=';
 
-export const mockDefaultWorkspace: Workspace = {
+const PRO_PLAN = mockBillingPlans.listPlans.find((p) => p.planKey === 'PRO')!;
+const PRO_BASE_LICENSED_PRODUCT = PRO_PLAN?.baseProducts?.[0]!;
+const PRO_BASE_MONTHLY_PRICE = PRO_BASE_LICENSED_PRODUCT?.prices?.find(
+  (pr) => pr.recurringInterval === 'Month',
+)!;
+const PRO_METERED_PRODUCT = PRO_PLAN?.meteredProducts?.[0]!;
+const PRO_METERED_MONTHLY_PRICE = PRO_METERED_PRODUCT?.prices?.find(
+  (pr) => pr.recurringInterval === 'Month',
+)!;
+
+export const mockCurrentWorkspace = {
+  workspaceCustomApplication: CUSTOM_WORKSPACE_APPLICATION_MOCK,
+  workspaceCustomApplicationId: CUSTOM_WORKSPACE_APPLICATION_MOCK.id,
+  installedApplications: [CUSTOM_WORKSPACE_APPLICATION_MOCK],
+  subdomain: 'acme.twenty.com',
   id: '7dfbc3f7-6e5e-4128-957e-8d86808cdf6w',
   displayName: 'Twenty',
-  domainName: 'twenty.com',
   inviteHash: 'twenty.com-invite-hash',
   logo: workspaceLogoUrl,
+  isPublicInviteLinkEnabled: true,
+  isCampaignClickTrackingEnabled: false,
+  isCampaignOpenTrackingEnabled: false,
+  workspaceDiscoverability: WorkspaceDiscoverability.PUBLIC,
   allowImpersonation: true,
-  subscriptionStatus: 'active',
-  activationStatus: 'active',
-  featureFlags: [
-    {
-      id: '1492de61-5018-4368-8923-4f1eeaf988c4',
-      key: 'IS_AIRTABLE_INTEGRATION_ENABLED',
-      value: true,
-      workspaceId: '7dfbc3f7-6e5e-4128-957e-8d86808cdf6w',
-    },
-    {
-      id: '1492de61-5018-4368-8923-4f1eeaf988c5',
-      key: 'IS_POSTGRESQL_INTEGRATION_ENABLED',
-      value: true,
-      workspaceId: '7dfbc3f7-6e5e-4128-957e-8d86808cdf6w',
-    },
-    {
-      id: '1492de61-5018-4368-8923-4f1eeaf988c6',
-      key: 'IS_CALENDER_ENABLED',
-      value: true,
-      workspaceId: '7dfbc3f7-6e5e-4128-957e-8d86808cdf6w',
-    },
-  ],
+  activationStatus: WorkspaceActivationStatus.ACTIVE,
+  hasValidSignedEnterpriseKey: false,
+  hasValidEnterpriseValidityToken: false,
+  isTrialAvailable: true,
+  isGoogleAuthEnabled: true,
+  isPasswordAuthEnabled: true,
+  isMicrosoftAuthEnabled: false,
+  isCustomDomainEnabled: false,
+  iframeMediaPermissions: [],
+  isPasswordAuthBypassEnabled: false,
+  isGoogleAuthBypassEnabled: false,
+  isMicrosoftAuthBypassEnabled: false,
+  workspaceUrls: {
+    customUrl: undefined,
+    subdomainUrl: 'twenty.twenty.com',
+  },
+  featureFlags: [],
   createdAt: '2023-04-26T10:23:42.33625+00:00',
   updatedAt: '2023-04-26T10:23:42.33625+00:00',
-  currentCacheVersion: '1',
+  metadataVersion: 1,
+  trashRetentionDays: 14,
+  aiChatModelTier: AiModelTier.fast,
+  aiChatAssistantProfile: {
+    ...DEFAULT_AI_CHAT_ASSISTANT_PROFILE,
+    __typename: 'AiChatAssistantProfile',
+  },
+  aiChatDirectMessageAssistantMode: AiChatAssistantMode.MENTION_ONLY,
+  aiChatInboxAssistantMode: AiChatAssistantMode.AUTOMATIC,
+  aiAgentModelTier: AiModelTier.fast,
+  isAutoModelSelectionEnabled: true,
+  aiModelIdByTier: {},
+  isInternalMessagesImportEnabled: false,
   currentBillingSubscription: {
     __typename: 'BillingSubscription',
     id: '7efbc3f7-6e5e-4128-957e-8d86808cdf6a',
-    interval: 'month',
-    status: 'active',
+    interval: SubscriptionInterval.Month,
+    status: SubscriptionStatus.Active,
+    currentPeriodEnd: getMockedDateWithOffset({ months: 1 }),
+    metadata: {
+      plan: PRO_PLAN.planKey,
+    },
+    phases: [],
+    billingSubscriptionItems: [
+      {
+        __typename: 'BillingSubscriptionItem',
+        id: '11111111-1111-4111-8111-111111111111',
+        hasReachedCurrentPeriodCap: false,
+        quantity: 1,
+        stripePriceId: PRO_BASE_MONTHLY_PRICE.stripePriceId,
+        unitAmount: PRO_BASE_MONTHLY_PRICE.unitAmount,
+        creditAmount: PRO_BASE_MONTHLY_PRICE.creditAmount,
+        billingProduct: {
+          name: PRO_BASE_LICENSED_PRODUCT.name,
+          description: PRO_BASE_LICENSED_PRODUCT.description,
+          images: PRO_BASE_LICENSED_PRODUCT.images,
+          metadata: PRO_BASE_LICENSED_PRODUCT.metadata,
+        },
+      },
+      {
+        __typename: 'BillingSubscriptionItem',
+        id: '11111111-1111-4111-8111-111111111112',
+        hasReachedCurrentPeriodCap: false,
+        quantity: null,
+        stripePriceId: PRO_METERED_MONTHLY_PRICE.stripePriceId,
+        unitAmount: null,
+        creditAmount: null,
+        billingProduct: {
+          name: PRO_METERED_PRODUCT.name,
+          description: PRO_METERED_PRODUCT.description,
+          images: PRO_METERED_PRODUCT.images,
+          metadata: PRO_METERED_PRODUCT.metadata,
+        },
+      },
+    ],
   },
-};
+  billingEntitlements: [],
+  billingSubscriptions: [
+    {
+      __typename: 'BillingSubscription',
+      id: '7efbc3f7-6e5e-4128-957e-8d86808cdf6a',
+      status: SubscriptionStatus.Active,
+      metadata: {},
+      phases: [],
+      billingSubscriptionItems: [
+        {
+          __typename: 'BillingSubscriptionItem',
+          id: '22222222-2222-4222-8222-222222222222',
+          hasReachedCurrentPeriodCap: false,
+          quantity: 1,
+          stripePriceId: PRO_BASE_MONTHLY_PRICE.stripePriceId,
+          unitAmount: PRO_BASE_MONTHLY_PRICE.unitAmount,
+          creditAmount: PRO_BASE_MONTHLY_PRICE.creditAmount,
+          billingProduct: {
+            name: PRO_BASE_LICENSED_PRODUCT.name,
+            description: PRO_BASE_LICENSED_PRODUCT.description,
+            images: PRO_BASE_LICENSED_PRODUCT.images,
+            metadata: PRO_BASE_LICENSED_PRODUCT.metadata,
+          },
+        },
+      ],
+    },
+  ],
+  workspaceMembersCount: 1,
+  databaseSchema: null,
+  isTwoFactorAuthenticationEnforced: false,
+  eventLogRetentionDays: 90,
+  __typename: 'Workspace',
+} as const satisfies Workspace;
 
 export const mockedWorkspaceMemberData: WorkspaceMember = {
   __typename: 'WorkspaceMember',
@@ -76,84 +195,120 @@ export const mockedWorkspaceMemberData: WorkspaceMember = {
   updatedAt: '2023-04-26T10:23:42.33625+00:00',
   userId: '2603c1f9-0172-4ea6-986c-eeaccdf7f4cf',
   userEmail: 'charles@test.com',
+  dateFormat: WorkspaceMemberDateFormatEnum.DAY_FIRST,
+  timeFormat: WorkspaceMemberTimeFormatEnum.HOUR_24,
+  timeZone: 'America/New_York',
 };
 
-export const mockedUsersData: Array<MockedUser> = [
-  {
-    id: '7dfbc3f7-6e5e-4128-957e-8d86808cdf6d',
-    __typename: 'User',
-    email: 'charles@test.com',
-    firstName: 'Charles',
-    lastName: 'Test',
-    canImpersonate: false,
-    supportUserHash:
-      'a95afad9ff6f0b364e2a3fd3e246a1a852c22b6e55a3ca33745a86c201f9c10d',
-    workspaceMember: mockedWorkspaceMemberData,
-    defaultWorkspace: mockDefaultWorkspace,
-    locale: 'en',
-    workspaces: [{ workspace: mockDefaultWorkspace }],
+export const mockedUserData: MockedUser = {
+  id: '7dfbc3f7-6e5e-4128-957e-8d86808cdf6d',
+  __typename: 'User',
+  email: 'charles@test.com',
+  firstName: 'Charles',
+  lastName: 'Test',
+  canAccessFullAdminPanel: false,
+  canImpersonate: false,
+  hasPassword: true,
+  supportUserHash:
+    'a95afad9ff6f0b364e2a3fd3e246a1a852c22b6e55a3ca33745a86c201f9c10d',
+  workspaceMember: mockedWorkspaceMemberData,
+  currentWorkspace: mockCurrentWorkspace,
+  currentUserWorkspace: {
+    permissionFlags: [
+      PermissionFlagType.WORKSPACE_MEMBERS,
+      PermissionFlagType.CONNECTED_ACCOUNTS,
+    ],
+    twoFactorAuthenticationMethodSummary: [],
+    objectRecordsPermissions: getTestEnrichedObjectMetadataItemsMock().map(
+      (item) => ({
+        objectMetadataId: item.id,
+        canCreateAllRecords: true,
+        canReadAllRecords: true,
+        canUpdateAllRecords: true,
+        canSoftDeleteAllRecords: true,
+        canDestroyAllRecords: true,
+        unreadableFields: [],
+        uneditableFields: [],
+        restrictedFields: {},
+      }),
+    ),
   },
-  {
-    id: '7dfbc3f7-6e5e-4128-957e-8d86808cdf6c',
-    __typename: 'User',
-    email: 'felix@test.com',
-    firstName: 'Felix',
-    lastName: 'Test',
-    canImpersonate: false,
-    supportUserHash:
-      '54ac3986035961724cdb9a7a30c70e6463a4b68f0ecd2014c727171a82144b74',
-    workspaceMember: {
-      ...mockedWorkspaceMemberData,
-      id: '7dfbc3f7-6e5e-4128-957e-8d86808cdf6c',
-      name: {
-        firstName: 'Felix',
-        lastName: 'Test',
-      },
-      userId: '81aeb270-d689-4515-bd5d-35dbe956da3b',
-    },
-    defaultWorkspace: mockDefaultWorkspace,
-    locale: 'en',
-    workspaces: [{ workspace: mockDefaultWorkspace }],
+  locale: 'en',
+  workspaces: [{ workspace: mockCurrentWorkspace }],
+  workspaceMembers: [mockedWorkspaceMemberData],
+  onboardingStatus: OnboardingStatus.COMPLETED,
+  availableWorkspaces: {
+    availableWorkspacesForSignIn: [],
+    availableWorkspacesForSignUp: [],
   },
-];
+  userVars: {},
+};
 
-export const mockedOnboardingUsersData: Array<MockedUser> = [
-  {
+export const mockedLimitedPermissionsUserData: MockedUser = {
+  ...mockedUserData,
+  currentUserWorkspace: {
+    ...mockedUserData.currentUserWorkspace,
+    objectRecordsPermissions: getTestEnrichedObjectMetadataItemsMock().map(
+      (item) => {
+        const hasAccess =
+          item.nameSingular !== 'task' && item.nameSingular !== 'opportunity';
+
+        return {
+          objectMetadataId: item.id,
+          canCreateAllRecords: hasAccess,
+          canReadAllRecords: hasAccess,
+          canUpdateAllRecords: hasAccess,
+          canSoftDeleteAllRecords: hasAccess,
+          canDestroyAllRecords: hasAccess,
+          unreadableFields: [],
+          uneditableFields: [],
+          restrictedFields: {},
+        };
+      },
+    ),
+  },
+};
+
+export const mockedOnboardingUserData = (
+  onboardingStatus?: OnboardingStatus,
+) => {
+  return {
     id: '7dfbc3f7-6e5e-4128-957e-8d86808cdf6d',
     __typename: 'User',
     email: 'workspace-onboarding@test.com',
     firstName: '',
     lastName: '',
+    hasPassword: false,
+    canAccessFullAdminPanel: false,
     canImpersonate: false,
     supportUserHash:
       '4fb61d34ed3a4aeda2476d4b308b5162db9e1809b2b8277e6fdc6efc4a609254',
-    workspaceMember: {
-      ...mockedWorkspaceMemberData,
-      id: 'd454f075-c72f-4ebe-bac7-d28e75e74a23',
-      name: {
-        firstName: '',
-        lastName: '',
-      },
-
-      userId: '7f793378-b939-43b7-8642-292c9510754c',
-    },
-    defaultWorkspace: mockDefaultWorkspace,
-    locale: 'en',
-    workspaces: [{ workspace: mockDefaultWorkspace }],
-  },
-  {
-    id: '7dfbc3f7-6e5e-4128-957e-8d86808cdf6d',
-    __typename: 'User',
-    email: 'profile-onboarding@test.com',
-    firstName: '',
-    lastName: '',
-    canImpersonate: false,
     workspaceMember: null,
-    defaultWorkspace: {
-      ...mockDefaultWorkspace,
-      activationStatus: 'inactive',
+    workspaceMembers: [],
+    currentWorkspace: mockCurrentWorkspace,
+    currentUserWorkspace: {
+      permissionFlags: [PermissionFlagType.WORKSPACE_MEMBERS],
+      objectRecordsPermissions: getTestEnrichedObjectMetadataItemsMock().map(
+        (item) => ({
+          objectMetadataId: item.id,
+          canCreateAllRecords: true,
+          canReadAllRecords: true,
+          canUpdateAllRecords: true,
+          canSoftDeleteAllRecords: true,
+          canDestroyAllRecords: true,
+          unreadableFields: [],
+          uneditableFields: [],
+          restrictedFields: {},
+        }),
+      ),
     },
     locale: 'en',
-    workspaces: [{ workspace: mockDefaultWorkspace }],
-  },
-];
+    workspaces: [{ workspace: mockCurrentWorkspace }],
+    onboardingStatus: onboardingStatus || null,
+    userVars: {},
+    availableWorkspaces: {
+      availableWorkspacesForSignIn: [],
+      availableWorkspacesForSignUp: [],
+    },
+  };
+};

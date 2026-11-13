@@ -1,13 +1,14 @@
-import { Bundle, ZObject } from 'zapier-platform-core';
+import type { Bundle, ZObject } from 'zapier-platform-core';
 
-import requestDb from './utils/requestDb';
+import requestDb from 'src/utils/requestDb';
 
 const testAuthentication = async (z: ZObject, bundle: Bundle) => {
-  return await requestDb(
+  return await requestDb({
     z,
     bundle,
-    'query currentWorkspace {currentWorkspace {id displayName}}',
-  );
+    query: 'query currentWorkspace {currentWorkspace {id displayName}}',
+    endpoint: 'metadata',
+  });
 };
 
 export default {
@@ -21,7 +22,16 @@ export default {
       label: 'Api Key',
       type: 'string',
       helpText:
-        'Create an API key in [your twenty workspace](https://app.twenty.com/settings/developers)',
+        'Create an API key in [your twenty workspace](https://app.twenty.com/settings/apis)',
+    },
+    {
+      computed: false,
+      key: 'apiUrl',
+      required: false,
+      label: 'Self hosted instance url',
+      type: 'string',
+      placeholder: 'https://crm.custom-url.com',
+      helpText: 'Set this only if you self-host Twenty',
     },
   ],
   connectionLabel: '{{data.currentWorkspace.displayName}}',

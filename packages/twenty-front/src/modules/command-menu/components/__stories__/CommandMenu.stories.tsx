@@ -1,70 +1,134 @@
-import { useEffect } from 'react';
-import { action } from '@storybook/addon-actions';
-import { Meta, StoryObj } from '@storybook/react';
-import { expect, userEvent, within } from '@storybook/test';
-import { useSetRecoilState } from 'recoil';
-import { IconCheckbox, IconNotes } from 'twenty-ui';
+import {
+  type Decorator,
+  type Meta,
+  type StoryObj,
+} from '@storybook/react-vite';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 
 import { currentWorkspaceMemberState } from '@/auth/states/currentWorkspaceMemberState';
 import { currentWorkspaceState } from '@/auth/states/currentWorkspaceState';
-import { useCommandMenu } from '@/command-menu/hooks/useCommandMenu';
-import { CommandType } from '@/command-menu/types/Command';
+import { metadataStoreState } from '@/metadata-store/states/metadataStoreState';
+import { jotaiStore } from '@/ui/utilities/state/jotai/jotaiStore';
 import { ComponentWithRouterDecorator } from '~/testing/decorators/ComponentWithRouterDecorator';
 import { ObjectMetadataItemsDecorator } from '~/testing/decorators/ObjectMetadataItemsDecorator';
-import { SnackBarDecorator } from '~/testing/decorators/SnackBarDecorator';
+import { ToastDecorator } from '~/testing/decorators/ToastDecorator';
 import { graphqlMocks } from '~/testing/graphqlMocks';
+import { mockedCommandMenuItems } from '~/testing/mock-data/generated/metadata/command-menu-items/mock-command-menu-items-data';
 import {
-  mockDefaultWorkspace,
+  mockCurrentWorkspace,
+  mockedLimitedPermissionsUserData,
   mockedWorkspaceMemberData,
 } from '~/testing/mock-data/users';
-import { sleep } from '~/testing/sleep';
 
-import { CommandMenu } from '../CommandMenu';
+import { type SidePanelCommandMenuItemDisplayPage } from '@/command-menu-item/display/components/SidePanelCommandMenuItemDisplayPage';
+import { CommandMenuComponentInstanceContext } from '@/command-menu/states/contexts/CommandMenuComponentInstanceContext';
+import { MAIN_CONTEXT_STORE_INSTANCE_ID } from '@/context-store/constants/MainContextStoreInstanceId';
+import { contextStoreCurrentObjectMetadataItemIdComponentState } from '@/context-store/states/contextStoreCurrentObjectMetadataItemIdComponentState';
+import { contextStoreCurrentPageTypeComponentState } from '@/context-store/states/contextStoreCurrentPageTypeComponentState';
+import { contextStoreCurrentViewTypeComponentState } from '@/context-store/states/contextStoreCurrentViewTypeComponentState';
+import { ContextStoreComponentInstanceContext } from '@/context-store/states/contexts/ContextStoreComponentInstanceContext';
+import { ContextStoreViewType } from '@/context-store/types/ContextStoreViewType';
+import { objectMetadataItemsSelector } from '@/object-metadata/states/objectMetadataItemsSelector';
+import { RecordComponentInstanceContextsWrapper } from '@/object-record/components/RecordComponentInstanceContextsWrapper';
+import { SidePanelRouter } from '@/side-panel/components/SidePanelRouter';
+import { SIDE_PANEL_COMPONENT_INSTANCE_ID } from '@/side-panel/constants/SidePanelComponentInstanceId';
+import { SIDE_PANEL_FOCUS_ID } from '@/side-panel/constants/SidePanelFocusId';
+import { isSidePanelOpenedState } from '@/side-panel/states/isSidePanelOpenedState';
+import { sidePanelNavigationStackState } from '@/side-panel/states/sidePanelNavigationStackState';
+import { ViewComponentInstanceContext } from '@/views/states/contexts/ViewComponentInstanceContext';
+import { HttpResponse, graphql } from 'msw';
+import { ContextStorePageType, SidePanelPages } from 'twenty-shared/types';
+import { IconDotsVertical, IconPlus } from 'twenty-ui/icon';
+import { JestContextStoreSetter } from '~/testing/jest/JestContextStoreSetter';
 
-const openTimeout = 50;
+const ContextStoreDecorator: Decorator = (Story) => {
+  return (
+    <RecordComponentInstanceContextsWrapper
+      componentInstanceId={SIDE_PANEL_COMPONENT_INSTANCE_ID}
+    >
+      <ContextStoreComponentInstanceContext.Provider
+        value={{ instanceId: SIDE_PANEL_COMPONENT_INSTANCE_ID }}
+      >
+        <ViewComponentInstanceContext.Provider
+          value={{ instanceId: SIDE_PANEL_COMPONENT_INSTANCE_ID }}
+        >
+          <CommandMenuComponentInstanceContext.Provider
+            value={{ instanceId: SIDE_PANEL_COMPONENT_INSTANCE_ID }}
+          >
+            <JestContextStoreSetter
+              contextStoreCurrentObjectMetadataNameSingular="company"
+              contextStoreCurrentViewId="1"
+              contextStoreCurrentViewType={ContextStoreViewType.Table}
+            >
+              <Story />
+            </JestContextStoreSetter>
+          </CommandMenuComponentInstanceContext.Provider>
+        </ViewComponentInstanceContext.Provider>
+      </ContextStoreComponentInstanceContext.Provider>
+    </RecordComponentInstanceContextsWrapper>
+  );
+};
 
-const meta: Meta<typeof CommandMenu> = {
+const meta: Meta<typeof SidePanelCommandMenuItemDisplayPage> = {
   title: 'Modules/CommandMenu/CommandMenu',
-  component: CommandMenu,
+  component: SidePanelRouter,
   decorators: [
     (Story) => {
-      const setCurrentWorkspace = useSetRecoilState(currentWorkspaceState);
-      const setCurrentWorkspaceMember = useSetRecoilState(
-        currentWorkspaceMemberState,
+      jotaiStore.set(currentWorkspaceState.atom, mockCurrentWorkspace);
+      jotaiStore.set(metadataStoreState.atomFamily('commandMenuItems'), {
+        current: mockedCommandMenuItems,
+        draft: [],
+        status: 'up-to-date',
+      });
+      jotaiStore.set(
+        currentWorkspaceMemberState.atom,
+        mockedWorkspaceMemberData,
       );
-      const { addToCommandMenu, setToInitialCommandMenu, openCommandMenu } =
-        useCommandMenu();
+      jotaiStore.set(isSidePanelOpenedState.atom, true);
+      jotaiStore.set(sidePanelNavigationStackState.atom, [
+        {
+          page: SidePanelPages.CommandMenuDisplay,
+          pageTitle: 'Command Menu',
+          pageIcon: IconDotsVertical,
+          pageId: '1',
+        },
+      ]);
 
-      setCurrentWorkspace(mockDefaultWorkspace);
-      setCurrentWorkspaceMember(mockedWorkspaceMemberData);
+      const objectMetadataItems = jotaiStore.get(
+        objectMetadataItemsSelector.atom,
+      );
+      const companyMetadataItem = objectMetadataItems.find(
+        (item) => item.nameSingular === 'company',
+      );
 
-      useEffect(() => {
-        setToInitialCommandMenu();
-        addToCommandMenu([
-          {
-            id: 'create-task',
-            to: '',
-            label: 'Create Task',
-            type: CommandType.Create,
-            Icon: IconCheckbox,
-            onCommandClick: action('create task click'),
-          },
-          {
-            id: 'create-note',
-            to: '',
-            label: 'Create Note',
-            type: CommandType.Create,
-            Icon: IconNotes,
-            onCommandClick: action('create note click'),
-          },
-        ]);
-        openCommandMenu();
-      }, [addToCommandMenu, setToInitialCommandMenu, openCommandMenu]);
+      if (companyMetadataItem === undefined) {
+        return <Story />;
+      }
+
+      jotaiStore.set(
+        contextStoreCurrentObjectMetadataItemIdComponentState.atomFamily({
+          instanceId: MAIN_CONTEXT_STORE_INSTANCE_ID,
+        }),
+        companyMetadataItem.id,
+      );
+      jotaiStore.set(
+        contextStoreCurrentViewTypeComponentState.atomFamily({
+          instanceId: MAIN_CONTEXT_STORE_INSTANCE_ID,
+        }),
+        ContextStoreViewType.Table,
+      );
+      jotaiStore.set(
+        contextStoreCurrentPageTypeComponentState.atomFamily({
+          instanceId: MAIN_CONTEXT_STORE_INSTANCE_ID,
+        }),
+        ContextStorePageType.Index,
+      );
 
       return <Story />;
     },
+    ContextStoreDecorator,
     ObjectMetadataItemsDecorator,
-    SnackBarDecorator,
+    ToastDecorator,
     ComponentWithRouterDecorator,
   ],
   parameters: {
@@ -73,63 +137,87 @@ const meta: Meta<typeof CommandMenu> = {
 };
 
 export default meta;
-type Story = StoryObj<typeof CommandMenu>;
+type Story = StoryObj<typeof SidePanelCommandMenuItemDisplayPage>;
 
 export const DefaultWithoutSearch: Story = {
-  play: async () => {
-    const canvas = within(document.body);
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
 
-    expect(await canvas.findByText('Create Task')).toBeInTheDocument();
-    expect(await canvas.findByText('Go to People')).toBeInTheDocument();
-    expect(await canvas.findByText('Go to Companies')).toBeInTheDocument();
-    expect(await canvas.findByText('Go to Opportunities')).toBeInTheDocument();
-    expect(await canvas.findByText('Go to Settings')).toBeInTheDocument();
-    expect(await canvas.findByText('Go to Tasks')).toBeInTheDocument();
+    expect(await canvas.findByText('Go to People')).toBeVisible();
+    expect(await canvas.findByText('Go to Opportunities')).toBeVisible();
+    expect(await canvas.findByText('Go to Settings')).toBeVisible();
+    expect(await canvas.findByText('Go to Tasks')).toBeVisible();
+    expect(await canvas.findByText('Go to Notes')).toBeVisible();
   },
 };
 
-export const MatchingPersonCompanyActivityCreateNavigate: Story = {
-  play: async () => {
-    const canvas = within(document.body);
-    const searchInput = await canvas.findByPlaceholderText('Search');
-    await sleep(openTimeout);
-    await userEvent.type(searchInput, 'n');
-    expect(await canvas.findByText('Alexandre Prot')).toBeInTheDocument();
-    expect(await canvas.findByText('Airbnb')).toBeInTheDocument();
-    expect(await canvas.findByText('My very first note')).toBeInTheDocument();
-    expect(await canvas.findByText('Create Note')).toBeInTheDocument();
-    expect(await canvas.findByText('Go to Companies')).toBeInTheDocument();
+export const LimitedPermissions: Story = {
+  parameters: {
+    currentUserWorkspace: mockedLimitedPermissionsUserData.currentUserWorkspace,
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    expect(await canvas.findByText('Go to People')).toBeVisible();
+    await waitFor(() => {
+      expect(canvas.queryByText('Go to Opportunities')).not.toBeInTheDocument();
+      expect(canvas.queryByText('Go to Tasks')).not.toBeInTheDocument();
+    });
+    expect(await canvas.findByText('Go to Settings')).toBeVisible();
+    expect(await canvas.findByText('Go to Notes')).toBeVisible();
   },
 };
 
-export const OnlyMatchingCreateAndNavigate: Story = {
-  play: async () => {
-    const canvas = within(document.body);
-    const searchInput = await canvas.findByPlaceholderText('Search');
-    await sleep(openTimeout);
+export const MatchingNavigate: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const searchInput = await canvas.findByTestId(SIDE_PANEL_FOCUS_ID);
+    await waitFor(() => expect(searchInput).toHaveFocus());
     await userEvent.type(searchInput, 'ta');
-    expect(await canvas.findByText('Create Task')).toBeInTheDocument();
-    expect(await canvas.findByText('Go to Tasks')).toBeInTheDocument();
+    expect(await canvas.findByText('Go to Tasks')).toBeVisible();
   },
 };
 
-export const AtleastMatchingOnePerson: Story = {
-  play: async () => {
-    const canvas = within(document.body);
-    const searchInput = await canvas.findByPlaceholderText('Search');
-    await sleep(openTimeout);
-    await userEvent.type(searchInput, 'alex');
-    expect(await canvas.findByText('Alexandre Prot')).toBeInTheDocument();
+export const MatchingNavigateShortcuts: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const searchInput = await canvas.findByTestId(SIDE_PANEL_FOCUS_ID);
+    await waitFor(() => expect(searchInput).toHaveFocus());
+    await userEvent.type(searchInput, 'gp');
+    expect(await canvas.findByText('Go to People')).toBeVisible();
   },
 };
 
-export const NotMatchingAnything: Story = {
-  play: async () => {
-    const canvas = within(document.body);
-    const searchInput = await canvas.findByPlaceholderText('Search');
-    await sleep(openTimeout);
-    await userEvent.type(searchInput, 'asdasdasd');
-    // FIXME: We need to fix the filters in graphql
-    // expect(await canvas.findByText('No results found')).toBeInTheDocument();
+export const NoResultsSearchFallback: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const searchInput = await canvas.findByRole('textbox', { name: 'Search' });
+    await waitFor(() => expect(searchInput).toHaveFocus());
+    await userEvent.type(searchInput, 'input without results');
+    expect(
+      await canvas.findByText('Use ‘input without results’ with...'),
+    ).toBeVisible();
+    await waitFor(() => {
+      expect(canvas.queryByText('No results found')).not.toBeInTheDocument();
+    });
+  },
+  parameters: {
+    msw: {
+      handlers: [
+        ...graphqlMocks.handlers,
+        graphql.query('Search', () => {
+          return HttpResponse.json({
+            data: {
+              search: {
+                edges: [],
+                pageInfo: {
+                  hasNextPage: false,
+                  endCursor: null,
+                },
+              },
+            },
+          });
+        }),
+      ],
+    },
   },
 };

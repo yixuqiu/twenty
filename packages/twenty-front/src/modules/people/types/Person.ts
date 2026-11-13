@@ -2,24 +2,28 @@ export type Person = {
   __typename: 'Person';
   id: string;
   createdAt: string;
-  updatedAt: string;
-  deletedAt: string | null;
+  updatedAt?: string;
+  deletedAt?: string | null;
   name: {
+    __typename?: 'FullName';
     firstName: string;
     lastName: string;
   };
-  avatarUrl: string;
+  avatarUrl?: string;
   jobTitle: string;
   linkedinLink: {
-    url: string;
-    label: string;
+    __typename?: 'Links';
+    primaryLinkUrl: string;
+    primaryLinkLabel: string;
   };
-  xLink: {
-    url: string;
-    label: string;
-  };
-  city: string;
   email: string;
+  /** @deprecated */
   phone: string;
-  companyId: string;
+  companyId?: string;
+  position?: number;
+  links?: {
+    __typename: 'Links';
+    primaryLinkUrl: string;
+    primaryLinkLabel: '';
+  };
 };

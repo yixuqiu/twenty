@@ -1,29 +1,42 @@
 import { act, renderHook } from '@testing-library/react';
-import { RecoilRoot, useRecoilValue } from 'recoil';
+import { Provider as JotaiProvider } from 'jotai';
 
-import { useClickOustideListenerStates } from '@/ui/utilities/pointer-event/hooks/useClickOustideListenerStates';
 import { useClickOutsideListener } from '@/ui/utilities/pointer-event/hooks/useClickOutsideListener';
+import { clickOutsideListenerIsActivatedComponentState } from '@/ui/utilities/pointer-event/states/clickOutsideListenerIsActivatedComponentState';
+import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
+import {
+  jotaiStore,
+  resetJotaiStore,
+} from '@/ui/utilities/state/jotai/jotaiStore';
 
 const componentId = 'componentId';
 
+const Wrapper = ({ children }: { children: React.ReactNode }) => (
+  <JotaiProvider store={jotaiStore}>{children}</JotaiProvider>
+);
+
 describe('useClickOutsideListener', () => {
+  beforeEach(() => {
+    resetJotaiStore();
+  });
+
   it('should toggle the click outside listener activation state', async () => {
     const { result } = renderHook(
       () => {
-        const { getClickOutsideListenerIsActivatedState } =
-          useClickOustideListenerStates(componentId);
-
         return {
           useClickOutside: useClickOutsideListener(componentId),
-          isActivated: useRecoilValue(getClickOutsideListenerIsActivatedState),
+          isActivated: useAtomComponentStateValue(
+            clickOutsideListenerIsActivatedComponentState,
+            componentId,
+          ),
         };
       },
       {
-        wrapper: RecoilRoot,
+        wrapper: Wrapper,
       },
     );
 
-    const toggle = result.current.useClickOutside.toggleClickOutsideListener;
+    const toggle = result.current.useClickOutside.toggleClickOutside;
 
     act(() => {
       toggle(true);

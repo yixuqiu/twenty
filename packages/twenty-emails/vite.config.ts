@@ -1,42 +1,91 @@
+import { builtinModules } from 'node:module';
+
+import { lingui } from '@lingui/vite-plugin';
 import react from '@vitejs/plugin-react-swc';
 import * as path from 'path';
-import { defineConfig } from 'vite';
-import dts from 'vite-plugin-dts';
-import tsconfigPaths from 'vite-tsconfig-paths';
+import { APP_LOCALES } from 'twenty-shared/translations';
+import { defineConfig, type Plugin } from 'vite';
+
+// twenty-emails bundles its deps (the Node server that consumes it doesn't have
+// @react-email et al.) but runs in Node. A plain client/lib build under Vite 8
+// (rolldown) resolves node builtins to browser stubs that throw at runtime
+// (e.g. object-inspect reading util.inspect.custom), crashing the server on
+// import. Vite only externalizes builtins as real `require('node:*')` in an
+// SSR/node build, so this is built with `build.ssr` + `ssr.target: 'node'`,
+// while `ssr.noExternal: true` keeps the npm deps bundled in. React stays
+// external as the host app provides it.
+const EXTERNAL_DEPENDENCIES = ['react', 'react-dom', 'react/jsx-runtime'];
+
+const nodeBuiltins = new Set([
+  ...builtinModules,
+  ...builtinModules.map((moduleName) => `node:${moduleName}`),
+]);
+
+const externalizeNodeBuiltins = (): Plugin => ({
+  name: 'externalize-node-builtins',
+  enforce: 'pre',
+  resolveId(source) {
+    const specifier = source.startsWith('node:') ? source : `node:${source}`;
+
+    if (nodeBuiltins.has(source) || nodeBuiltins.has(specifier)) {
+      return { id: specifier, external: true };
+    }
+
+    return null;
+  },
+});
 
 export default defineConfig({
   root: __dirname,
   cacheDir: '../../node_modules/.vite/packages/twenty-emails',
 
+  resolve: {
+    tsconfigPaths: true,
+    alias: {
+      '@/': path.resolve(__dirname, 'src') + '/',
+      'src/': path.resolve(__dirname, 'src') + '/',
+    },
+  },
+
+  ssr: {
+    target: 'node',
+    noExternal: true,
+    external: EXTERNAL_DEPENDENCIES,
+  },
+
   plugins: [
-    react(),
-    tsconfigPaths(),
-    dts({
-      entryRoot: 'src',
-      tsconfigPath: path.join(__dirname, 'tsconfig.lib.json'),
+    externalizeNodeBuiltins(),
+    react({
+      plugins: [['@lingui/swc-plugin', {}]],
+    }),
+    lingui({
+      configPath: path.resolve(__dirname, './lingui.config.ts'),
     }),
   ],
 
-  // Configuration for building your library.
-  // See: https://vitejs.dev/guide/build.html#library-mode
   build: {
     outDir: './dist',
-    reportCompressedSize: true,
+    ssr: true,
+    reportCompressedSize: false,
     commonjsOptions: {
       transformMixedEsModules: true,
     },
     lib: {
-      // Could also be a dictionary or array of multiple entry points.
-      entry: 'src/index.ts',
+      entry: {
+        index: 'src/index.ts',
+        ...Object.values(APP_LOCALES).reduce(
+          (acc, locale) => ({
+            ...acc,
+            [`locales/generated/${locale}`]: `src/locales/generated/${locale}.ts`,
+          }),
+          {},
+        ),
+      },
       name: 'twenty-emails',
-      fileName: 'index',
-      // Change this to the formats you want to support.
-      // Don't forget to update your package.json as well.
       formats: ['es', 'cjs'],
     },
     rollupOptions: {
-      // External packages that should not be bundled into your library.
-      external: ['react', 'react-dom', 'react/jsx-runtime'],
+      external: EXTERNAL_DEPENDENCIES,
     },
   },
 });

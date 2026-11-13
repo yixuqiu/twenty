@@ -1,9 +1,8 @@
-import { AvatarType } from 'twenty-ui';
-
+import { type AvatarShape } from 'twenty-ui/primitives/data-display';
 export type ObjectRecordIdentifier = {
   id: string;
   name: string;
   avatarUrl?: string;
-  avatarType?: AvatarType | null;
+  avatarShape?: AvatarShape | null;
   linkToShowPage?: string;
 };

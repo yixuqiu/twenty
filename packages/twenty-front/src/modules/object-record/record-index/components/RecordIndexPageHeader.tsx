@@ -1,47 +1,66 @@
-import { useParams } from 'react-router-dom';
-import { useRecoilValue } from 'recoil';
-import { useIcons } from 'twenty-ui';
-
+import { RecordIndexCommandMenu } from '@/command-menu-item/components/RecordIndexCommandMenu';
+import { contextStoreCurrentViewIdComponentState } from '@/context-store/states/contextStoreCurrentViewIdComponentState';
+import { contextStoreNumberOfSelectedRecordsComponentState } from '@/context-store/states/contextStoreNumberOfSelectedRecordsComponentState';
+import { isLayoutCustomizationModeEnabledState } from '@/layout-customization/states/isLayoutCustomizationModeEnabledState';
 import { useFilteredObjectMetadataItems } from '@/object-metadata/hooks/useFilteredObjectMetadataItems';
-import { recordIndexViewTypeState } from '@/object-record/record-index/states/recordIndexViewTypeState';
-import { PageAddButton } from '@/ui/layout/page/PageAddButton';
-import { PageHeader } from '@/ui/layout/page/PageHeader';
-import { PageHotkeysEffect } from '@/ui/layout/page/PageHotkeysEffect';
-import { ViewType } from '@/views/types/ViewType';
-import { capitalize } from '~/utils/string/capitalize';
+import { RecordIndexPageHeaderTitle } from '@/object-record/record-index/components/RecordIndexPageHeaderTitle';
+import { RecordIndexPageHeaderIcon } from '@/object-record/record-index/components/RecordIndexPageHeaderIcon';
+import { useRecordIndexContextOrThrow } from '@/object-record/record-index/contexts/RecordIndexContext';
+import { SidePanelPageTitleSyncEffect } from '@/side-panel/components/SidePanelPageTitleSyncEffect';
+import { SidePanelToggleButton } from '@/side-panel/components/SidePanelToggleButton';
+import { PageCardHeader } from '@/ui/layout/page/components/PageCardHeader';
+import { useWorkspaceSurface } from '@/ui/layout/hooks/useWorkspaceSurface';
+import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import { isDefined } from 'twenty-shared/utils';
 
-type RecordIndexPageHeaderProps = {
-  createRecord: () => void;
-};
-
-export const RecordIndexPageHeader = ({
-  createRecord,
-}: RecordIndexPageHeaderProps) => {
-  const objectNamePlural = useParams().objectNamePlural ?? '';
+export const RecordIndexPageHeader = () => {
+  const workspaceSurface = useWorkspaceSurface();
 
   const { findObjectMetadataItemByNamePlural } =
     useFilteredObjectMetadataItems();
 
+  const contextStoreNumberOfSelectedRecords = useAtomComponentStateValue(
+    contextStoreNumberOfSelectedRecordsComponentState,
+  );
+
+  const { objectNamePlural } = useRecordIndexContextOrThrow();
+
   const objectMetadataItem =
     findObjectMetadataItemByNamePlural(objectNamePlural);
 
-  const { getIcon } = useIcons();
-  const Icon = getIcon(
-    findObjectMetadataItemByNamePlural(objectNamePlural)?.icon,
+  const label = objectMetadataItem?.labelPlural ?? objectNamePlural;
+
+  const contextStoreCurrentViewId = useAtomComponentStateValue(
+    contextStoreCurrentViewIdComponentState,
+  );
+  const isLayoutCustomizationModeEnabled = useAtomStateValue(
+    isLayoutCustomizationModeEnabledState,
   );
 
-  const recordIndexViewType = useRecoilValue(recordIndexViewTypeState);
-
-  const canAddRecord =
-    recordIndexViewType === ViewType.Table && !objectMetadataItem?.isRemote;
-
-  const pageHeaderTitle =
-    objectMetadataItem?.labelPlural ?? capitalize(objectNamePlural);
-
   return (
-    <PageHeader title={pageHeaderTitle} Icon={Icon}>
-      <PageHotkeysEffect onAddButtonClick={createRecord} />
-      {canAddRecord && <PageAddButton onClick={createRecord} />}
-    </PageHeader>
+    <>
+      <SidePanelPageTitleSyncEffect pageTitle={label} />
+      <PageCardHeader
+        icon={
+          <RecordIndexPageHeaderIcon objectMetadataItem={objectMetadataItem} />
+        }
+        title={
+          <RecordIndexPageHeaderTitle
+            label={label}
+            numberOfSelectedRecords={contextStoreNumberOfSelectedRecords}
+          />
+        }
+        actionButton={
+          isDefined(contextStoreCurrentViewId) ? (
+            <>
+              <RecordIndexCommandMenu />
+              {!isLayoutCustomizationModeEnabled &&
+                workspaceSurface.type === 'main' && <SidePanelToggleButton />}
+            </>
+          ) : undefined
+        }
+      />
+    </>
   );
 };

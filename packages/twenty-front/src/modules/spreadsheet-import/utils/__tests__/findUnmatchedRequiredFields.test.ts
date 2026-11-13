@@ -1,49 +1,64 @@
 import {
-  Column,
-  ColumnType,
-} from '@/spreadsheet-import/steps/components/MatchColumnsStep/MatchColumnsStep';
-import { Field, Validation } from '@/spreadsheet-import/types';
+  type SpreadsheetImportField,
+  type SpreadsheetImportFieldValidationDefinition,
+} from '@/spreadsheet-import/types';
+import { type SpreadsheetColumn } from '@/spreadsheet-import/types/SpreadsheetColumn';
+import { SpreadsheetColumnType } from '@/spreadsheet-import/types/SpreadsheetColumnType';
 import { findUnmatchedRequiredFields } from '@/spreadsheet-import/utils/findUnmatchedRequiredFields';
+import { FieldMetadataType } from 'twenty-shared/types';
 
-const nameField: Field<'Name'> = {
+const nameField: SpreadsheetImportField = {
   key: 'Name',
   label: 'Name',
-  icon: null,
+  Icon: null,
   fieldType: {
     type: 'input',
   },
+  fieldMetadataType: FieldMetadataType.TEXT,
+  fieldMetadataItemId: '1',
+  isNestedField: false,
 };
 
-const ageField: Field<'Age'> = {
+const ageField: SpreadsheetImportField = {
   key: 'Age',
   label: 'Age',
-  icon: null,
+  Icon: null,
   fieldType: {
     type: 'input',
   },
+  fieldMetadataType: FieldMetadataType.NUMBER,
+  fieldMetadataItemId: '2',
+  isNestedField: false,
 };
-const validations: Validation[] = [{ rule: 'required' }];
-const nameFieldWithValidations: Field<'Name'> = { ...nameField, validations };
-const ageFieldWithValidations: Field<'Age'> = { ...ageField, validations };
 
-type ColumnValues = 'Name' | 'Age';
+const validations: SpreadsheetImportFieldValidationDefinition[] = [
+  { rule: 'required' },
+];
+const nameFieldWithValidations: SpreadsheetImportField = {
+  ...nameField,
+  fieldValidationDefinitions: validations,
+};
+const ageFieldWithValidations: SpreadsheetImportField = {
+  ...ageField,
+  fieldValidationDefinitions: validations,
+};
 
-const nameColumn: Column<ColumnValues> = {
-  type: ColumnType.matched,
+const nameColumn: SpreadsheetColumn = {
+  type: SpreadsheetColumnType.matched,
   index: 0,
   header: '',
   value: 'Name',
 };
 
-const ageColumn: Column<ColumnValues> = {
-  type: ColumnType.matched,
+const ageColumn: SpreadsheetColumn = {
+  type: SpreadsheetColumnType.matched,
   index: 0,
   header: '',
   value: 'Age',
 };
 
-const extraColumn: Column<ColumnValues> = {
-  type: ColumnType.matched,
+const extraColumn: SpreadsheetColumn = {
+  type: SpreadsheetColumnType.matched,
   index: 0,
   header: '',
   value: 'Age',

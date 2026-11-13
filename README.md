@@ -1,170 +1,176 @@
-
-<br>
 <p align="center">
   <a href="https://www.twenty.com">
-    <img src="./packages/twenty-docs/static/img/logo-square-dark.svg" width="100px" alt="Twenty logo" />
+    <img src="./packages/twenty-website/public/images/core/logo.svg" width="100px" alt="Twenty logo" />
   </a>
 </p>
 
-<h2 align="center" >The #1 Open-Source CRM </h3>
-<p align="center">Tailored to your unique business needs</p>
+<h2 align="center">The #1 Open-Source CRM</h2>
 
-<p align="center"><a href="https://twenty.com">🌐 Website</a> · <a href="https://docs.twenty.com">📚 Documentation</a> ·  <a href="https://discord.gg/cx5n4Jzs57"><img src="./packages/twenty-docs/static/img/discord-icon.svg" width="12" height="12"/> Discord</a> · <a href="https://www.figma.com/file/xt8O9mFeLl46C5InWwoMrN/Twenty"><img src="./packages/twenty-docs/static/img/figma-icon.png"  width="12" height="12"/>  Figma</a><p>
+<p align="center"><a href="https://twenty.com"><img src="./packages/twenty-website/public/images/readme/globe-icon.svg" width="12" height="12"/> Website</a> · <a href="https://docs.twenty.com"><img src="./packages/twenty-website/public/images/readme/book-icon.svg" width="12" height="12"/> Documentation</a> · <a href="https://github.com/orgs/twentyhq/projects/1"><img src="./packages/twenty-website/public/images/readme/map-icon.svg" width="12" height="12"/> Roadmap </a> · <a href="https://discord.gg/cx5n4Jzs57"><img src="./packages/twenty-website/public/images/readme/discord-icon.svg" width="12" height="12"/> Discord</a> · <a href="https://www.figma.com/file/xt8O9mFeLl46C5InWwoMrN/Twenty"><img src="./packages/twenty-website/public/images/readme/figma-icon.webp"  width="12" height="12"/>  Figma</a></p>
+
+<p align="center">
+  <a href="https://www.twenty.com">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="./packages/twenty-website/public/images/readme/github-cover-dark.webp" />
+      <source media="(prefers-color-scheme: light)" srcset="./packages/twenty-website/public/images/readme/github-cover-light.webp" />
+      <img src="./packages/twenty-website/public/images/readme/github-cover-light.webp" alt="Twenty banner" />
+    </picture>
+  </a>
+</p>
+
 <br />
 
+# Why Twenty
 
-<p align="center">
-  <a href="https://www.twenty.com">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/twentyhq/twenty/main/packages/twenty-docs/static/img/preview-dark.png">
-      <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/twentyhq/twenty/main/packages/twenty-docs/static/img/preview-light.png">
-      <img src="./packages/twenty-docs/static/img/preview-light.png" alt="Companies view" />
-    </picture>
-  </a>
-</p>
-<br>
+Twenty gives technical teams the building blocks for a custom CRM that meets complex business needs and quickly adapts as the business evolves. Twenty is the CRM you build, ship, and version like the rest of your stack.
 
-We’ve spent thousands of hours grappling with traditional CRMs like Pipedrive and Salesforce to align them with our business needs, only to end up frustrated — customizations are complex and the closed ecosystems of these platforms can feel restrictive.
+<a href="https://twenty.com/resources/why-twenty"><img src="./packages/twenty-website/public/images/readme/star-icon.svg" width="14" height="14"/> Learn more about why we built Twenty</a>
 
-We felt the need for a CRM platform that empowers rather than constrains. We believe the next great CRM will come from the open source community. And we’ve packed Twenty with powerful features to give you full control and help you run your business efficiently. 
+<br />
 
-<br>
+# Installation
 
-# Demo 
-Go to <a href="https://demo.twenty.com/">demo.twenty.com</a> and login with the following credentials:
+### <img src="./packages/twenty-website/public/images/readme/globe-icon.svg" width="14" height="14"/> Cloud
+
+The fastest way to get started. Sign up at [twenty.com](https://twenty.com) and spin up a workspace in under a minute, with no infrastructure to manage and always up to date.
+
+### <img src="./packages/twenty-website/public/images/readme/book-icon.svg" width="14" height="14"/> Build an app
+
+Scaffold a new app with the Twenty CLI:
+
+```bash
+npm install -g twenty
+twenty app init my-app
+cd my-app
+yarn install
 ```
-email: noah@demo.dev
-password: Applecar2025
+
+Define objects, fields, and views as code:
+
+```ts
+import { defineObject, FieldType } from 'twenty-sdk/define';
+
+export default defineObject({
+  nameSingular: 'deal',
+  namePlural: 'deals',
+  labelSingular: 'Deal',
+  labelPlural: 'Deals',
+  fields: [
+    { name: 'name', label: 'Name', type: FieldType.TEXT },
+    { name: 'amount', label: 'Amount', type: FieldType.CURRENCY },
+    { name: 'closeDate', label: 'Close Date', type: FieldType.DATE_TIME },
+  ],
+});
 ```
 
-See also:  
-🚀 [Self-hosting](https://docs.twenty.com/start/self-hosting/)  
-🖥️ [Local Setup](https://docs.twenty.com/start/local-setup)  
+Then ship it to your workspace:
 
-# Why Choose Twenty?
-We understand that the CRM landscape is vast. So why should you choose us?
+```bash
+twenty auth login --url https://your-workspace.twenty.com
+twenty app publish --private
+```
 
-⛓️ **Full control, Full Freedom:** Contribute, self-host, fork. Break free from vendor lock-in and join us in shaping the open future of CRM.
+See the [app development guide](https://docs.twenty.com/developers/extend/apps/getting-started) for objects, views, agents, and logic functions.
 
-📊 **Data, Your Way:** The days when the role of CRM platforms was to shift manual data entries to a database are over. Now, the data is already there. CRM 2.0 should be built around your data, allowing you to access and visualize any existing sources, not forcing you to retrofit your data into predefined objects on a remote cloud.
+Building with a coding agent? Install the official [Twenty app skills](./packages/twenty-agent-skills), which work in Claude Code, Codex, Cursor, Pi, and any other harness supported by the `skills` CLI:
 
-🎨 **Effortlessly Intuitive:** We set out to create something that we ourselves would always enjoy using. The main application draws inspiration from Notion, a tool known for its user-friendly interface and customization capabilities.
-<br>
+```bash
+npx skills add https://github.com/twentyhq/twenty/tree/agent-skills --list
+```
 
+The `agent-skills` branch is created by the first successful publish from `main`. Until then, use the [local build instructions](./packages/twenty-agent-skills#local-development). [`SKILLS.md`](./SKILLS.md) explains the other skill families in this repository and who they are for.
 
-<br>
+### <img src="./packages/twenty-website/public/images/readme/rocket-icon.svg" width="14" height="14"/> Self-hosting
 
-# What You Can Do With Twenty
-We're currently in the development phase of Twenty's alpha version.  
+Run Twenty on your own infrastructure with [Docker Compose](https://docs.twenty.com/developers/self-host/capabilities/docker-compose), or contribute locally via the [local setup guide](https://docs.twenty.com/developers/contribute/capabilities/local-setup).
 
-Please feel free to flag any specific need you have need by creating an issue.   
+<br />
+<br />
 
-Below are some features we have implemented to date:
+# Everything you need
 
-+ [Add, filter, sort, edit and track customers](#add-filter-sort-edit-and-track-customers)
-+ [Create one or several opportunities for each company](#create-one-or-several-opportunities-for-each-company)
-+ [See rich notes tasks displayed in a timeline](#see-rich-notes-tasks-displayed-in-a-timeline)
-+ [Create tasks on records](#create-tasks-on-records)
-+ [Navigate quickly through the app using keyboard shortcuts and search](#navigate-quickly-through-the-app-using-keyboard-shortcuts-and-search)
+Twenty gives you the building blocks of a modern CRM (objects, views, workflows, and agents) and lets you extend them as code. Here's a tour of what's in the box.
 
-## Add, filter, sort, edit and track customers:
+Want to go deeper? Read the <a href="https://docs.twenty.com/user-guide/introduction"><img src="./packages/twenty-website/public/images/readme/planner-icon.svg" width="14" height="14"/> User Guide</a> for product walkthroughs, or the <a href="https://docs.twenty.com"><img src="./packages/twenty-website/public/images/readme/book-icon.svg" width="14" height="14"/> Documentation</a> for developer reference.
 
-<p align="center">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/twentyhq/twenty/main/packages/twenty-docs/static/img/index-dark.png">
-      <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/twentyhq/twenty/main/packages/twenty-docs/static/img/index-light.png">
-      <img src="./packages/twenty-docs/static/img/visualise-customer-light.png" alt="Companies view" />
-    </picture>
-</p>
+<table align="center">
+  <tr>
+    <td width="50%">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="./packages/twenty-website/public/images/readme/v2-build-apps-dark.webp" />
+        <source media="(prefers-color-scheme: light)" srcset="./packages/twenty-website/public/images/readme/v2-build-apps-light.webp" />
+        <img src="./packages/twenty-website/public/images/readme/v2-build-apps-light.webp" alt="Create your apps" />
+      </picture>
+      <p align="center"><a href="https://docs.twenty.com/developers/extend/apps/getting-started"><img src="./packages/twenty-website/public/images/readme/code-icon.svg" width="16" height="16"/> Learn more about apps in doc</a></p>
+    </td>
+    <td width="50%">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="./packages/twenty-website/public/images/readme/v2-version-control-dark.webp" />
+        <source media="(prefers-color-scheme: light)" srcset="./packages/twenty-website/public/images/readme/v2-version-control-light.webp" />
+        <img src="./packages/twenty-website/public/images/readme/v2-version-control-light.webp" alt="Stay on top with version control" />
+      </picture>
+      <p align="center"><a href="https://docs.twenty.com/developers/extend/apps/publishing"><img src="./packages/twenty-website/public/images/readme/monitor-icon.svg" width="16" height="16"/> Learn more about version control in doc</a></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="./packages/twenty-website/public/images/readme/v2-all-tools-dark.webp" />
+        <source media="(prefers-color-scheme: light)" srcset="./packages/twenty-website/public/images/readme/v2-all-tools-light.webp" />
+        <img src="./packages/twenty-website/public/images/readme/v2-all-tools-light.webp" alt="All the tools you need to build anything" />
+      </picture>
+      <p align="center"><a href="https://docs.twenty.com/developers/extend/apps/building"><img src="./packages/twenty-website/public/images/readme/rocket-icon.svg" width="16" height="16"/> Learn more about primitives in doc</a></p>
+    </td>
+    <td width="50%">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="./packages/twenty-website/public/images/readme/v2-tools-dark.webp" />
+        <source media="(prefers-color-scheme: light)" srcset="./packages/twenty-website/public/images/readme/v2-tools-light.webp" />
+        <img src="./packages/twenty-website/public/images/readme/v2-tools-light.webp" alt="Customize your layouts" />
+      </picture>
+      <p align="center"><a href="https://docs.twenty.com/user-guide/layout/overview"><img src="./packages/twenty-website/public/images/readme/planner-icon.svg" width="16" height="16"/> Learn more about layouts in doc</a></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="./packages/twenty-website/public/images/readme/v2-ai-agents-dark.webp" />
+        <source media="(prefers-color-scheme: light)" srcset="./packages/twenty-website/public/images/readme/v2-ai-agents-light.webp" />
+        <img src="./packages/twenty-website/public/images/readme/v2-ai-agents-light.webp" alt="AI agents and chats" />
+      </picture>
+      <p align="center"><a href="https://docs.twenty.com/user-guide/ai/overview"><img src="./packages/twenty-website/public/images/readme/message-icon.svg" width="16" height="16"/> Learn more about AI in doc</a></p>
+    </td>
+    <td width="50%">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="./packages/twenty-website/public/images/readme/v2-crm-tools-dark.webp" />
+        <source media="(prefers-color-scheme: light)" srcset="./packages/twenty-website/public/images/readme/v2-crm-tools-light.webp" />
+        <img src="./packages/twenty-website/public/images/readme/v2-crm-tools-light.webp" alt="Plus all the tools of a good CRM" />
+      </picture>
+      <p align="center"><a href="https://docs.twenty.com/user-guide/introduction"><img src="./packages/twenty-website/public/images/readme/star-icon.svg" width="16" height="16"/> Learn more about CRM features in doc</a></p>
+    </td>
+  </tr>
+</table>
 
-## Create one or several opportunities for each company:
+<br />
 
-<p align="center">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/twentyhq/twenty/main/packages/twenty-docs/static/img/kanban-dark.png">
-      <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/twentyhq/twenty/main/packages/twenty-docs/static/img/kanban-light.png">
-      <img src="./packages/twenty-docs/static/img/follow-your-deals-light.png" alt="Companies view" />
-    </picture>
-</p>
+# Stack
 
-## Track deals effortlessly with the email integration:
+- <a href="https://www.typescriptlang.org/"><img src="./packages/twenty-website/public/images/readme/stack-typescript.svg" width="14" height="14"/> TypeScript</a>
+- <a href="https://nx.dev/"><img src="./packages/twenty-website/public/images/readme/stack-nx.svg" width="14" height="14"/> Nx</a>
+- <a href="https://nestjs.com/"><img src="./packages/twenty-website/public/images/readme/stack-nestjs.svg" width="14" height="14"/> NestJS</a>, with <a href="https://bullmq.io/">BullMQ</a>, <a href="https://www.postgresql.org/"><img src="./packages/twenty-website/public/images/readme/stack-postgresql.svg" width="14" height="14"/> PostgreSQL</a>, <a href="https://redis.io/"><img src="./packages/twenty-website/public/images/readme/stack-redis.svg" width="14" height="14"/> Redis</a>
+- <a href="https://reactjs.org/"><img src="./packages/twenty-website/public/images/readme/stack-react.svg" width="14" height="14"/> React</a>, with <a href="https://jotai.org/">Jotai</a>, <a href="https://linaria.dev/">Linaria</a> and <a href="https://lingui.dev/">Lingui</a>
 
-<p align="center">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/twentyhq/twenty/main/packages/twenty-docs/static/img/emails-dark.png">
-      <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/twentyhq/twenty/main/packages/twenty-docs/static/img/emails-light.png">
-      <img src="./packages/twenty-docs/static/img/rich-notes-light.png" alt="Companies view" />
-    </picture>
-</p>
-
-## Tailor your data model to meet business needs:
-
-<p align="center">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/twentyhq/twenty/main/packages/twenty-docs/static/img/data-dark.png">
-      <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/twentyhq/twenty/main/packages/twenty-docs/static/img/data-light.png">
-      <img src="./packages/twenty-docs/static/img/rich-notes-light.png" alt="Companies view" />
-    </picture>
-</p>
-
-## See rich notes displayed in a timeline:
-
-<p align="center">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/twentyhq/twenty/main/packages/twenty-docs/static/img/notes-dark.png">
-      <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/twentyhq/twenty/main/packages/twenty-docs/static/img/notes-light.png">
-      <img src="./packages/twenty-docs/static/img/rich-notes-light.png" alt="Companies view" />
-    </picture>
-</p>
-
-## Create tasks on records
-
-<p align="center">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/twentyhq/twenty/main/packages/twenty-docs/static/img/tasks-dark.png">
-      <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/twentyhq/twenty/main/packages/twenty-docs/static/img/tasks-light.png">
-      <img src="./packages/twenty-docs/static/img/create-tasks-light.png" alt="Companies view" />
-    </picture>
-</p>
-
-## Navigate quickly through the app using keyboard shortcuts and search:
-
-<p align="center">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/twentyhq/twenty/main/packages/twenty-docs/static/img/keyboard-dark.png">
-      <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/twentyhq/twenty/main/packages/twenty-docs/static/img/keyboard-light.png">
-      <img src="./packages/twenty-docs/static/img/shortcut-navigation-light.png" alt="Companies view" />
-    </picture>
-</p>
-
-## Connect your CRM to all your tools through our APIs and Webhooks.
+# Thanks
 
 <p align="center">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/twentyhq/twenty/main/packages/twenty-docs/static/img/api-dark.png">
-      <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/twentyhq/twenty/main/packages/twenty-docs/static/img/api-light.png">
-      <img src="./packages/twenty-docs/static/img/shortcut-navigation-light.png" alt="Companies view" />
-    </picture>
+  <a href="https://greptile.com"><img src="./packages/twenty-website/public/images/readme/greptile.webp" height="28" alt="Greptile" /></a>
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <a href="https://sentry.io/"><img src="./packages/twenty-website/public/images/readme/sentry.webp" height="28" alt="Sentry" /></a>
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <a href="https://crowdin.com/"><img src="./packages/twenty-website/public/images/readme/crowdin.webp" height="28" alt="Crowdin" /></a>
 </p>
 
-<br>
-
-# What's In Store
-
-Here’s what you can look forward to:
-
-⏳ **Frequent updates:** We’re shipping fast! Expect regular updates and new features that enhance your experience.
-
-🔗 **Extensibility:** We’re putting the power in your hands. Soon, you’ll have the tools to extend and customize Twenty with plugins and more.
-
-<br>
+Thanks to these amazing services that we use and recommend for code review (Greptile), catching bugs (Sentry) and translating (Crowdin).
 
 # Join the Community
 
-- Star the repo
-- Join [discussions](https://github.com/twentyhq/twenty/discussions) and track [issues](https://github.com/twentyhq/twenty/issues) 
-- Follow us on [Twitter](https://twitter.com/twentycrm) or [LinkedIn](https://www.linkedin.com/company/twenty/) 
-- Join our [Discord](https://discord.gg/cx5n4Jzs57)
-- [Contributions](https://github.com/twentyhq/twenty/contribute) are, of course, most welcome! 
-
-
+<p><a href="https://github.com/twentyhq/twenty"><img src="./packages/twenty-website/public/images/readme/star-icon.svg" width="12" height="12"/> Star the repo</a> · <a href="https://discord.gg/cx5n4Jzs57"><img src="./packages/twenty-website/public/images/readme/discord-icon.svg" width="12" height="12"/> Discord</a> · <a href="https://github.com/twentyhq/twenty/discussions"><img src="./packages/twenty-website/public/images/readme/message-icon.svg" width="12" height="12"/> Feature requests</a> · <a href="https://github.com/orgs/twentyhq/projects/1/views/35"><img src="./packages/twenty-website/public/images/readme/rocket-icon.svg" width="12" height="12"/> Releases</a> · <a href="https://twitter.com/twentycrm"><img src="./packages/twenty-website/public/images/readme/x-icon.svg" width="12" height="12"/> X</a> · <a href="https://www.linkedin.com/company/twenty/"><img src="./packages/twenty-website/public/images/readme/linkedin-icon.svg" width="12" height="12"/> LinkedIn</a> · <a href="https://twenty.crowdin.com/twenty"><img src="./packages/twenty-website/public/images/readme/language-icon.svg" width="12" height="12"/> Crowdin</a> · <a href="https://github.com/twentyhq/twenty/contribute"><img src="./packages/twenty-website/public/images/readme/code-icon.svg" width="12" height="12"/> Contribute</a></p>

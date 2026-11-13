@@ -1,11 +1,14 @@
-import { ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
-import { parseFieldRelationType } from '@/object-metadata/utils/parseFieldRelationType';
+import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/EnrichedObjectMetadataItem';
+import { type FieldDefinition } from '@/object-record/record-field/ui/types/FieldDefinition';
+import { type FieldMetadata } from '@/object-record/record-field/ui/types/FieldMetadata';
 
-import { FieldMetadataItem } from '../types/FieldMetadataItem';
+import { getFieldButtonIcon } from '@/object-record/record-field/ui/utils/getFieldButtonIcon';
+import { FieldMetadataType } from 'twenty-shared/types';
+import { type FieldMetadataItem } from '@/object-metadata/types/FieldMetadataItem';
 
 export type FieldMetadataItemAsFieldDefinitionProps = {
   field: FieldMetadataItem;
-  objectMetadataItem: ObjectMetadataItem;
+  objectMetadataItem: EnrichedObjectMetadataItem;
   showLabel?: boolean;
   labelWidth?: number;
 };
@@ -15,14 +18,40 @@ export const formatFieldMetadataItemAsFieldDefinition = ({
   objectMetadataItem,
   showLabel,
   labelWidth,
-}: FieldMetadataItemAsFieldDefinitionProps) => {
-  const relationObjectMetadataItem =
-    field.toRelationMetadata?.fromObjectMetadata ||
-    field.fromRelationMetadata?.toObjectMetadata;
+}: FieldMetadataItemAsFieldDefinitionProps): FieldDefinition<FieldMetadata> => {
+  const relationObjectMetadataItem = field.relation?.targetObjectMetadata;
 
-  const relationFieldMetadataId =
-    field.toRelationMetadata?.fromFieldMetadataId ||
-    field.fromRelationMetadata?.toFieldMetadataId;
+  const relationFieldMetadataId = field.relation?.targetFieldMetadata.id;
+
+  const isRelation = field.type === FieldMetadataType.RELATION;
+  const isMorphRelation = field.type === FieldMetadataType.MORPH_RELATION;
+
+  const relationType = isRelation
+    ? field.relation?.type
+    : isMorphRelation
+      ? field.morphRelations?.[0]?.type
+      : undefined;
+
+  const fieldDefintionMetadata = {
+    description: field.description,
+    fieldName: field.name,
+    placeHolder: field.label,
+    relationType,
+    morphRelations: isMorphRelation ? field.morphRelations : [],
+    relationFieldMetadataId,
+    relationObjectMetadataNameSingular:
+      relationObjectMetadataItem?.nameSingular ?? '',
+    relationObjectMetadataNamePlural:
+      relationObjectMetadataItem?.namePlural ?? '',
+    relationObjectMetadataId: relationObjectMetadataItem?.id ?? '',
+    objectMetadataNameSingular: objectMetadataItem.nameSingular ?? '',
+    targetFieldMetadataName: field.relation?.targetFieldMetadata?.name ?? '',
+    options: field.options,
+    settings: field.settings,
+    isNullable: field.isNullable,
+    applicationId: field.applicationId,
+    isUIEditable: field.isUIEditable ?? true,
+  };
 
   return {
     fieldMetadataId: field.id,
@@ -30,19 +59,12 @@ export const formatFieldMetadataItemAsFieldDefinition = ({
     showLabel,
     labelWidth,
     type: field.type,
-    metadata: {
-      fieldName: field.name,
-      placeHolder: field.label,
-      relationType: parseFieldRelationType(field),
-      relationFieldMetadataId,
-      relationObjectMetadataNameSingular:
-        relationObjectMetadataItem?.nameSingular ?? '',
-      relationObjectMetadataNamePlural:
-        relationObjectMetadataItem?.namePlural ?? '',
-      objectMetadataNameSingular: objectMetadataItem.nameSingular ?? '',
-      options: field.options,
-    },
+    metadata: fieldDefintionMetadata,
     iconName: field.icon ?? 'Icon123',
     defaultValue: field.defaultValue,
+    editButtonIcon: getFieldButtonIcon({
+      metadata: fieldDefintionMetadata,
+      type: field.type,
+    }),
   };
 };

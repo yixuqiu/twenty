@@ -21,24 +21,33 @@
     "forceConsistentCasingInFileNames": true,
     "outDir": "../../.cache/tsc",
     "paths": {
-      "@/*": ["packages/twenty-front/src/modules/*"],
-      "~/*": ["packages/twenty-front/src/*"],
-      "twenty-ui": ["packages/twenty-ui/src/index.ts"],
-      "@ui/*": ["packages/twenty-ui/src/*"]
-    }
+      "@/*": ["./src/modules/*"],
+      "~/*": ["./src/*"]
+    },
+    "types": ["node", "jest"],
+    "plugins": [
+      {
+        "name": "@styled/typescript-styled-plugin",
+        "lint": {
+          "validProperties": ["container-type"]
+        }
+      }
+    ]
   },
-  "files": [],
-  "include": [],
-  "references": [
-    {
-      "path": "./tsconfig.app.json"
-    },
-    {
-      "path": "./tsconfig.spec.json"
-    },
-    {
-      "path": "./tsconfig.storybook.json"
-    }
+  "include": [
+    "src/**/*.js",
+    "src/**/*.jsx",
+    "src/**/*.d.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "scripts/**/*.ts",
+    ".storybook/*.ts",
+    ".storybook/*.tsx",
+    "lingui.config.ts",
+    "jest.config.mjs",
+    "vite.config.ts",
+    "vitest.config.ts",
+    "setupTests.ts"
   ],
   "extends": "../../tsconfig.base.json"
 }

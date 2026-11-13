@@ -1,7 +1,8 @@
+import { type SpreadsheetColumns } from '@/spreadsheet-import/types/SpreadsheetColumns';
+import { styled } from '@linaria/react';
+import { themeCssVariables } from 'twenty-ui/theme';
 import React from 'react';
-import styled from '@emotion/styled';
-
-import { Columns } from '../MatchColumnsStep';
+import { useLingui } from '@lingui/react/macro';
 
 const StyledGridContainer = styled.div`
   align-items: center;
@@ -13,20 +14,20 @@ const StyledGridContainer = styled.div`
 `;
 
 const StyledGrid = styled.div`
-  border: 1px solid ${({ theme }) => theme.border.color.medium};
-  border-radius: ${({ theme }) => theme.border.radius.md};
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  margin-top: ${({ theme }) => theme.spacing(8)};
   width: 100%;
 `;
 
 type HeightProps = {
   height?: `${number}px`;
+  withBorder?: boolean;
 };
 
 const StyledGridRow = styled.div<HeightProps>`
+  border-bottom: ${({ withBorder }) =>
+    withBorder ? `1px solid ${themeCssVariables.border.color.medium}` : 'none'};
   box-sizing: border-box;
   display: flex;
   flex-direction: row;
@@ -34,7 +35,7 @@ const StyledGridRow = styled.div<HeightProps>`
 `;
 
 type PositionProps = {
-  position: 'left' | 'right';
+  position: 'left' | 'right' | 'full-line';
 };
 
 const StyledGridCell = styled.div<PositionProps>`
@@ -43,79 +44,93 @@ const StyledGridCell = styled.div<PositionProps>`
   display: flex;
   flex: 1;
   overflow-x: auto;
-  padding-bottom: ${({ theme }) => theme.spacing(4)};
-  padding-top: ${({ theme }) => theme.spacing(4)};
-  ${({ position, theme }) => {
-    if (position === 'left') {
-      return `
-        padding-left: ${theme.spacing(4)};
-        padding-right: ${theme.spacing(2)};
-      `;
-    }
-    return `
-      padding-left: ${theme.spacing(2)};
-      padding-right: ${theme.spacing(4)};
-    `;
-  }};
+  padding-bottom: ${themeCssVariables.spacing[4]};
+  padding-left: ${({ position }) =>
+    position === 'left'
+      ? themeCssVariables.spacing[4]
+      : themeCssVariables.spacing[2]};
+  padding-right: ${({ position }) =>
+    position === 'left'
+      ? themeCssVariables.spacing[2]
+      : themeCssVariables.spacing[4]};
+  padding-top: ${({ position }) =>
+    position === 'full-line'
+      ? themeCssVariables.spacing[0]
+      : themeCssVariables.spacing[4]};
+  width: ${({ position }) => (position === 'full-line' ? '100%' : 'auto')};
 `;
 
 const StyledGridHeader = styled.div<PositionProps>`
   align-items: center;
-  background-color: ${({ theme }) => theme.background.tertiary};
+  background-color: ${themeCssVariables.background.secondary};
+  border-bottom: 1px solid ${themeCssVariables.border.color.medium};
   box-sizing: border-box;
-  color: ${({ theme }) => theme.font.color.light};
+  color: ${themeCssVariables.font.color.light};
   display: flex;
   flex: 1;
-  font-size: ${({ theme }) => theme.font.size.sm};
-  font-weight: ${({ theme }) => theme.font.weight.semiBold};
-  padding-left: ${({ theme }) => theme.spacing(4)};
-  padding-right: ${({ theme }) => theme.spacing(4)};
-  ${({ position, theme }) => {
-    if (position === 'left') {
-      return `border-top-left-radius: calc(${theme.border.radius.md} - 1px);`;
-    }
-    return `border-top-right-radius: calc(${theme.border.radius.md} - 1px);`;
-  }};
-  text-transform: uppercase;
+  font-size: ${themeCssVariables.font.size.xs};
+  font-weight: ${themeCssVariables.font.weight.semiBold};
+  padding-left: ${themeCssVariables.spacing[4]};
+  padding-right: ${themeCssVariables.spacing[4]};
 `;
 
-type ColumnGridProps<T extends string> = {
-  columns: Columns<T>;
+type ColumnGridProps = {
+  columns: SpreadsheetColumns;
   renderUserColumn: (
-    columns: Columns<T>,
+    columns: SpreadsheetColumns,
     columnIndex: number,
   ) => React.ReactNode;
   renderTemplateColumn: (
-    columns: Columns<T>,
+    columns: SpreadsheetColumns,
+    columnIndex: number,
+  ) => React.ReactNode;
+  renderUnmatchedColumn: (
+    columns: SpreadsheetColumns,
     columnIndex: number,
   ) => React.ReactNode;
 };
 
-export const ColumnGrid = <T extends string>({
+export const ColumnGrid = ({
   columns,
   renderUserColumn,
   renderTemplateColumn,
-}: ColumnGridProps<T>) => {
+  renderUnmatchedColumn,
+}: ColumnGridProps) => {
+  const { t } = useLingui();
   return (
     <>
       <StyledGridContainer>
         <StyledGrid>
-          <StyledGridRow height="29px">
-            <StyledGridHeader position="left">Imported data</StyledGridHeader>
-            <StyledGridHeader position="right">Twenty fields</StyledGridHeader>
+          <StyledGridRow height="32px">
+            <StyledGridHeader position="left">{t`Imported data`}</StyledGridHeader>
+            <StyledGridHeader position="right">{t`Twenty fields`}</StyledGridHeader>
           </StyledGridRow>
           {columns.map((column, index) => {
             const userColumn = renderUserColumn(columns, index);
             const templateColumn = renderTemplateColumn(columns, index);
+            const unmatchedColumn = renderUnmatchedColumn(columns, index);
+            const isSelect = 'matchedOptions' in columns[index];
+            const isLast = index === columns.length - 1;
 
             if (React.isValidElement(userColumn)) {
               return (
-                <StyledGridRow key={index}>
-                  <StyledGridCell position="left">{userColumn}</StyledGridCell>
-                  <StyledGridCell position="right">
-                    {templateColumn}
-                  </StyledGridCell>
-                </StyledGridRow>
+                <div key={index}>
+                  <StyledGridRow withBorder={!isSelect && !isLast}>
+                    <StyledGridCell position="left">
+                      {userColumn}
+                    </StyledGridCell>
+                    <StyledGridCell position="right">
+                      {templateColumn}
+                    </StyledGridCell>
+                  </StyledGridRow>
+                  {isSelect && (
+                    <StyledGridRow withBorder={!isLast}>
+                      <StyledGridCell position="full-line">
+                        {unmatchedColumn}
+                      </StyledGridCell>
+                    </StyledGridRow>
+                  )}
+                </div>
               );
             }
 

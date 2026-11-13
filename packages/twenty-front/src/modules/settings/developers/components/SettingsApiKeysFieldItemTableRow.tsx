@@ -1,56 +1,84 @@
-import { useTheme } from '@emotion/react';
-import styled from '@emotion/styled';
-import { IconChevronRight } from 'twenty-ui';
-
-import { ApiFieldItem } from '@/settings/developers/types/api-key/ApiFieldItem';
+import {
+  formatExpiration,
+  isExpired,
+} from '@/settings/developers/utils/formatExpiration';
 import { TableCell } from '@/ui/layout/table/components/TableCell';
 import { TableRow } from '@/ui/layout/table/components/TableRow';
+import { styled } from '@linaria/react';
+import { useLingui } from '@lingui/react/macro';
+import { IconChevronRight } from 'twenty-ui/icon';
+import { useTheme } from 'twenty-ui/theme';
+import { type ApiKey } from '~/generated-metadata/graphql';
 
-export const StyledApisFieldTableRow = styled(TableRow)`
-  grid-template-columns: 312px 132px 68px;
+const StyledEllipsisLabel = styled.div`
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 `;
 
-const StyledNameTableCell = styled(TableCell)`
-  color: ${({ theme }) => theme.font.color.primary};
-  gap: ${({ theme }) => theme.spacing(2)};
-`;
+type ApiKeyType = Pick<ApiKey, 'id' | 'name' | 'expiresAt' | 'revokedAt'> & {
+  role?: { id: string; label: string; icon?: string | null } | null;
+};
 
-const StyledIconTableCell = styled(TableCell)`
-  justify-content: center;
-  padding-right: ${({ theme }) => theme.spacing(1)};
-`;
-
-const StyledIconChevronRight = styled(IconChevronRight)`
-  color: ${({ theme }) => theme.font.color.tertiary};
-`;
+type SettingsApiKeysFieldItemTableRowProps = {
+  apiKey: ApiKeyType;
+  to: string;
+};
 
 export const SettingsApiKeysFieldItemTableRow = ({
-  fieldItem,
-  onClick,
-}: {
-  fieldItem: ApiFieldItem;
-  onClick: () => void;
-}) => {
+  apiKey,
+  to,
+}: SettingsApiKeysFieldItemTableRowProps) => {
+  const { t } = useLingui();
   const theme = useTheme();
+  const formattedExpiration = formatExpiration(apiKey.expiresAt || null);
+
+  const gridColumns = '5fr 2fr 3fr 1fr';
 
   return (
-    <StyledApisFieldTableRow onClick={() => onClick()}>
-      <StyledNameTableCell>{fieldItem.name}</StyledNameTableCell>
+    <TableRow gridAutoColumns={gridColumns} to={to}>
+      <TableCell
+        color={theme.font.color.primary}
+        whiteSpace="nowrap"
+        overflow="hidden"
+        textOverflow="ellipsis"
+        clickable
+      >
+        <StyledEllipsisLabel>
+          {apiKey.name || t`Unnamed API Key`}
+        </StyledEllipsisLabel>
+      </TableCell>
+
+      <TableCell
+        color={theme.font.color.tertiary}
+        whiteSpace="nowrap"
+        overflow="hidden"
+        textOverflow="ellipsis"
+        clickable
+      >
+        <StyledEllipsisLabel>{apiKey.role?.label || '-'}</StyledEllipsisLabel>
+      </TableCell>
+
       <TableCell
         color={
-          fieldItem.expiration === 'Expired'
+          isExpired(apiKey.expiresAt || null)
             ? theme.font.color.danger
             : theme.font.color.tertiary
         }
+        whiteSpace="nowrap"
+        overflow="hidden"
+        textOverflow="ellipsis"
+        clickable
       >
-        {fieldItem.expiration}
+        <StyledEllipsisLabel>{formattedExpiration}</StyledEllipsisLabel>
       </TableCell>
-      <StyledIconTableCell>
-        <StyledIconChevronRight
+
+      <TableCell align="right">
+        <IconChevronRight
           size={theme.icon.size.md}
-          stroke={theme.icon.stroke.sm}
+          color={theme.font.color.tertiary}
         />
-      </StyledIconTableCell>
-    </StyledApisFieldTableRow>
+      </TableCell>
+    </TableRow>
   );
 };

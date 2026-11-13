@@ -1,28 +1,33 @@
-import styled from '@emotion/styled';
+import { type JSX } from 'react';
+import { isDefined } from '@ui/utilities/utils/isDefined';
 
-const StyledLayout = styled.div<{ width?: number }>`
-  background: ${({ theme }) => theme.background.primary};
-  border: 1px solid ${({ theme }) => theme.border.color.light};
-  border-radius: 5px;
-
-  display: flex;
-  flex-direction: row;
-
-  height: fit-content;
-  max-width: calc(100% - 40px);
-  min-width: ${({ width }) => (width ? 'unset' : '300px')};
-  padding: 20px;
-  width: ${({ width }) => (width ? width + 'px' : 'fit-content')};
-`;
+import styles from './ComponentStorybookLayout.module.scss';
 
 type ComponentStorybookLayoutProps = {
   width?: number;
+  backgroundColor?: string | undefined;
+  height?: number;
   children: JSX.Element;
 };
 
 export const ComponentStorybookLayout = ({
   width,
+  backgroundColor,
+  height,
   children,
-}: ComponentStorybookLayoutProps) => (
-  <StyledLayout width={width}>{children}</StyledLayout>
-);
+}: ComponentStorybookLayoutProps) => {
+  return (
+    <div
+      className={styles.layout}
+      style={{
+        // background falls back to the SCSS default when undefined
+        background: backgroundColor,
+        height: isDefined(height) ? `${height}px` : 'fit-content',
+        minWidth: width ? 'unset' : '300px',
+        width: width ? `${width}px` : 'fit-content',
+      }}
+    >
+      {children}
+    </div>
+  );
+};

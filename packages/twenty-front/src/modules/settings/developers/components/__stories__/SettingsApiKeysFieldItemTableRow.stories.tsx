@@ -1,19 +1,27 @@
-import { Meta, StoryObj } from '@storybook/react';
-import { ComponentDecorator } from 'twenty-ui';
+import { getMockedDateWithOffset } from '~/testing/utils/getMockedDateWithOffset';
+import { type Meta, type StoryObj } from '@storybook/react-vite';
 
 import { SettingsApiKeysFieldItemTableRow } from '@/settings/developers/components/SettingsApiKeysFieldItemTableRow';
+import { ComponentDecorator } from 'twenty-ui/testing';
+import { MemoryRouterDecorator } from '~/testing/decorators/MemoryRouterDecorator';
 
 const meta: Meta<typeof SettingsApiKeysFieldItemTableRow> = {
   title: 'Modules/Settings/Developers/ApiKeys/SettingsApiKeysFieldItemTableRow',
   component: SettingsApiKeysFieldItemTableRow,
-  decorators: [ComponentDecorator],
+  decorators: [ComponentDecorator, MemoryRouterDecorator],
   args: {
-    fieldItem: {
+    apiKey: {
       id: '3f4a42e8-b81f-4f8c-9c20-1602e6b34791',
       name: 'Zapier Api Key',
-      type: 'internal',
-      expiration: 'In 3 days',
+      expiresAt: getMockedDateWithOffset({ days: 3 }),
+      revokedAt: null,
+      role: {
+        id: '1',
+        label: 'Admin',
+        icon: 'admin',
+      },
     },
+    to: '/settings/developers/api-keys/3f4a42e8-b81f-4f8c-9c20-1602e6b34791',
   },
 };
 

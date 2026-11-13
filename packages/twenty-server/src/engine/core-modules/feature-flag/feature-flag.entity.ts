@@ -1,50 +1,26 @@
-import { Field, ObjectType } from '@nestjs/graphql';
+import { registerEnumType } from '@nestjs/graphql';
 
+import { FeatureFlagKey } from 'twenty-shared/types';
 import {
-  Entity,
-  Unique,
-  PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
+  Entity,
+  PrimaryGeneratedColumn,
+  Unique,
   UpdateDateColumn,
-  ManyToOne,
-  Relation,
 } from 'typeorm';
-import { IDField } from '@ptc-org/nestjs-query-graphql';
 
-import { Workspace } from 'src/engine/core-modules/workspace/workspace.entity';
-import { UUIDScalarType } from 'src/engine/api/graphql/workspace-schema-builder/graphql-types/scalars';
-
-export enum FeatureFlagKeys {
-  IsBlocklistEnabled = 'IS_BLOCKLIST_ENABLED',
-  IsEventObjectEnabled = 'IS_EVENT_OBJECT_ENABLED',
-  IsAirtableIntegrationEnabled = 'IS_AIRTABLE_INTEGRATION_ENABLED',
-  IsPostgreSQLIntegrationEnabled = 'IS_POSTGRESQL_INTEGRATION_ENABLED',
-  IsStripeIntegrationEnabled = 'IS_STRIPE_INTEGRATION_ENABLED',
-}
+import { WorkspaceRelatedEntity } from 'src/engine/workspace-manager/types/workspace-related-entity.type';
 
 @Entity({ name: 'featureFlag', schema: 'core' })
-@ObjectType('FeatureFlag')
-@Unique('IndexOnKeyAndWorkspaceIdUnique', ['key', 'workspaceId'])
-export class FeatureFlagEntity {
-  @IDField(() => UUIDScalarType)
+@Unique('IDX_FEATURE_FLAG_KEY_WORKSPACE_ID_UNIQUE', ['key', 'workspaceId'])
+export class FeatureFlagEntity extends WorkspaceRelatedEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Field()
   @Column({ nullable: false, type: 'text' })
-  key: FeatureFlagKeys;
+  key: FeatureFlagKey;
 
-  @Field()
-  @Column({ nullable: false, type: 'uuid' })
-  workspaceId: string;
-
-  @ManyToOne(() => Workspace, (workspace) => workspace.featureFlags, {
-    onDelete: 'CASCADE',
-  })
-  workspace: Relation<Workspace>;
-
-  @Field()
   @Column({ nullable: false })
   value: boolean;
 
@@ -54,3 +30,7 @@ export class FeatureFlagEntity {
   @UpdateDateColumn({ type: 'timestamptz' })
   updatedAt: Date;
 }
+
+registerEnumType(FeatureFlagKey, {
+  name: 'FeatureFlagKey',
+});

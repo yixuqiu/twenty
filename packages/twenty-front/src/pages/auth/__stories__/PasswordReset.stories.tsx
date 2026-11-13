@@ -1,63 +1,103 @@
-import { getOperationName } from '@apollo/client/utilities';
-import { Meta, StoryObj } from '@storybook/react';
-import { within } from '@storybook/test';
-import { graphql, HttpResponse } from 'msw';
+import { getOperationName } from '~/utils/getOperationName';
+import { type Meta, type StoryObj } from '@storybook/react-vite';
+import { HttpResponse, graphql } from 'msw';
+import { within } from 'storybook/test';
 
 import { GET_CURRENT_USER } from '@/users/graphql/queries/getCurrentUser';
-import { ValidatePasswordResetTokenDocument } from '~/generated/graphql';
+import {
+  OnboardingStatus,
+  ValidatePasswordResetTokenDocument,
+} from '~/generated-metadata/graphql';
 import { PasswordReset } from '~/pages/auth/PasswordReset';
 import {
   PageDecorator,
-  PageDecoratorArgs,
+  type PageDecoratorArgs,
 } from '~/testing/decorators/PageDecorator';
 import { graphqlMocks } from '~/testing/graphqlMocks';
-import { mockedOnboardingUsersData } from '~/testing/mock-data/users';
+import { mockedOnboardingUserData } from '~/testing/mock-data/users';
+
+const mockedOnboardingUsersData = mockedOnboardingUserData(
+  OnboardingStatus.COMPLETED,
+);
+
+const buildHandlers = (hasPassword: boolean) => [
+  graphql.query(
+    getOperationName(ValidatePasswordResetTokenDocument) ?? '',
+    () =>
+      HttpResponse.json({
+        data: {
+          validatePasswordResetToken: {
+            __typename: 'ValidatePasswordResetToken',
+            id: mockedOnboardingUsersData.id,
+            email: mockedOnboardingUsersData.email,
+            hasPassword,
+          },
+        },
+      }),
+  ),
+  graphql.query(getOperationName(GET_CURRENT_USER) ?? '', () =>
+    HttpResponse.json({
+      data: {
+        currentUser: {
+          ...mockedOnboardingUsersData,
+          hasPassword,
+        },
+      },
+    }),
+  ),
+  ...graphqlMocks.handlers,
+];
 
 const meta: Meta<PageDecoratorArgs> = {
   title: 'Pages/Auth/PasswordReset',
   component: PasswordReset,
   decorators: [PageDecorator],
-  args: {
-    routePath: '/reset-password/:passwordResetToken',
-    routeParams: { ':passwordResetToken': 'MOCKED_TOKEN' },
-  },
-  parameters: {
-    msw: {
-      handlers: [
-        graphql.query(
-          getOperationName(ValidatePasswordResetTokenDocument) ?? '',
-          () => {
-            return HttpResponse.json({
-              data: {
-                validatePasswordResetToken: {
-                  id: mockedOnboardingUsersData[0].id,
-                  email: mockedOnboardingUsersData[0].email,
-                },
-              },
-            });
-          },
-        ),
-        graphql.query(getOperationName(GET_CURRENT_USER) ?? '', () => {
-          return HttpResponse.json({
-            data: {
-              currentUser: mockedOnboardingUsersData[0],
-            },
-          });
-        }),
-        graphqlMocks.handlers,
-      ],
-    },
-  },
 };
 
 export default meta;
 
 export type Story = StoryObj<typeof PasswordReset>;
 
-export const Default: Story = {
+export const ChangePassword: Story = {
+  args: {
+    routePath: '/reset-password/:passwordResetToken',
+    routeParams: {
+      ':passwordResetToken': 'MOCKED_TOKEN_CHANGE',
+    },
+  },
+  parameters: {
+    msw: {
+      handlers: buildHandlers(true),
+    },
+  },
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
+    const canvas = within(canvasElement.ownerDocument.body);
+    await canvas.findByRole(
+      'button',
+      { name: 'Change Password' },
+      { timeout: 3000 },
+    );
+  },
+};
 
-    await canvas.findByText('Reset Password');
+export const SetPassword: Story = {
+  args: {
+    routePath: '/reset-password/:passwordResetToken',
+    routeParams: {
+      ':passwordResetToken': 'MOCKED_TOKEN_SET',
+    },
+  },
+  parameters: {
+    msw: {
+      handlers: buildHandlers(false),
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement.ownerDocument.body);
+    await canvas.findByRole(
+      'button',
+      { name: 'Set Password' },
+      { timeout: 3000 },
+    );
   },
 };

@@ -1,41 +1,40 @@
-import { ReactNode } from 'react';
-import styled from '@emotion/styled';
+import { styled } from '@linaria/react';
+import { type ReactNode } from 'react';
 
-import { Card } from '@/ui/layout/card/components/Card';
-import { CardContent } from '@/ui/layout/card/components/CardContent';
+import { StyledFormCardTitle } from '@/settings/data-model/fields/components/StyledFormCardTitle';
+import { SETTINGS_DATA_MODEL_PREVIEW_SECTION_CLASS_NAME } from '@/settings/data-model/styles/SettingsDataModelPreviewSectionClassName';
+import { Trans } from '@lingui/react/macro';
+import { Card } from 'twenty-ui/primitives/surfaces';
+import { isDefined } from 'twenty-shared/utils';
 
 type SettingsDataModelPreviewFormCardProps = {
-  className?: string;
   preview: ReactNode;
   form?: ReactNode;
+  disabled?: boolean;
+  isPreviewTitleVisible?: boolean;
 };
 
-const StyledPreviewContainer = styled(CardContent)`
-  background-color: ${({ theme }) => theme.background.transparent.lighter};
-`;
-
-const StyledTitle = styled.h3`
-  color: ${({ theme }) => theme.font.color.extraLight};
-  font-size: ${({ theme }) => theme.font.size.sm};
-  font-weight: ${({ theme }) => theme.font.weight.medium};
-  margin: 0;
-  margin-bottom: ${({ theme }) => theme.spacing(4)};
-`;
-
-const StyledFormContainer = styled(CardContent)`
+const StyledFormCardContent = styled(Card.Content)`
   padding: 0;
 `;
 
 export const SettingsDataModelPreviewFormCard = ({
-  className,
   preview,
   form,
+  isPreviewTitleVisible = true,
 }: SettingsDataModelPreviewFormCardProps) => (
-  <Card className={className} fullWidth>
-    <StyledPreviewContainer divider={!!form}>
-      <StyledTitle>Preview</StyledTitle>
+  <Card.Root fullWidth>
+    <Card.Content
+      className={SETTINGS_DATA_MODEL_PREVIEW_SECTION_CLASS_NAME}
+      divider={isDefined(form)}
+    >
+      {isPreviewTitleVisible && (
+        <StyledFormCardTitle>
+          <Trans>Preview</Trans>
+        </StyledFormCardTitle>
+      )}
       {preview}
-    </StyledPreviewContainer>
-    {!!form && <StyledFormContainer>{form}</StyledFormContainer>}
-  </Card>
+    </Card.Content>
+    {isDefined(form) && <StyledFormCardContent>{form}</StyledFormCardContent>}
+  </Card.Root>
 );

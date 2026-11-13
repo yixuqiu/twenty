@@ -1,22 +1,14 @@
-import { useEffect } from 'react';
-import { useRecoilValue, useSetRecoilState } from 'recoil';
+import { GettingStartedSidebarCard } from '@/getting-started/components/GettingStartedSidebarCard';
+import { useIsSettingsDrawer } from '@/navigation/hooks/useIsSettingsDrawer';
 
-import { currentWorkspaceState } from '@/auth/states/currentWorkspaceState';
-import { SettingsNavigationDrawerItems } from '@/settings/components/SettingsNavigationDrawerItems';
-import { SupportChat } from '@/support/components/SupportChat';
-import { GithubVersionLink } from '@/ui/navigation/link/components/GithubVersionLink';
-import {
-  NavigationDrawer,
-  NavigationDrawerProps,
-} from '@/ui/navigation/navigation-drawer/components/NavigationDrawer';
-import { isNavigationDrawerOpenState } from '@/ui/navigation/states/isNavigationDrawerOpenState';
-import { useIsMobile } from '@/ui/utilities/responsive/hooks/useIsMobile';
-import { getImageAbsoluteURIOrBase64 } from '~/utils/image/getImageAbsoluteURIOrBase64';
-
-import { useIsSettingsPage } from '../hooks/useIsSettingsPage';
-import { currentMobileNavigationDrawerState } from '../states/currentMobileNavigationDrawerState';
-
-import { MainNavigationDrawerItems } from './MainNavigationDrawerItems';
+import { MainNavigationDrawerContent } from '@/navigation/components/MainNavigationDrawerContent';
+import { MainNavigationDrawerModeSwitcher } from '@/navigation/components/MainNavigationDrawerModeSwitcher';
+import { NavigationDrawerHeader } from '@/navigation/components/NavigationDrawerHeader';
+import { NavigationDrawerModeTransition } from '@/navigation/components/NavigationDrawerModeTransition';
+import { SettingsNavigationDrawerContent } from '@/navigation/components/SettingsNavigationDrawerContent';
+import { NavigationDrawer } from '@/ui/navigation/navigation-drawer/components/NavigationDrawer';
+import { NavigationDrawerFixedContent } from '@/ui/navigation/navigation-drawer/components/NavigationDrawerFixedContent';
+import { useIsMobile } from 'twenty-ui/utilities';
 
 export type AppNavigationDrawerProps = {
   className?: string;
@@ -26,49 +18,30 @@ export const AppNavigationDrawer = ({
   className,
 }: AppNavigationDrawerProps) => {
   const isMobile = useIsMobile();
-  const isSettingsPage = useIsSettingsPage();
-  const currentMobileNavigationDrawer = useRecoilValue(
-    currentMobileNavigationDrawerState,
-  );
-  const setIsNavigationDrawerOpen = useSetRecoilState(
-    isNavigationDrawerOpenState,
-  );
-  const currentWorkspace = useRecoilValue(currentWorkspaceState);
+  const isSettingsDrawer = useIsSettingsDrawer();
 
-  const isSettingsDrawer = isMobile
-    ? currentMobileNavigationDrawer === 'settings'
-    : isSettingsPage;
-
-  const drawerProps: NavigationDrawerProps = isSettingsDrawer
-    ? {
-        isSubMenu: true,
-        title: 'Settings',
-        children: <SettingsNavigationDrawerItems />,
-        footer: <GithubVersionLink />,
-      }
-    : {
-        logo:
-          (currentWorkspace?.logo &&
-            getImageAbsoluteURIOrBase64(currentWorkspace.logo)) ??
-          undefined,
-        title: currentWorkspace?.displayName ?? undefined,
-        children: <MainNavigationDrawerItems />,
-        footer: <SupportChat />,
-      };
-
-  useEffect(() => {
-    setIsNavigationDrawerOpen(!isMobile);
-  }, [isMobile, setIsNavigationDrawerOpen]);
+  // The main navigation is the home page on mobile, not a drawer.
+  if (isMobile && !isSettingsDrawer) {
+    return null;
+  }
 
   return (
-    <NavigationDrawer
-      className={className}
-      isSubMenu={drawerProps.isSubMenu}
-      logo={drawerProps.logo}
-      title={drawerProps.title}
-      footer={drawerProps.footer}
-    >
-      {drawerProps.children}
+    <NavigationDrawer className={className} header={<NavigationDrawerHeader />}>
+      {/* Mobile switches modes from the bottom navigation bar instead. */}
+      {!isMobile && (
+        <NavigationDrawerFixedContent>
+          <MainNavigationDrawerModeSwitcher />
+        </NavigationDrawerFixedContent>
+      )}
+
+      <NavigationDrawerModeTransition>
+        {isSettingsDrawer ? (
+          <SettingsNavigationDrawerContent />
+        ) : (
+          <MainNavigationDrawerContent />
+        )}
+      </NavigationDrawerModeTransition>
+      {!isSettingsDrawer && <GettingStartedSidebarCard />}
     </NavigationDrawer>
   );
 };

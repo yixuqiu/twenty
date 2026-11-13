@@ -1,40 +1,42 @@
-import { ApolloCache } from '@apollo/client/cache';
-import gql from 'graphql-tag';
+import { type ApolloCache } from '@apollo/client/cache';
 
-import { ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
-import { mapObjectMetadataToGraphQLQuery } from '@/object-metadata/utils/mapObjectMetadataToGraphQLQuery';
+import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/EnrichedObjectMetadataItem';
+import { generateRecordCacheFragment } from '@/object-record/cache/utils/generateRecordCacheFragment';
 import { getRecordNodeFromRecord } from '@/object-record/cache/utils/getRecordNodeFromRecord';
-import { RecordGqlNode } from '@/object-record/graphql/types/RecordGqlNode';
-import { ObjectRecord } from '@/object-record/types/ObjectRecord';
-import { isUndefinedOrNull } from '~/utils/isUndefinedOrNull';
-import { capitalize } from '~/utils/string/capitalize';
+import {
+  type ObjectRecordsPermissions,
+  type RecordGqlFields,
+} from 'twenty-shared/types';
+import { type RecordGqlNode } from '@/object-record/graphql/types/RecordGqlNode';
+import { type ObjectRecord } from '@/object-record/types/ObjectRecord';
+import { capitalize, isDefined } from 'twenty-shared/utils';
 
 export const updateRecordFromCache = <T extends ObjectRecord>({
   objectMetadataItems,
   objectMetadataItem,
   cache,
+  recordGqlFields,
   record,
+  objectPermissionsByObjectMetadataId,
 }: {
-  objectMetadataItems: ObjectMetadataItem[];
-  objectMetadataItem: ObjectMetadataItem;
-  cache: ApolloCache<object>;
+  objectMetadataItems: EnrichedObjectMetadataItem[];
+  objectMetadataItem: EnrichedObjectMetadataItem;
+  cache: ApolloCache;
+  recordGqlFields: RecordGqlFields;
   record: T;
+  objectPermissionsByObjectMetadataId: Record<string, ObjectRecordsPermissions>;
 }) => {
-  if (isUndefinedOrNull(objectMetadataItem)) {
+  if (!isDefined(objectMetadataItem)) {
     return null;
   }
 
-  const capitalizedObjectName = capitalize(objectMetadataItem.nameSingular);
-
-  const cacheWriteFragment = gql`
-      fragment ${capitalizedObjectName}Fragment on ${capitalizedObjectName} ${mapObjectMetadataToGraphQLQuery(
-        {
-          objectMetadataItems,
-          objectMetadataItem,
-          computeReferences: true,
-        },
-      )}
-    `;
+  const cacheWriteFragment = generateRecordCacheFragment({
+    objectMetadataItems,
+    objectMetadataItem,
+    computeReferences: true,
+    recordGqlFields,
+    objectPermissionsByObjectMetadataId,
+  });
 
   const cachedRecordId = cache.identify({
     __typename: capitalize(objectMetadataItem.nameSingular),
@@ -47,7 +49,7 @@ export const updateRecordFromCache = <T extends ObjectRecord>({
     record,
   });
 
-  if (isUndefinedOrNull(recordWithConnection)) {
+  if (!isDefined(recordWithConnection)) {
     return;
   }
 

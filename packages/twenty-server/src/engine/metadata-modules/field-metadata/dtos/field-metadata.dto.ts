@@ -5,14 +5,7 @@ import {
   registerEnumType,
 } from '@nestjs/graphql';
 
-import { GraphQLJSON } from 'graphql-type-json';
-import {
-  Authorize,
-  FilterableField,
-  IDField,
-  QueryOptions,
-  Relation,
-} from '@ptc-org/nestjs-query-graphql';
+import { Transform } from 'class-transformer';
 import {
   IsBoolean,
   IsDateString,
@@ -21,54 +14,44 @@ import {
   IsOptional,
   IsString,
   IsUUID,
-  Validate,
 } from 'class-validator';
+import { GraphQLJSON } from 'graphql-type-json';
+import {
+  type FieldMetadataDefaultOption,
+  type FieldMetadataOptions,
+  type FieldMetadataSettings,
+  FieldMetadataType,
+  type FieldMetadataDefaultValue,
+} from 'twenty-shared/types';
+import { type FieldPermissionAction } from 'twenty-shared/application';
 
-import { FieldMetadataOptions } from 'src/engine/metadata-modules/field-metadata/interfaces/field-metadata-options.interface';
-import { FieldMetadataDefaultValue } from 'src/engine/metadata-modules/field-metadata/interfaces/field-metadata-default-value.interface';
-import { FieldMetadataSettings } from 'src/engine/metadata-modules/field-metadata/interfaces/field-metadata-settings.interface';
-
-import { RelationMetadataDTO } from 'src/engine/metadata-modules/relation-metadata/dtos/relation-metadata.dto';
-import { FieldMetadataType } from 'src/engine/metadata-modules/field-metadata/field-metadata.entity';
-import { IsFieldMetadataDefaultValue } from 'src/engine/metadata-modules/field-metadata/validators/is-field-metadata-default-value.validator';
-import { IsFieldMetadataOptions } from 'src/engine/metadata-modules/field-metadata/validators/is-field-metadata-options.validator';
-import { IsValidMetadataName } from 'src/engine/decorators/metadata/is-valid-metadata-name.decorator';
+import { type AuthoredOverrides } from 'src/engine/metadata-modules/overrides/types/authored-overrides.type';
 import { UUIDScalarType } from 'src/engine/api/graphql/workspace-schema-builder/graphql-types/scalars';
+import { IsValidMetadataName } from 'src/engine/decorators/metadata/is-valid-metadata-name.decorator';
+import { type FieldMetadataOverrides } from 'src/engine/metadata-modules/field-metadata/types/field-metadata-overrides.type';
+import { transformEnumValue } from 'src/engine/utils/transform-enum-value';
 
 registerEnumType(FieldMetadataType, {
   name: 'FieldMetadataType',
   description: 'Type of the field',
 });
 
-@ObjectType('field')
-@Authorize({
-  authorize: (context: any) => ({
-    workspaceId: { eq: context?.req?.user?.workspace?.id },
-  }),
-})
-@QueryOptions({
-  defaultResultSize: 10,
-  disableSort: true,
-  maxResultsSize: 1000,
-})
-@Relation('toRelationMetadata', () => RelationMetadataDTO, {
-  nullable: true,
-})
-@Relation('fromRelationMetadata', () => RelationMetadataDTO, {
-  nullable: true,
-})
-export class FieldMetadataDTO<
-  T extends FieldMetadataType | 'default' = 'default',
-> {
+@ObjectType('Field')
+// TODO refactor nullable fields to be typed as nullable and not optional
+export class FieldMetadataDTO<T extends FieldMetadataType = FieldMetadataType> {
   @IsUUID()
   @IsNotEmpty()
-  @IDField(() => UUIDScalarType)
+  @Field(() => UUIDScalarType)
   id: string;
+
+  @IsNotEmpty()
+  @Field()
+  universalIdentifier: string;
 
   @IsEnum(FieldMetadataType)
   @IsNotEmpty()
   @Field(() => FieldMetadataType)
-  type: FieldMetadataType;
+  type: T;
 
   @IsString()
   @IsNotEmpty()
@@ -91,32 +74,68 @@ export class FieldMetadataDTO<
   @Field({ nullable: true })
   icon?: string;
 
-  @IsBoolean()
-  @IsOptional()
-  @FilterableField({ nullable: true })
-  isCustom?: boolean;
+  @HideField()
+  overrides?: AuthoredOverrides<FieldMetadataOverrides> | null;
 
   @IsBoolean()
   @IsOptional()
-  @FilterableField({ nullable: true })
+  @Field({ nullable: true })
   isActive?: boolean;
 
   @IsBoolean()
   @IsOptional()
-  @FilterableField({ nullable: true })
+  @Field({ nullable: true })
   isSystem?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  @Field({ nullable: true })
+  isUIEditable?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  @Field({ nullable: true })
+  isSystemSideEffect?: boolean;
+
+  @Field(() => [String], { nullable: true })
+  disabledFieldPermissionActions?: FieldPermissionAction[] | null;
+
+  // deprecated alias kept for one release so external API consumers do not break
+  @IsBoolean()
+  @IsOptional()
+  @Field({
+    nullable: true,
+    deprecationReason: 'Use isUIEditable',
+  })
+  isUIReadOnly?: boolean;
 
   @IsBoolean()
   @IsOptional()
   @Field({ nullable: true })
   isNullable?: boolean;
 
-  @Validate(IsFieldMetadataDefaultValue)
+  @IsBoolean()
+  @IsOptional()
+  @Field({ nullable: true })
+  isUnique?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  @Field({ nullable: true })
+  isSearchable?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  @Field({ nullable: true })
+  isAuditLogged?: boolean;
+
   @IsOptional()
   @Field(() => GraphQLJSON, { nullable: true })
   defaultValue?: FieldMetadataDefaultValue<T>;
 
-  @Validate(IsFieldMetadataOptions)
+  @Transform(({ value }) =>
+    transformEnumValue(value as FieldMetadataDefaultOption[]),
+  )
   @IsOptional()
   @Field(() => GraphQLJSON, { nullable: true })
   options?: FieldMetadataOptions<T>;
@@ -128,11 +147,30 @@ export class FieldMetadataDTO<
   @HideField()
   workspaceId: string;
 
-  @IsDateString()
+  @Field(() => UUIDScalarType)
+  objectMetadataId: string;
+
+  @IsBoolean()
+  @IsOptional()
+  @Field({ nullable: true })
+  isLabelSyncedWithName?: boolean;
+
+  @IsOptional()
+  @IsUUID()
+  @Field(() => UUIDScalarType, { nullable: true })
+  morphId?: string;
+
+  @IsDateString(undefined, {
+    message: ({ value }) =>
+      `Field metadata created at is invalid got ${JSON.stringify(value)} isDate: ${value instanceof Date}`,
+  })
   @Field()
   createdAt: Date;
 
   @IsDateString()
   @Field()
   updatedAt: Date;
+
+  @Field(() => UUIDScalarType)
+  applicationId: string;
 }

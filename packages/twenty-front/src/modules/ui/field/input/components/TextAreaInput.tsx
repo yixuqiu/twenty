@@ -1,12 +1,15 @@
-import { ChangeEvent, useEffect, useRef, useState } from 'react';
+import { styled } from '@linaria/react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
-import styled from '@emotion/styled';
 
-import { useRegisterInputEvents } from '@/object-record/record-field/meta-types/input/hooks/useRegisterInputEvents';
-import { TEXT_INPUT_STYLE } from '@/ui/theme/constants/TextInputStyle';
-import { isDefined } from '~/utils/isDefined';
+import { LightCopyIconButton } from '@/ui/input/components/LightCopyIconButton';
+import { useRegisterInputEvents } from '@/ui/input/hooks/useRegisterInputEvents';
+import { isDefined } from 'twenty-shared/utils';
+import { turnIntoEmptyStringIfWhitespacesOnly } from '~/utils/string/turnIntoEmptyStringIfWhitespacesOnly';
+import { themeCssVariables } from 'twenty-ui/theme';
 
 export type TextAreaInputProps = {
+  instanceId: string;
   disabled?: boolean;
   className?: string;
   placeholder?: string;
@@ -17,29 +20,57 @@ export type TextAreaInputProps = {
   onTab?: (newText: string) => void;
   onShiftTab?: (newText: string) => void;
   onClickOutside: (event: MouseEvent | TouchEvent, inputValue: string) => void;
-  hotkeyScope: string;
   onChange?: (newText: string) => void;
   maxRows?: number;
+  copyButton?: boolean;
 };
 
-const StyledTextArea = styled(TextareaAutosize)`
-  ${TEXT_INPUT_STYLE}
+const StyledTextAreaContainer = styled.div`
   width: 100%;
-  resize: none;
-  box-shadow: ${({ theme }) => theme.boxShadow.strong};
-  border: ${({ theme }) => `1px solid ${theme.border.color.light}`};
-  padding: ${({ theme }) => theme.spacing(2)};
-  background-color: ${({ theme }) => theme.background.primary};
-  border-radius: ${({ theme }) => theme.border.radius.sm};
+
+  > textarea {
+    align-items: center;
+    background-color: transparent;
+    border: none;
+    color: ${themeCssVariables.font.color.primary};
+    display: flex;
+    font-family: ${themeCssVariables.font.family};
+    font-size: inherit;
+    font-weight: inherit;
+
+    &::placeholder,
+    &::-webkit-input-placeholder {
+      color: ${themeCssVariables.font.color.light};
+      font-family: ${themeCssVariables.font.family};
+      font-weight: ${themeCssVariables.font.weight.medium};
+    }
+
+    justify-content: center;
+    line-height: 18px;
+    max-height: 400px;
+    outline: none;
+    padding: ${themeCssVariables.spacing[0]} ${themeCssVariables.spacing[2]};
+    resize: none;
+
+    width: calc(100% - ${themeCssVariables.spacing[7]});
+  }
+`;
+
+const StyledLightIconButtonContainer = styled.div`
+  background: transparent;
+  position: absolute;
+  right: 0;
+  top: 16px;
+  transform: translateY(-50%);
 `;
 
 export const TextAreaInput = ({
+  instanceId,
   disabled,
   className,
   placeholder,
   autoFocus,
   value,
-  hotkeyScope,
   onEnter,
   onEscape,
   onTab,
@@ -47,15 +78,19 @@ export const TextAreaInput = ({
   onClickOutside,
   onChange,
   maxRows,
+  copyButton = true,
 }: TextAreaInputProps) => {
   const [internalText, setInternalText] = useState(value);
-
   const handleChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
-    setInternalText(event.target.value);
-    onChange?.(event.target.value);
+    const targetValue = turnIntoEmptyStringIfWhitespacesOnly(
+      event.target.value,
+    );
+    setInternalText(targetValue);
+    onChange?.(targetValue);
   };
 
   const wrapperRef = useRef<HTMLTextAreaElement>(null);
+  const copyRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (isDefined(wrapperRef.current)) {
@@ -67,26 +102,36 @@ export const TextAreaInput = ({
   }, []);
 
   useRegisterInputEvents({
+    focusId: instanceId,
     inputRef: wrapperRef,
+    copyRef: copyRef,
     inputValue: internalText,
     onEnter,
     onEscape,
     onClickOutside,
     onTab,
     onShiftTab,
-    hotkeyScope,
   });
 
   return (
-    <StyledTextArea
-      placeholder={placeholder}
-      disabled={disabled}
-      className={className}
-      ref={wrapperRef}
-      onChange={handleChange}
-      autoFocus={autoFocus}
-      value={internalText}
-      maxRows={maxRows}
-    />
+    <>
+      <StyledTextAreaContainer>
+        <TextareaAutosize
+          placeholder={placeholder}
+          disabled={disabled}
+          className={className}
+          ref={wrapperRef}
+          onChange={handleChange}
+          autoFocus={autoFocus}
+          value={internalText}
+          maxRows={maxRows}
+        />
+      </StyledTextAreaContainer>
+      {copyButton && (
+        <StyledLightIconButtonContainer ref={copyRef}>
+          <LightCopyIconButton copyText={internalText} />
+        </StyledLightIconButtonContainer>
+      )}
+    </>
   );
 };

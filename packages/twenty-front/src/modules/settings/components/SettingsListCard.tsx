@@ -1,50 +1,53 @@
-import { ComponentType } from 'react';
-import { useTheme } from '@emotion/react';
-import styled from '@emotion/styled';
-import { IconComponent, IconPlus } from 'twenty-ui';
+import { styled } from '@linaria/react';
+import { type ComponentType } from 'react';
 
 import { SettingsListSkeletonCard } from '@/settings/components/SettingsListSkeletonCard';
-import { Card } from '@/ui/layout/card/components/Card';
-import { CardFooter } from '@/ui/layout/card/components/CardFooter';
 
+import { type IconComponent, IconPlus } from 'twenty-ui/icon';
+import { Card } from 'twenty-ui/primitives/surfaces';
+import { useTheme, themeCssVariables } from 'twenty-ui/theme';
 import { SettingsListItemCardContent } from './SettingsListItemCardContent';
 
-const StyledFooter = styled(CardFooter)`
+const StyledFooter = styled(Card.Footer)`
   align-items: center;
   display: flex;
-  padding: ${({ theme }) => theme.spacing(1)};
+  padding: ${themeCssVariables.spacing[1]};
 `;
 
 const StyledButton = styled.button`
   align-items: center;
-  background: ${({ theme }) => theme.background.primary};
+  background: ${themeCssVariables.background.primary};
   border: none;
-  border-radius: ${({ theme }) => theme.border.radius.sm};
-  color: ${({ theme }) => theme.font.color.secondary};
-  gap: ${({ theme }) => theme.spacing(2)};
-  padding: 0 ${({ theme }) => theme.spacing(1)};
-  padding-left: ${({ theme }) => theme.spacing(2)};
+  border-radius: ${themeCssVariables.border.radius.sm};
+  color: ${themeCssVariables.font.color.secondary};
   cursor: pointer;
   display: flex;
   flex: 1 0 0;
-  height: ${({ theme }) => theme.spacing(8)};
+  gap: ${themeCssVariables.spacing[2]};
+  height: ${themeCssVariables.spacing[8]};
+  padding: 0 ${themeCssVariables.spacing[1]};
+  padding-left: ${themeCssVariables.spacing[2]};
   width: 100%;
 
   &:hover {
-    background: ${({ theme }) => theme.background.transparent.light};
+    background: ${themeCssVariables.background.transparent.light};
   }
 `;
 
 type SettingsListCardProps<ListItem extends { id: string }> = {
   items: ListItem[];
   getItemLabel: (item: ListItem) => string;
+  getItemDescription?: (item: ListItem) => string;
   hasFooter?: boolean;
   isLoading?: boolean;
   onRowClick?: (item: ListItem) => void;
   RowIcon?: IconComponent;
+  RowIconFn?: (item: ListItem) => IconComponent | undefined;
+  RowIconColor?: string;
   RowRightComponent: ComponentType<{ item: ListItem }>;
   footerButtonLabel?: string;
   onFooterButtonClick?: () => void;
+  to?: (item: ListItem) => string;
 };
 
 export const SettingsListCard = <
@@ -54,28 +57,37 @@ export const SettingsListCard = <
 >({
   items,
   getItemLabel,
+  getItemDescription,
   hasFooter,
   isLoading,
   onRowClick,
   RowIcon,
+  RowIconFn,
+  RowIconColor,
   RowRightComponent,
   onFooterButtonClick,
   footerButtonLabel,
+  to,
 }: SettingsListCardProps<ListItem>) => {
   const theme = useTheme();
 
-  if (isLoading === true) return <SettingsListSkeletonCard />;
+  if (isLoading === true) {
+    return <SettingsListSkeletonCard />;
+  }
 
   return (
-    <Card>
+    <Card.Root>
       {items.map((item, index) => (
         <SettingsListItemCardContent
           key={item.id}
-          LeftIcon={RowIcon}
+          LeftIcon={RowIconFn ? RowIconFn(item) : RowIcon}
+          LeftIconColor={RowIconColor}
           label={getItemLabel(item)}
+          description={getItemDescription?.(item)}
           rightComponent={<RowRightComponent item={item} />}
           divider={index < items.length - 1}
-          onClick={() => onRowClick?.(item)}
+          onClick={onRowClick ? () => onRowClick?.(item) : undefined}
+          to={to?.(item)}
         />
       ))}
       {hasFooter && (
@@ -86,6 +98,6 @@ export const SettingsListCard = <
           </StyledButton>
         </StyledFooter>
       )}
-    </Card>
+    </Card.Root>
   );
 };

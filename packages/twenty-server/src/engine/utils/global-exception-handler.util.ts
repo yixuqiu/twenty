@@ -1,17 +1,26 @@
 import { HttpException } from '@nestjs/common';
 
-import { ExceptionHandlerUser } from 'src/engine/integrations/exception-handler/interfaces/exception-handler-user.interface';
+import { GraphQLError } from 'graphql';
+import { RetryableLogicFunctionError } from 'twenty-shared/logic-function';
+import { isDefined } from 'twenty-shared/utils';
 
+import { type ExceptionHandlerUser } from 'src/engine/core-modules/exception-handler/interfaces/exception-handler-user.interface';
+import { type ExceptionHandlerWorkspace } from 'src/engine/core-modules/exception-handler/interfaces/exception-handler-workspace.interface';
+import { NodeEnvironment } from 'src/engine/core-modules/twenty-config/interfaces/node-environment.interface';
+
+import { type ExceptionHandlerService } from 'src/engine/core-modules/exception-handler/exception-handler.service';
 import {
   AuthenticationError,
   BaseGraphQLError,
-  ForbiddenError,
-  ValidationError,
-  NotFoundError,
   ConflictError,
+  ErrorCode,
+  ForbiddenError,
   MethodNotAllowedError,
-} from 'src/engine/utils/graphql-errors.util';
-import { ExceptionHandlerService } from 'src/engine/integrations/exception-handler/exception-handler.service';
+  NotFoundError,
+  TimeoutError,
+  ValidationError,
+} from 'src/engine/core-modules/graphql/utils/graphql-errors.util';
+import { CustomException } from 'src/utils/custom-exception';
 
 const graphQLPredefinedExceptions = {
   400: ValidationError,
@@ -19,37 +28,106 @@ const graphQLPredefinedExceptions = {
   403: ForbiddenError,
   404: NotFoundError,
   405: MethodNotAllowedError,
+  408: TimeoutError,
   409: ConflictError,
 };
+
+export const graphQLErrorCodesToFilter = [
+  ErrorCode.GRAPHQL_VALIDATION_FAILED,
+  ErrorCode.UNAUTHENTICATED,
+  ErrorCode.FORBIDDEN,
+  ErrorCode.NOT_FOUND,
+  ErrorCode.METHOD_NOT_ALLOWED,
+  ErrorCode.TIMEOUT,
+  ErrorCode.CONFLICT,
+  ErrorCode.BAD_USER_INPUT,
+  ErrorCode.METADATA_VALIDATION_FAILED,
+  ErrorCode.RATE_LIMITED,
+  ErrorCode.QUOTA_EXHAUSTED,
+];
 
 export const handleExceptionAndConvertToGraphQLError = (
   exception: Error,
   exceptionHandlerService: ExceptionHandlerService,
   user?: ExceptionHandlerUser,
+  workspace?: ExceptionHandlerWorkspace,
 ): BaseGraphQLError => {
-  handleException(exception, exceptionHandlerService, user);
+  handleException({
+    exception,
+    exceptionHandlerService,
+    user,
+    workspace,
+  });
 
   return convertExceptionToGraphQLError(exception);
 };
 
-export const filterException = (exception: Error): boolean => {
-  if (exception instanceof HttpException && exception.getStatus() < 500) {
-    return true;
+export const shouldCaptureException = (
+  exception: Error,
+  statusCode?: number,
+): boolean => {
+  if (exception instanceof RetryableLogicFunctionError) {
+    return false;
   }
 
-  return false;
+  if (
+    exception instanceof CustomException &&
+    isDefined(exception.statusCode) &&
+    exception.statusCode < 500
+  ) {
+    return false;
+  }
+
+  if (
+    exception instanceof GraphQLError &&
+    (exception?.extensions?.http?.status ?? 500) < 500
+  ) {
+    return false;
+  }
+
+  if (
+    exception instanceof BaseGraphQLError &&
+    graphQLErrorCodesToFilter.includes(exception?.extensions?.code)
+  ) {
+    return false;
+  }
+
+  if (exception instanceof HttpException && exception.getStatus() < 500) {
+    return false;
+  }
+
+  if (statusCode && statusCode < 500) {
+    return false;
+  }
+
+  return true;
 };
 
-export const handleException = (
-  exception: Error,
-  exceptionHandlerService: ExceptionHandlerService,
-  user?: ExceptionHandlerUser,
-): void => {
-  if (filterException(exception)) {
-    return;
+export const handleException = <
+  T extends Error | CustomException | HttpException,
+>({
+  exception,
+  exceptionHandlerService,
+  user,
+  workspace,
+  statusCode,
+  shouldBeCapturedBySentry = true,
+}: {
+  exception: T;
+  exceptionHandlerService: Pick<ExceptionHandlerService, 'captureExceptions'>;
+  user?: ExceptionHandlerUser;
+  workspace?: ExceptionHandlerWorkspace;
+  statusCode?: number;
+  shouldBeCapturedBySentry?: boolean;
+}): T => {
+  if (
+    shouldBeCapturedBySentry &&
+    shouldCaptureException(exception, statusCode)
+  ) {
+    exceptionHandlerService.captureExceptions([exception], { user, workspace });
   }
 
-  exceptionHandlerService.captureExceptions([exception], { user });
+  return exception;
 };
 
 export const convertExceptionToGraphQLError = (
@@ -58,17 +136,22 @@ export const convertExceptionToGraphQLError = (
   if (exception instanceof HttpException) {
     return convertHttpExceptionToGraphql(exception);
   }
+  if (exception instanceof BaseGraphQLError) {
+    return exception;
+  }
 
   return convertExceptionToGraphql(exception);
 };
 
-export const convertHttpExceptionToGraphql = (exception: HttpException) => {
+const convertHttpExceptionToGraphql = (exception: HttpException) => {
   const status = exception.getStatus();
   let error: BaseGraphQLError;
 
   if (status in graphQLPredefinedExceptions) {
+    // @ts-expect-error legacy noImplicitAny
     const message = exception.getResponse()['message'] ?? exception.message;
 
+    // @ts-expect-error legacy noImplicitAny
     error = new graphQLPredefinedExceptions[exception.getStatus()](message);
   } else {
     error = new BaseGraphQLError(
@@ -77,8 +160,7 @@ export const convertHttpExceptionToGraphql = (exception: HttpException) => {
     );
   }
 
-  // Only show the stack trace in development mode
-  if (process.env.NODE_ENV === 'development') {
+  if (process.env.NODE_ENV === NodeEnvironment.DEVELOPMENT) {
     error.stack = exception.stack;
     error.extensions['response'] = exception.getResponse();
   }
@@ -87,10 +169,15 @@ export const convertHttpExceptionToGraphql = (exception: HttpException) => {
 };
 
 export const convertExceptionToGraphql = (exception: Error) => {
-  const error = new BaseGraphQLError(exception.name, 'INTERNAL_SERVER_ERROR');
+  const error = new BaseGraphQLError(
+    'Internal Server Error',
+    ErrorCode.INTERNAL_SERVER_ERROR,
+  );
 
-  error.stack = exception.stack;
-  error.extensions['response'] = exception.message;
+  if (process.env.NODE_ENV === NodeEnvironment.DEVELOPMENT) {
+    error.stack = exception.stack;
+    error.extensions['response'] = exception.message;
+  }
 
   return error;
 };

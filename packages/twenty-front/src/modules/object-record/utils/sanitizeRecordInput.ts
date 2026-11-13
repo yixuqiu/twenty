@@ -1,59 +1,118 @@
-import { isString } from '@sniptt/guards';
-
-import { CoreObjectNameSingular } from '@/object-metadata/types/CoreObjectNameSingular';
-import { ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
-import { isFieldRelationValue } from '@/object-record/record-field/types/guards/isFieldRelationValue';
-import { ObjectRecord } from '@/object-record/types/ObjectRecord';
-import { FieldMetadataType } from '~/generated/graphql';
-import { isDefined } from '~/utils/isDefined';
-import { getUrlHostName } from '~/utils/url/getUrlHostName';
+import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/EnrichedObjectMetadataItem';
+import { isManyToOneRelationField } from '@/object-metadata/utils/isManyToOneRelationField';
+import { isCompositeFieldType } from '@/object-record/object-filter-dropdown/utils/isCompositeFieldType';
+import { isFieldMorphRelation } from '@/object-record/record-field/ui/types/guards/isFieldMorphRelation';
+import { type ObjectRecord } from '@/object-record/types/ObjectRecord';
+import { isSystemSearchVectorField } from '@/object-record/utils/isSystemSearchVectorField';
+import { removeTypenamesFromCompositeFieldValue } from '@/object-record/utils/removeTypenamesFromCompositeFieldValue';
+import {
+  computeMorphRelationGqlFieldName,
+  computeRelationGqlFieldJoinColumnName,
+  isDefined,
+} from 'twenty-shared/utils';
+import { doNotTranslate } from 'twenty-shared/i18n';
+import { FieldMetadataType, RelationType } from '~/generated-metadata/graphql';
 
 export const sanitizeRecordInput = ({
   objectMetadataItem,
   recordInput,
 }: {
-  objectMetadataItem: ObjectMetadataItem;
+  objectMetadataItem: EnrichedObjectMetadataItem;
   recordInput: Partial<ObjectRecord>;
 }) => {
   const filteredResultRecord = Object.fromEntries(
     Object.entries(recordInput)
       .map<[string, unknown] | undefined>(([fieldName, fieldValue]) => {
+        if (isSystemSearchVectorField(fieldName)) {
+          return undefined;
+        }
+
         const fieldMetadataItem = objectMetadataItem.fields.find(
           (field) => field.name === fieldName,
         );
+        const potentialJoinColumnNameFieldMetadataItem =
+          objectMetadataItem.fields.find(
+            (field) =>
+              field.type === FieldMetadataType.RELATION &&
+              computeRelationGqlFieldJoinColumnName({ name: field.name }) ===
+                fieldName,
+          );
+        const potentialMorphRelationJoinColumnNameFieldMetadataItem =
+          objectMetadataItem.fields.find((field) => {
+            if (!isFieldMorphRelation(field)) {
+              return false;
+            }
+            return field.morphRelations?.some((morphRelation) => {
+              const computedFieldName = computeMorphRelationGqlFieldName({
+                fieldName: field.name,
+                relationType: morphRelation.type,
+                targetObjectMetadataNameSingular:
+                  morphRelation.targetObjectMetadata.nameSingular,
+                targetObjectMetadataNamePlural:
+                  morphRelation.targetObjectMetadata.namePlural,
+              });
+              return (
+                computedFieldName ===
+                fieldName.replace(doNotTranslate('Id'), '')
+              );
+            });
+          });
 
-        if (!fieldMetadataItem) return undefined;
+        if (
+          !isDefined(fieldMetadataItem) &&
+          !isDefined(potentialJoinColumnNameFieldMetadataItem) &&
+          !isDefined(potentialMorphRelationJoinColumnNameFieldMetadataItem)
+        ) {
+          return undefined;
+        }
 
-        if (!fieldMetadataItem.isNullable && fieldValue == null) {
+        if (fieldMetadataItem?.isNullable === false && fieldValue == null) {
           return undefined;
         }
 
         if (
-          fieldMetadataItem.type === FieldMetadataType.Relation &&
-          isFieldRelationValue(fieldValue)
+          isDefined(fieldMetadataItem) &&
+          isManyToOneRelationField(fieldMetadataItem) &&
+          !isDefined(recordInput[fieldMetadataItem.name]?.connect?.where) &&
+          !isDefined(recordInput[fieldMetadataItem.name]?.create)
         ) {
-          const relationIdFieldName = `${fieldMetadataItem.name}Id`;
-          const relationIdFieldMetadataItem = objectMetadataItem.fields.find(
-            (field) => field.name === relationIdFieldName,
-          );
-
-          return relationIdFieldMetadataItem
-            ? [relationIdFieldName, fieldValue?.id ?? null]
-            : undefined;
+          return undefined;
         }
 
+        if (
+          isDefined(fieldMetadataItem) &&
+          fieldMetadataItem.type === FieldMetadataType.RELATION &&
+          fieldMetadataItem.relation?.type === RelationType.ONE_TO_MANY
+        ) {
+          return undefined;
+        }
+
+        if (
+          isDefined(fieldMetadataItem) &&
+          fieldMetadataItem.type === FieldMetadataType.FILES &&
+          Array.isArray(fieldValue)
+        ) {
+          const cleanedFiles = fieldValue.map((file: any) => ({
+            fileId: file.fileId,
+            label: file.label,
+          }));
+          return [fieldName, cleanedFiles];
+        }
+
+        if (
+          isDefined(fieldMetadataItem) &&
+          isCompositeFieldType(fieldMetadataItem.type)
+        ) {
+          return [
+            fieldName,
+            removeTypenamesFromCompositeFieldValue(fieldValue),
+          ];
+        }
+
+        // TODO: validate fieldValue against the field type, including composite structures
         return [fieldName, fieldValue];
       })
       .filter(isDefined),
   );
-  if (
-    objectMetadataItem.nameSingular !== CoreObjectNameSingular.Company ||
-    !isString(filteredResultRecord.domainName)
-  )
-    return filteredResultRecord;
-
-  return {
-    ...filteredResultRecord,
-    domainName: getUrlHostName(filteredResultRecord.domainName),
-  };
+  return filteredResultRecord;
 };

@@ -1,51 +1,53 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 
-import { GraphQLSchema } from 'graphql';
+import { GraphQLObjectType, GraphQLSchema } from 'graphql';
+import { isDefined } from 'twenty-shared/utils';
 
-import { WorkspaceResolverBuilderMethods } from 'src/engine/api/graphql/workspace-resolver-builder/interfaces/workspace-resolvers-builder.interface';
-import { ObjectMetadataInterface } from 'src/engine/metadata-modules/field-metadata/interfaces/object-metadata.interface';
-
-import { TypeDefinitionsGenerator } from './type-definitions.generator';
-
-import { WorkspaceBuildSchemaOptions } from './interfaces/workspace-build-schema-optionts.interface';
-import { QueryTypeFactory } from './factories/query-type.factory';
-import { MutationTypeFactory } from './factories/mutation-type.factory';
-import { OrphanedTypesFactory } from './factories/orphaned-types.factory';
+import { GqlOperation } from 'src/engine/api/graphql/workspace-schema-builder/enums/gql-operation.enum';
+import {
+  WorkspaceGraphQLSchemaException,
+  WorkspaceGraphQLSchemaExceptionCode,
+} from 'src/engine/api/graphql/workspace-schema-builder/exceptions/workspace-graphql-schema.exception';
+import { GqlTypeGenerator } from 'src/engine/api/graphql/workspace-schema-builder/graphql-type-generators/gql-type.generator';
+import { type SchemaGenerationContext } from 'src/engine/api/graphql/workspace-schema-builder/types/schema-generation-context.type';
 
 @Injectable()
-export class WorkspaceGraphQLSchemaFactory {
-  private readonly logger = new Logger(WorkspaceGraphQLSchemaFactory.name);
+export class WorkspaceGraphQLSchemaGenerator {
+  constructor(private readonly gqlTypeGenerator: GqlTypeGenerator) {}
 
-  constructor(
-    private readonly typeDefinitionsGenerator: TypeDefinitionsGenerator,
-    private readonly queryTypeFactory: QueryTypeFactory,
-    private readonly mutationTypeFactory: MutationTypeFactory,
-    private readonly orphanedTypesFactory: OrphanedTypesFactory,
-  ) {}
-
-  async create(
-    objectMetadataCollection: ObjectMetadataInterface[],
-    workspaceResolverBuilderMethods: WorkspaceResolverBuilderMethods,
-    options: WorkspaceBuildSchemaOptions = {},
+  async generateSchema(
+    context: SchemaGenerationContext,
   ): Promise<GraphQLSchema> {
-    // Generate type definitions
-    this.typeDefinitionsGenerator.generate(objectMetadataCollection, options);
+    const gqlTypesStorage = await this.gqlTypeGenerator.buildAndStore(context);
 
-    // Generate schema
-    const schema = new GraphQLSchema({
-      query: this.queryTypeFactory.create(
-        objectMetadataCollection,
-        [...workspaceResolverBuilderMethods.queries],
-        options,
-      ),
-      mutation: this.mutationTypeFactory.create(
-        objectMetadataCollection,
-        [...workspaceResolverBuilderMethods.mutations],
-        options,
-      ),
-      types: this.orphanedTypesFactory.create(),
+    const queryType = gqlTypesStorage.getGqlTypeByKey<GraphQLObjectType>(
+      GqlOperation.Query,
+    );
+    const mutationType = gqlTypesStorage.getGqlTypeByKey<GraphQLObjectType>(
+      GqlOperation.Mutation,
+    );
+
+    if (!isDefined(queryType)) {
+      throw new WorkspaceGraphQLSchemaException(
+        'Query type not found in GqlTypesStorage',
+        WorkspaceGraphQLSchemaExceptionCode.QUERY_TYPE_NOT_FOUND,
+      );
+    }
+
+    if (!isDefined(mutationType)) {
+      throw new WorkspaceGraphQLSchemaException(
+        'Mutation type not found in GqlTypesStorage',
+        WorkspaceGraphQLSchemaExceptionCode.MUTATION_TYPE_NOT_FOUND,
+      );
+    }
+
+    return new GraphQLSchema({
+      query: queryType,
+      mutation: mutationType,
+      types: gqlTypesStorage.getAllGqlTypesExcept([
+        GqlOperation.Query,
+        GqlOperation.Mutation,
+      ]),
     });
-
-    return schema;
   }
 }

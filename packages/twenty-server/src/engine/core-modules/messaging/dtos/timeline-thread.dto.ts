@@ -1,24 +1,26 @@
-import { ObjectType, Field } from '@nestjs/graphql';
+import { Field, ObjectType } from '@nestjs/graphql';
 
+import { MessageChannelVisibility } from 'twenty-shared/types';
 import { UUIDScalarType } from 'src/engine/api/graphql/workspace-schema-builder/graphql-types/scalars';
-import { TimelineThreadParticipant } from 'src/engine/core-modules/messaging/dtos/timeline-thread-participant.dto';
+import { TimelineThreadChannelDTO } from 'src/engine/core-modules/messaging/dtos/timeline-thread-channel.dto';
+import { TimelineThreadParticipantDTO } from 'src/engine/core-modules/messaging/dtos/timeline-thread-participant.dto';
 
 @ObjectType('TimelineThread')
-export class TimelineThread {
+export class TimelineThreadDTO {
   @Field(() => UUIDScalarType)
   id: string;
 
   @Field()
   read: boolean;
 
-  @Field()
-  visibility: string;
+  @Field(() => MessageChannelVisibility)
+  visibility: MessageChannelVisibility;
 
   @Field()
-  firstParticipant: TimelineThreadParticipant;
+  firstParticipant: TimelineThreadParticipantDTO;
 
-  @Field(() => [TimelineThreadParticipant])
-  lastTwoParticipants: TimelineThreadParticipant[];
+  @Field(() => [TimelineThreadParticipantDTO])
+  lastTwoParticipants: TimelineThreadParticipantDTO[];
 
   @Field()
   lastMessageReceivedAt: Date;
@@ -34,4 +36,10 @@ export class TimelineThread {
 
   @Field()
   participantCount: number;
+
+  @Field()
+  lastMessageIsDraft: boolean;
+
+  @Field(() => TimelineThreadChannelDTO, { nullable: true })
+  channel: TimelineThreadChannelDTO | null;
 }

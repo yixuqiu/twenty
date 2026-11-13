@@ -1,24 +1,38 @@
-import { ApolloCache, StoreObject } from '@apollo/client';
+import { type ApolloCache, type StoreObject } from '@apollo/client';
 
+import { triggerUpdateRootQueriesOptimisticEffect } from '@/apollo/optimistic-effect/utils/triggerUpdateRootQueriesOptimisticEffect';
+import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/EnrichedObjectMetadataItem';
+import { getRecordFromCache } from '@/object-record/cache/utils/getRecordFromCache';
+import { getRecordNodeFromRecord } from '@/object-record/cache/utils/getRecordNodeFromRecord';
 import { isObjectRecordConnectionWithRefs } from '@/object-record/cache/utils/isObjectRecordConnectionWithRefs';
-import { capitalize } from '~/utils/string/capitalize';
+import { type ObjectRecord } from '@/object-record/types/ObjectRecord';
+import { capitalize, isDefined } from 'twenty-shared/utils';
+import { type ObjectRecordsPermissions } from 'twenty-shared/types';
 
 export const triggerDetachRelationOptimisticEffect = ({
   cache,
   sourceObjectNameSingular,
   sourceRecordId,
-  targetObjectNameSingular,
+  targetObjectMetadataItem,
   fieldNameOnTargetRecord,
   targetRecordId,
+  objectMetadataItems,
+  objectPermissionsByObjectMetadataId,
+  upsertRecordsInStore,
 }: {
-  cache: ApolloCache<unknown>;
+  cache: ApolloCache;
   sourceObjectNameSingular: string;
   sourceRecordId: string;
-  targetObjectNameSingular: string;
+  targetObjectMetadataItem: EnrichedObjectMetadataItem;
   fieldNameOnTargetRecord: string;
   targetRecordId: string;
+  objectMetadataItems: EnrichedObjectMetadataItem[];
+  objectPermissionsByObjectMetadataId: Record<string, ObjectRecordsPermissions>;
+  upsertRecordsInStore: (props: { partialRecords: ObjectRecord[] }) => void;
 }) => {
-  const targetRecordTypeName = capitalize(targetObjectNameSingular);
+  const targetRecordTypeName = capitalize(
+    targetObjectMetadataItem.nameSingular,
+  );
 
   const targetRecordCacheId = cache.identify({
     id: targetRecordId,
@@ -57,5 +71,37 @@ export const triggerDetachRelationOptimisticEffect = ({
         return targetRecordFieldValue;
       },
     },
+  });
+
+  const newCachedRecord = getRecordFromCache({
+    cache,
+    objectMetadataItem: targetObjectMetadataItem,
+    objectMetadataItems,
+    recordId: targetRecordId,
+    objectPermissionsByObjectMetadataId,
+  });
+
+  if (!isDefined(newCachedRecord)) {
+    return;
+  }
+
+  upsertRecordsInStore({ partialRecords: [newCachedRecord] });
+
+  const newCachedRecordNode = getRecordNodeFromRecord({
+    objectMetadataItems,
+    objectMetadataItem: targetObjectMetadataItem,
+    record: newCachedRecord,
+    computeReferences: false,
+  });
+
+  if (!isDefined(newCachedRecordNode)) {
+    return;
+  }
+
+  triggerUpdateRootQueriesOptimisticEffect({
+    cache,
+    objectMetadataItem: targetObjectMetadataItem,
+    objectMetadataItems,
+    updatedRecords: [newCachedRecordNode],
   });
 };

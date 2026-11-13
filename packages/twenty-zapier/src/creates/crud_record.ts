@@ -1,13 +1,26 @@
-import { Bundle, ZObject } from 'zapier-platform-core';
+import type { Bundle, ZObject } from 'zapier-platform-core';
+import { findObjectNamesSingularKey } from 'src/triggers/find_object_names_singular';
+import { listRecordIdsKey } from 'src/triggers/list_record_ids';
+import { computeInputFields } from 'src/utils/computeInputFields';
+import { type InputData, type Node, type Schema } from 'src/utils/data.types';
+import handleQueryParams from 'src/utils/handleQueryParams';
+import requestDb, { requestSchema } from 'src/utils/requestDb';
+import { DatabaseEventAction } from 'src/utils/triggers/triggers.utils';
+import { isNonEmptyString } from '@sniptt/guards';
 
-import { findObjectNamesSingularKey } from '../triggers/find_object_names_singular';
-import { listRecordIdsKey } from '../triggers/list_record_ids';
-import { capitalize } from '../utils/capitalize';
-import { computeInputFields } from '../utils/computeInputFields';
-import { InputData } from '../utils/data.types';
-import handleQueryParams from '../utils/handleQueryParams';
-import requestDb, { requestSchema } from '../utils/requestDb';
-import { Operation } from '../utils/triggers/triggers.utils';
+const getObjectNode = (
+  schema: Schema,
+  nameSingular: string,
+): Node | undefined =>
+  schema.data.objects.edges.find(
+    (edge) => edge.node.nameSingular === nameSingular,
+  )?.node;
+
+const capitalize = (stringToCapitalize: string) => {
+  if (!isNonEmptyString(stringToCapitalize)) return '';
+
+  return stringToCapitalize[0].toUpperCase() + stringToCapitalize.slice(1);
+};
 
 export const recordInputFields = async (
   z: ZObject,
@@ -24,7 +37,7 @@ export const recordInputFields = async (
 const computeFields = async (z: ZObject, bundle: Bundle) => {
   const operation = bundle.inputData.crudZapierOperation;
   switch (operation) {
-    case Operation.delete:
+    case DatabaseEventAction.DELETED:
       return [
         {
           key: 'id',
@@ -34,9 +47,9 @@ const computeFields = async (z: ZObject, bundle: Bundle) => {
           required: true,
         },
       ];
-    case Operation.update:
+    case DatabaseEventAction.UPDATED:
       return recordInputFields(z, bundle, true);
-    case Operation.create:
+    case DatabaseEventAction.CREATED:
       return recordInputFields(z, bundle, false);
     default:
       return [];
@@ -44,18 +57,19 @@ const computeFields = async (z: ZObject, bundle: Bundle) => {
 };
 
 const computeQueryParameters = (
-  operation: Operation,
+  operation: DatabaseEventAction,
   data: InputData,
+  node?: Node,
 ): string => {
   switch (operation) {
-    case Operation.create:
-      return `data:{${handleQueryParams(data)}}`;
-    case Operation.update:
+    case DatabaseEventAction.CREATED:
+      return `data:{${handleQueryParams(data, node)}}`;
+    case DatabaseEventAction.UPDATED:
       return `
-      data:{${handleQueryParams(data)}},
+      data:{${handleQueryParams(data, node)}},
       id: "${data.id}"
       `;
-    case Operation.delete:
+    case DatabaseEventAction.DELETED:
       return `
       id: "${data.id}"
       `;
@@ -64,20 +78,45 @@ const computeQueryParameters = (
   }
 };
 
-const perform = async (z: ZObject, bundle: Bundle) => {
+const getOperationFromDatabaseEventAction = (
+  z: ZObject,
+  databaseEventAction: DatabaseEventAction,
+): 'create' | 'update' | 'delete' => {
+  switch (databaseEventAction) {
+    case DatabaseEventAction.CREATED:
+      return 'create';
+    case DatabaseEventAction.UPDATED:
+      return 'update';
+    case DatabaseEventAction.DELETED:
+      return 'delete';
+    default:
+      throw new z.errors.Error(
+        `Unknown databaseEventAction: ${databaseEventAction}`,
+        'Error',
+        404,
+      );
+  }
+};
+
+const perform = async (z: ZObject, bundle: Bundle<InputData>) => {
   const data = bundle.inputData;
   const operation = data.crudZapierOperation;
+  const queryOperation = getOperationFromDatabaseEventAction(z, operation);
   const nameSingular = data.nameSingular;
+  const node =
+    operation === DatabaseEventAction.DELETED
+      ? undefined
+      : getObjectNode(await requestSchema(z, bundle), nameSingular);
   delete data.nameSingular;
   delete data.crudZapierOperation;
   const query = `
-  mutation ${operation}${capitalize(nameSingular)} {
-    ${operation}${capitalize(nameSingular)}(
-      ${computeQueryParameters(operation, data)}
+  mutation ${queryOperation}${capitalize(nameSingular)} {
+    ${queryOperation}${capitalize(nameSingular)}(
+      ${computeQueryParameters(operation, data, node)}
     )
     {id}
   }`;
-  return await requestDb(z, bundle, query);
+  return await requestDb({ z, bundle, query });
 };
 
 export const crudRecordKey = 'crud_record';
@@ -104,9 +143,9 @@ export default {
         required: true,
         label: 'Operation',
         choices: {
-          [Operation.create]: Operation.create,
-          [Operation.update]: Operation.update,
-          [Operation.delete]: Operation.delete,
+          [DatabaseEventAction.CREATED]: DatabaseEventAction.CREATED,
+          [DatabaseEventAction.UPDATED]: DatabaseEventAction.UPDATED,
+          [DatabaseEventAction.DELETED]: DatabaseEventAction.DELETED,
         },
         altersDynamicFields: true,
       },

@@ -3,69 +3,159 @@ import {
   Get,
   Req,
   Res,
-  UnauthorizedException,
+  UseFilters,
   UseGuards,
 } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
 
 import { Response } from 'express';
+import { ApiPath, SettingsPath } from 'twenty-shared/types';
+import { getSettingsPath } from 'twenty-shared/utils';
+import { Repository } from 'typeorm';
 
-import { GoogleAPIsProviderEnabledGuard } from 'src/engine/core-modules/auth/guards/google-apis-provider-enabled.guard';
-import { GoogleAPIsOauthGuard } from 'src/engine/core-modules/auth/guards/google-apis-oauth.guard';
-import { GoogleAPIsRequest } from 'src/engine/core-modules/auth/strategies/google-apis.auth.strategy';
+import {
+  AuthException,
+  AuthExceptionCode,
+} from 'src/engine/core-modules/auth/auth.exception';
+import { AuthRestApiExceptionFilter } from 'src/engine/core-modules/auth/filters/auth-rest-api-exception.filter';
+import { GoogleAPIsOauthExchangeCodeForTokenGuard } from 'src/engine/core-modules/auth/guards/google-apis-oauth-exchange-code-for-token.guard';
+import { GoogleAPIsOauthRequestCodeGuard } from 'src/engine/core-modules/auth/guards/google-apis-oauth-request-code.guard';
+import { ConnectedAccountOAuthService } from 'src/engine/core-modules/auth/services/connected-account-oauth.service';
 import { GoogleAPIsService } from 'src/engine/core-modules/auth/services/google-apis.service';
-import { TokenService } from 'src/engine/core-modules/auth/services/token.service';
-import { EnvironmentService } from 'src/engine/integrations/environment/environment.service';
+import { TransientTokenService } from 'src/engine/core-modules/auth/token/services/transient-token.service';
+import { APIsOAuthRequest } from 'src/engine/core-modules/auth/types/apis-oauth-request.type';
+import { parseRelativeUrl } from 'src/engine/core-modules/domain/domain-server-config/utils/parse-relative-url.util';
+import { WorkspaceDomainsService } from 'src/engine/core-modules/domain/workspace-domains/services/workspace-domains.service';
+import { GuardRedirectService } from 'src/engine/core-modules/guard-redirect/services/guard-redirect.service';
+import { OnboardingService } from 'src/engine/core-modules/onboarding/onboarding.service';
+import { TwentyConfigService } from 'src/engine/core-modules/twenty-config/twenty-config.service';
+import { WorkspaceEntity } from 'src/engine/core-modules/workspace/workspace.entity';
+import { NoPermissionGuard } from 'src/engine/guards/no-permission.guard';
+import { PublicEndpointGuard } from 'src/engine/guards/public-endpoint.guard';
 
-@Controller('auth/google-apis')
+@Controller(`${ApiPath.Auth}/google-apis`)
+@UseFilters(AuthRestApiExceptionFilter)
 export class GoogleAPIsAuthController {
   constructor(
     private readonly googleAPIsService: GoogleAPIsService,
-    private readonly tokenService: TokenService,
-    private readonly environmentService: EnvironmentService,
+    private readonly transientTokenService: TransientTokenService,
+    private readonly connectedAccountOAuthService: ConnectedAccountOAuthService,
+    private readonly twentyConfigService: TwentyConfigService,
+    private readonly onboardingService: OnboardingService,
+    private readonly workspaceDomainsService: WorkspaceDomainsService,
+    private readonly guardRedirectService: GuardRedirectService,
+    @InjectRepository(WorkspaceEntity)
+    private readonly workspaceRepository: Repository<WorkspaceEntity>,
   ) {}
 
   @Get()
-  @UseGuards(GoogleAPIsProviderEnabledGuard, GoogleAPIsOauthGuard)
+  @UseGuards(
+    GoogleAPIsOauthRequestCodeGuard,
+    PublicEndpointGuard,
+    NoPermissionGuard,
+  )
   async googleAuth() {
-    // As this method is protected by Google Auth guard, it will trigger Google SSO flow
     return;
   }
 
   @Get('get-access-token')
-  @UseGuards(GoogleAPIsProviderEnabledGuard, GoogleAPIsOauthGuard)
+  @UseGuards(
+    GoogleAPIsOauthExchangeCodeForTokenGuard,
+    PublicEndpointGuard,
+    NoPermissionGuard,
+  )
   async googleAuthGetAccessToken(
-    @Req() req: GoogleAPIsRequest,
+    @Req() req: APIsOAuthRequest,
     @Res() res: Response,
   ) {
-    const { user } = req;
+    let workspace: WorkspaceEntity | null = null;
 
-    const { email, accessToken, refreshToken, transientToken } = user;
+    try {
+      const { user } = req;
 
-    const { workspaceMemberId, workspaceId } =
-      await this.tokenService.verifyTransientToken(transientToken);
+      const {
+        emails,
+        accessToken,
+        refreshToken,
+        transientToken,
+        redirectLocation,
+        calendarVisibility,
+        messageVisibility,
+        skipMessageChannelConfiguration,
+      } = user;
 
-    const demoWorkspaceIds = this.environmentService.get('DEMO_WORKSPACE_IDS');
+      const { workspaceMemberId, userId, workspaceId } =
+        await this.transientTokenService.verifyTransientToken(transientToken);
 
-    if (demoWorkspaceIds.includes(workspaceId)) {
-      throw new UnauthorizedException(
-        'Cannot connect Google account to demo workspace',
+      if (!workspaceId) {
+        throw new AuthException(
+          'Workspace not found',
+          AuthExceptionCode.WORKSPACE_NOT_FOUND,
+        );
+      }
+
+      workspace = await this.workspaceRepository.findOneBy({
+        id: workspaceId,
+      });
+
+      await this.connectedAccountOAuthService.verifyUserCanConnectAccount({
+        userId,
+        workspaceId,
+      });
+
+      const handle = emails[0].value.toLowerCase();
+
+      const connectedAccountId =
+        await this.googleAPIsService.refreshGoogleRefreshToken({
+          handle,
+          userId,
+          workspaceMemberId,
+          workspaceId,
+          accessToken,
+          refreshToken,
+          calendarVisibility,
+          messageVisibility,
+          skipMessageChannelConfiguration,
+        });
+
+      await this.onboardingService.completeOnboardingConnectAccountStep({
+        userId,
+        workspaceId,
+      });
+
+      if (!workspace) {
+        throw new AuthException(
+          'Workspace not found',
+          AuthExceptionCode.WORKSPACE_NOT_FOUND,
+        );
+      }
+
+      const { pathname, searchParams, hash } = parseRelativeUrl(
+        redirectLocation ||
+          getSettingsPath(SettingsPath.AccountsConfiguration, {
+            connectedAccountId,
+          }),
+      );
+
+      const url = this.workspaceDomainsService.buildWorkspaceURL({
+        workspace,
+        pathname,
+        searchParams,
+        hash,
+      });
+
+      return res.redirect(url.toString());
+    } catch (error) {
+      return res.redirect(
+        this.guardRedirectService.getRedirectErrorUrlAndCaptureExceptions({
+          error,
+          workspace: workspace ?? {
+            subdomain: this.twentyConfigService.get('DEFAULT_SUBDOMAIN'),
+            customDomain: null,
+          },
+          pathname: getSettingsPath(SettingsPath.Accounts),
+        }),
       );
     }
-
-    if (!workspaceId) {
-      throw new Error('Workspace not found');
-    }
-
-    await this.googleAPIsService.refreshGoogleRefreshToken({
-      handle: email,
-      workspaceMemberId: workspaceMemberId,
-      workspaceId: workspaceId,
-      accessToken,
-      refreshToken,
-    });
-
-    return res.redirect(
-      `${this.environmentService.get('FRONT_BASE_URL')}/settings/accounts`,
-    );
   }
 }

@@ -1,8 +1,7 @@
-import { createState } from 'twenty-ui';
+import { type Sentry } from '~/generated-metadata/graphql';
+import { createAtomState } from '@/ui/utilities/state/jotai/utils/createAtomState';
 
-import { Sentry } from '~/generated/graphql';
-
-export const sentryConfigState = createState<Sentry | null>({
+export const sentryConfigState = createAtomState<Sentry | null>({
   key: 'sentryConfigState',
   defaultValue: null,
 });

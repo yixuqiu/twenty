@@ -1,67 +1,114 @@
-import { useRecoilState, useSetRecoilState } from 'recoil';
-
-import { useCreateActivityInCache } from '@/activities/hooks/useCreateActivityInCache';
-import { activityIdInDrawerState } from '@/activities/states/activityIdInDrawerState';
 import { activityTargetableEntityArrayState } from '@/activities/states/activityTargetableEntityArrayState';
-import { isActivityInCreateModeState } from '@/activities/states/isActivityInCreateModeState';
+import { StandardObjectNameSingular } from 'twenty-shared/types';
+import { type WorkspaceMember } from '@/workspace-member/types/WorkspaceMember';
+
 import { isUpsertingActivityInDBState } from '@/activities/states/isCreatingActivityInDBState';
-import { temporaryActivityForEditorState } from '@/activities/states/temporaryActivityForEditorState';
-import { viewableActivityIdState } from '@/activities/states/viewableActivityIdState';
-import { ActivityType } from '@/activities/types/Activity';
-import { useRightDrawer } from '@/ui/layout/right-drawer/hooks/useRightDrawer';
-import { RightDrawerHotkeyScope } from '@/ui/layout/right-drawer/types/RightDrawerHotkeyScope';
-import { RightDrawerPages } from '@/ui/layout/right-drawer/types/RightDrawerPages';
-import { useSetHotkeyScope } from '@/ui/utilities/hotkey/hooks/useSetHotkeyScope';
-import { WorkspaceMember } from '@/workspace-member/types/WorkspaceMember';
+import { useSetAtomState } from '@/ui/utilities/state/jotai/hooks/useSetAtomState';
+import { type ActivityTargetableObject } from '@/activities/types/ActivityTargetableEntity';
+import { type Note } from '@/activities/types/Note';
+import { type Task } from '@/activities/types/Task';
+import { useOpenRecordInSidePanel } from '@/side-panel/hooks/useOpenRecordInSidePanel';
+import { useObjectMetadataItems } from '@/object-metadata/hooks/useObjectMetadataItems';
+import { useCreateManyRecords } from '@/object-record/hooks/useCreateManyRecords';
+import { useCreateOneRecord } from '@/object-record/hooks/useCreateOneRecord';
+import { findTargetFieldInfo } from '@/object-record/record-field/ui/utils/junction/findTargetFieldInfo';
+import { useObjectMorphJunctionConfigOrThrow } from '@/object-record/record-field/ui/hooks/useObjectMorphJunctionConfigOrThrow';
+import { isDefined } from 'twenty-shared/utils';
 
-import { ActivityTargetableObject } from '../types/ActivityTargetableEntity';
+export const useOpenCreateActivityDrawer = ({
+  activityObjectNameSingular,
+}: {
+  activityObjectNameSingular:
+    | StandardObjectNameSingular.Note
+    | StandardObjectNameSingular.Task;
+}) => {
+  const { createOneRecord: createOneActivity } = useCreateOneRecord<
+    (Task | Note) & { position: 'first' | 'last' }
+  >({
+    objectNameSingular: activityObjectNameSingular,
+  });
 
-export const useOpenCreateActivityDrawer = () => {
-  const { openRightDrawer } = useRightDrawer();
+  const { objectMetadataItems } = useObjectMetadataItems();
 
-  const setHotkeyScope = useSetHotkeyScope();
+  const morphJunctionConfig = useObjectMorphJunctionConfigOrThrow({
+    objectNameSingular: activityObjectNameSingular,
+  });
 
-  const { createActivityInCache } = useCreateActivityInCache();
+  const { createManyRecords: createActivityTargets } = useCreateManyRecords({
+    objectNameSingular: morphJunctionConfig.junctionObjectMetadata.nameSingular,
+    shouldMatchRootQueryFilter: true,
+  });
 
-  const setActivityTargetableEntityArray = useSetRecoilState(
+  const setActivityTargetableEntityArray = useSetAtomState(
     activityTargetableEntityArrayState,
   );
-  const setViewableActivityId = useSetRecoilState(viewableActivityIdState);
 
-  const setIsCreatingActivity = useSetRecoilState(isActivityInCreateModeState);
-
-  const setTemporaryActivityForEditor = useSetRecoilState(
-    temporaryActivityForEditorState,
-  );
-
-  const setActivityIdInDrawer = useSetRecoilState(activityIdInDrawerState);
-
-  const [, setIsUpsertingActivityInDB] = useRecoilState(
+  const setIsUpsertingActivityInDB = useSetAtomState(
     isUpsertingActivityInDBState,
   );
 
+  const { openRecordInSidePanel } = useOpenRecordInSidePanel();
+
   const openCreateActivityDrawer = async ({
-    type,
     targetableObjects,
     customAssignee,
   }: {
-    type: ActivityType;
     targetableObjects: ActivityTargetableObject[];
     customAssignee?: WorkspaceMember;
   }) => {
-    const { createdActivityInCache } = createActivityInCache({
-      type,
-      targetObject: targetableObjects[0],
-      customAssignee,
+    const activity = await createOneActivity({
+      ...(activityObjectNameSingular === StandardObjectNameSingular.Task
+        ? {
+            assigneeId: customAssignee?.id,
+          }
+        : {}),
+      position: 'last',
     });
 
-    setActivityIdInDrawer(createdActivityInCache.id);
-    setTemporaryActivityForEditor(createdActivityInCache);
-    setIsCreatingActivity(true);
-    setHotkeyScope(RightDrawerHotkeyScope.RightDrawer, { goto: false });
-    setViewableActivityId(createdActivityInCache.id);
-    setActivityTargetableEntityArray(targetableObjects ?? []);
-    openRightDrawer(RightDrawerPages.CreateActivity);
+    const { junctionObjectMetadata, sourceJoinColumnName } =
+      morphJunctionConfig;
+
+    const supportedTargets = targetableObjects.flatMap((targetableObject) => {
+      const targetObjectMetadata = objectMetadataItems.find(
+        (item) =>
+          item.nameSingular === targetableObject.targetObjectNameSingular,
+      );
+      const targetFieldInfo = findTargetFieldInfo(
+        junctionObjectMetadata.fields,
+        targetObjectMetadata?.id ?? '',
+        objectMetadataItems,
+      );
+
+      if (!isDefined(targetFieldInfo?.joinColumnName)) {
+        return [];
+      }
+
+      return [
+        { targetableObject, joinColumnName: targetFieldInfo.joinColumnName },
+      ];
+    });
+
+    if (supportedTargets.length > 0) {
+      const recordsToCreate = supportedTargets.map(
+        ({ targetableObject, joinColumnName }) => ({
+          [sourceJoinColumnName]: activity.id,
+          [joinColumnName]: targetableObject.id,
+        }),
+      );
+
+      await createActivityTargets({ recordsToCreate, upsert: true });
+    }
+
+    setActivityTargetableEntityArray(
+      supportedTargets.map(({ targetableObject }) => targetableObject),
+    );
+
+    openRecordInSidePanel({
+      recordId: activity.id,
+      objectNameSingular: activityObjectNameSingular,
+      isNewRecord: true,
+    });
+
     setIsUpsertingActivityInDB(false);
   };
 

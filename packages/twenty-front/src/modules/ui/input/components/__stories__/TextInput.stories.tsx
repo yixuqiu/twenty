@@ -1,8 +1,11 @@
+import { type Meta, type StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
-import { Meta, StoryObj } from '@storybook/react';
-import { ComponentDecorator } from 'twenty-ui';
+import { expect, fn, userEvent, within } from 'storybook/test';
 
-import { TextInput, TextInputComponentProps } from '../TextInput';
+import { TextInput } from '@/ui/input/components/TextInput';
+import { type TextInputComponentProps } from '@/ui/input/types/TextInputComponentProps';
+import { Text } from 'twenty-ui/primitives/typography';
+import { ComponentDecorator } from 'twenty-ui/testing';
 
 type RenderProps = TextInputComponentProps;
 
@@ -13,7 +16,7 @@ const Render = (args: RenderProps) => {
     setValue(text);
   };
 
-  // eslint-disable-next-line react/jsx-props-no-spreading
+  // oxlint-disable-next-line react/jsx-props-no-spreading
   return <TextInput {...args} value={value} onChange={handleChange} />;
 };
 
@@ -36,4 +39,116 @@ export const Filled: Story = {
 
 export const Disabled: Story = {
   args: { disabled: true, value: 'Tim' },
+};
+
+export const AutoGrow: Story = {
+  args: { autoGrow: true, value: 'Tim' },
+};
+
+export const AutoGrowWithPlaceholder: Story = {
+  args: { autoGrow: true, placeholder: 'Tim' },
+};
+
+export const Small: Story = {
+  args: { sizeVariant: 'sm', value: 'Tim' },
+};
+
+export const AutoGrowSmall: Story = {
+  args: { autoGrow: true, sizeVariant: 'sm', value: 'Tim' },
+};
+
+export const WithLeftAdornment: Story = {
+  args: {
+    leftAdornment: 'https://',
+  },
+};
+
+export const WithRightAdornment: Story = {
+  args: {
+    rightAdornment: '@twenty.com',
+  },
+};
+
+export const WithError: Story = {
+  args: {
+    value: 'moblank',
+    label: 'Subdomain',
+    hint: 'Choose your workspace address',
+    rightAdornment: '.twenty.com',
+    error: 'Subdomain already taken',
+    fullWidth: true,
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const input = canvas.getByRole('textbox', { name: 'Subdomain' });
+    const hint = canvas.getByText('Choose your workspace address');
+    const errorMessage = canvas.getByText('Subdomain already taken');
+
+    await expect(errorMessage).toBeVisible();
+    await expect(
+      errorMessage.getBoundingClientRect().top,
+    ).toBeGreaterThanOrEqual(input.getBoundingClientRect().bottom);
+    await expect(
+      errorMessage.getBoundingClientRect().top,
+    ).toBeGreaterThanOrEqual(hint.getBoundingClientRect().bottom);
+  },
+};
+
+export const ForwardsNativeInputProps: Story = {
+  args: {
+    label: 'Address',
+    hint: 'Use your full address.',
+    value: '',
+    onChange: fn(),
+    onFocus: fn(),
+    onKeyDown: fn(),
+    inputProps: {
+      id: 'native-address-input',
+      role: 'combobox',
+      'aria-controls': 'address-options',
+      'aria-describedby': 'address-field-context',
+      onChange: fn(),
+      onFocus: fn(),
+      onKeyDown: fn(),
+    },
+  },
+  render: (args) => (
+    <>
+      <Text id="address-field-context">Your billing location.</Text>
+      <Render
+        // oxlint-disable-next-line react/jsx-props-no-spreading
+        {...args}
+      />
+    </>
+  ),
+  play: async ({ args, canvasElement }) => {
+    const canvas = within(canvasElement);
+    const input = canvas.getByRole('combobox', { name: 'Address' });
+
+    expect(input).toHaveAttribute('id', 'native-address-input');
+    expect(input).toHaveAttribute('aria-controls', 'address-options');
+    expect(input).toHaveAccessibleDescription(
+      'Your billing location. Use your full address.',
+    );
+
+    await userEvent.click(canvas.getByText('Address'));
+
+    expect(input).toHaveFocus();
+    expect(args.onFocus).toHaveBeenCalledTimes(1);
+    expect(args.inputProps?.onFocus).toHaveBeenCalledTimes(1);
+
+    await userEvent.type(input, 'Paris');
+
+    expect(input).toHaveValue('Paris');
+    expect(args.onChange).toHaveBeenLastCalledWith('Paris');
+    expect(args.inputProps?.onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ target: input }),
+    );
+    expect(args.onKeyDown).toHaveBeenLastCalledWith(
+      expect.objectContaining({ key: 's' }),
+    );
+    expect(args.inputProps?.onKeyDown).toHaveBeenLastCalledWith(
+      expect.objectContaining({ key: 's' }),
+    );
+  },
 };

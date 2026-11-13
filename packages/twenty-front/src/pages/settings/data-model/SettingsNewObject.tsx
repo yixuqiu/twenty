@@ -1,98 +1,119 @@
-import { FormProvider, useForm } from 'react-hook-form';
-import { useNavigate } from 'react-router-dom';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { IconSettings } from 'twenty-ui';
-import { z } from 'zod';
-
 import { useCreateOneObjectMetadataItem } from '@/object-metadata/hooks/useCreateOneObjectMetadataItem';
-import { getObjectSlug } from '@/object-metadata/utils/getObjectSlug';
+import { objectMetadataItemsSelector } from '@/object-metadata/states/objectMetadataItemsSelector';
 import { SaveAndCancelButtons } from '@/settings/components/SaveAndCancelButtons/SaveAndCancelButtons';
-import { SettingsHeaderContainer } from '@/settings/components/SettingsHeaderContainer';
 import { SettingsPageContainer } from '@/settings/components/SettingsPageContainer';
+import { SETTINGS_OBJECT_MODEL_IS_LABEL_SYNCED_WITH_NAME_LABEL_DEFAULT_VALUE } from '@/settings/constants/SettingsObjectModel';
+import { SettingsDataModelObjectAboutForm } from '@/settings/data-model/objects/forms/components/SettingsDataModelObjectAboutForm';
+import { getConflictingObjectMetadataItem } from '@/settings/data-model/utils/getConflictingObjectMetadataItem';
 import {
-  SettingsDataModelObjectAboutForm,
+  type SettingsDataModelObjectAboutFormValues,
   settingsDataModelObjectAboutFormSchema,
-} from '@/settings/data-model/objects/forms/components/SettingsDataModelObjectAboutForm';
-import { settingsCreateObjectInputSchema } from '@/settings/data-model/validation-schemas/settingsCreateObjectInputSchema';
-import { getSettingsPagePath } from '@/settings/utils/getSettingsPagePath';
-import { SettingsPath } from '@/types/SettingsPath';
-import { H2Title } from '@/ui/display/typography/components/H2Title';
-import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
-import { SubMenuTopBarContainer } from '@/ui/layout/page/SubMenuTopBarContainer';
-import { Section } from '@/ui/layout/section/components/Section';
-import { Breadcrumb } from '@/ui/navigation/bread-crumb/components/Breadcrumb';
-
-const newObjectFormSchema = settingsDataModelObjectAboutFormSchema;
-
-type SettingsDataModelNewObjectFormValues = z.infer<typeof newObjectFormSchema>;
+} from '@/settings/data-model/validation-schemas/settingsDataModelObjectAboutFormSchema';
+import { isDDLLockedState } from '@/client-config/states/isDDLLockedState';
+import { SettingsPageLayout } from '@/settings/components/layout/SettingsPageLayout';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useLingui } from '@lingui/react/macro';
+import { useState } from 'react';
+import { FormProvider, useForm } from 'react-hook-form';
+import { SettingsPath } from 'twenty-shared/types';
+import { getSettingsPath, isDefined } from 'twenty-shared/utils';
+import { useNavigateSettings } from '~/hooks/useNavigateSettings';
+import { Section } from 'twenty-ui/components/layout';
 
 export const SettingsNewObject = () => {
-  const navigate = useNavigate();
-  const { enqueueSnackBar } = useSnackBar();
-
+  const { t } = useLingui();
+  const navigate = useNavigateSettings();
+  const [isLoading, setIsLoading] = useState(false);
   const { createOneObjectMetadataItem } = useCreateOneObjectMetadataItem();
+  const isDDLLocked = useAtomStateValue(isDDLLockedState);
+  const objectMetadataItems = useAtomStateValue(objectMetadataItemsSelector);
 
-  const settingsObjectsPagePath = getSettingsPagePath(SettingsPath.Objects);
-
-  const formConfig = useForm<SettingsDataModelNewObjectFormValues>({
-    mode: 'onTouched',
-    resolver: zodResolver(newObjectFormSchema),
+  const formConfig = useForm<SettingsDataModelObjectAboutFormValues>({
+    mode: 'onChange',
+    resolver: zodResolver(settingsDataModelObjectAboutFormSchema),
+    defaultValues: {
+      color: 'gray',
+      isLabelSyncedWithName:
+        SETTINGS_OBJECT_MODEL_IS_LABEL_SYNCED_WITH_NAME_LABEL_DEFAULT_VALUE,
+    },
   });
 
-  const canSave = formConfig.formState.isValid;
+  const nameSingular = formConfig.watch('nameSingular');
+  const namePlural = formConfig.watch('namePlural');
 
-  const handleSave = async () => {
-    const formValues = formConfig.getValues();
+  const conflictingObjectMetadataItem = getConflictingObjectMetadataItem({
+    objectMetadataItems,
+    nameSingular,
+    namePlural,
+  });
 
-    try {
-      const { data: response } = await createOneObjectMetadataItem(
-        settingsCreateObjectInputSchema.parse(formValues),
-      );
+  const hasNameConflict = isDefined(conflictingObjectMetadataItem);
 
+  const { isValid, isSubmitting } = formConfig.formState;
+  const canSave = isValid && !isSubmitting && !hasNameConflict && !isDDLLocked;
+
+  const handleSave = async (
+    formValues: SettingsDataModelObjectAboutFormValues,
+  ) => {
+    setIsLoading(true);
+
+    const result = await createOneObjectMetadataItem(formValues);
+
+    if (result.status === 'successful') {
+      const response = result.response.data;
       navigate(
+        response ? SettingsPath.ObjectDetail : SettingsPath.Objects,
         response
-          ? `${settingsObjectsPagePath}/${getObjectSlug(
-              response.createOneObject,
-            )}`
-          : settingsObjectsPagePath,
+          ? { objectNamePlural: response.createOneObject.namePlural }
+          : undefined,
       );
-    } catch (error) {
-      enqueueSnackBar((error as Error).message, {
-        variant: 'error',
-      });
     }
+
+    setIsLoading(false);
   };
 
   return (
-    // eslint-disable-next-line react/jsx-props-no-spreading
+    // oxlint-disable-next-line react/jsx-props-no-spreading
     <FormProvider {...formConfig}>
-      <SubMenuTopBarContainer Icon={IconSettings} title="Settings">
+      <SettingsPageLayout
+        title={t`New Object`}
+        links={[
+          {
+            children: t`Workspace`,
+            href: getSettingsPath(SettingsPath.General),
+          },
+          {
+            children: t`Objects`,
+            href: getSettingsPath(SettingsPath.Objects),
+          },
+          { children: t`New` },
+        ]}
+        actionButton={
+          <SaveAndCancelButtons
+            isSaveDisabled={!canSave}
+            isLoading={isLoading}
+            isCancelDisabled={isSubmitting}
+            onCancel={() => navigate(SettingsPath.Objects)}
+            onSave={formConfig.handleSubmit(handleSave)}
+          />
+        }
+      >
         <SettingsPageContainer>
-          <SettingsHeaderContainer>
-            <Breadcrumb
-              links={[
-                {
-                  children: 'Objects',
-                  href: settingsObjectsPagePath,
-                },
-                { children: 'New' },
-              ]}
+          <Section.Root>
+            <Section.Header
+              title={t`About`}
+              description={t`Define the name and description of your object`}
             />
-            <SaveAndCancelButtons
-              isSaveDisabled={!canSave}
-              onCancel={() => navigate(settingsObjectsPagePath)}
-              onSave={handleSave}
+            <SettingsDataModelObjectAboutForm
+              onNewDirtyField={() => formConfig.trigger()}
+              conflictingObjectMetadataItem={
+                !isLoading ? conflictingObjectMetadataItem : undefined
+              }
             />
-          </SettingsHeaderContainer>
-          <Section>
-            <H2Title
-              title="About"
-              description="Name in both singular (e.g., 'Invoice') and plural (e.g., 'Invoices') forms."
-            />
-            <SettingsDataModelObjectAboutForm />
-          </Section>
+          </Section.Root>
         </SettingsPageContainer>
-      </SubMenuTopBarContainer>
+      </SettingsPageLayout>
     </FormProvider>
   );
 };

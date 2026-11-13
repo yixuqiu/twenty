@@ -1,16 +1,26 @@
-import React from 'react';
-import styled from '@emotion/styled';
+import { styled } from '@linaria/react';
 import { motion } from 'framer-motion';
-
-import { AnimatedEaseInOut } from '@/ui/utilities/animation/components/AnimatedEaseInOut';
+import Linkify from 'linkify-react';
+import { Collapsible } from 'twenty-ui/primitives/layout';
+import { themeCssVariables } from 'twenty-ui/theme';
 
 const StyledThreadMessageBody = styled(motion.div)`
-  color: ${({ theme }) => theme.font.color.primary};
-  display: flex;
-  flex-direction: column;
-  margin-top: ${({ theme }) => theme.spacing(4)};
-  white-space: pre-line;
+  color: ${themeCssVariables.font.color.primary};
+  margin-top: ${themeCssVariables.spacing[4]};
   overflow-wrap: break-word;
+  white-space: pre-line;
+
+  a {
+    color: ${themeCssVariables.font.color.primary};
+
+    text-decoration: underline;
+    text-decoration-color: ${themeCssVariables.font.color.primary};
+
+    &:hover {
+      color: ${themeCssVariables.font.color.tertiary};
+      text-decoration-color: ${themeCssVariables.border.color.strong};
+    }
+  }
 `;
 
 type EmailThreadMessageBodyProps = {
@@ -23,8 +33,19 @@ export const EmailThreadMessageBody = ({
   isDisplayed,
 }: EmailThreadMessageBodyProps) => {
   return (
-    <AnimatedEaseInOut isOpen={isDisplayed} duration="fast">
-      <StyledThreadMessageBody>{body}</StyledThreadMessageBody>
-    </AnimatedEaseInOut>
+    <Collapsible.Root open={isDisplayed}>
+      <Collapsible.Panel duration="fast">
+        <StyledThreadMessageBody>
+          <Linkify
+            options={{
+              target: '_blank',
+              rel: 'noopener noreferrer',
+            }}
+          >
+            {body}
+          </Linkify>
+        </StyledThreadMessageBody>
+      </Collapsible.Panel>
+    </Collapsible.Root>
   );
 };

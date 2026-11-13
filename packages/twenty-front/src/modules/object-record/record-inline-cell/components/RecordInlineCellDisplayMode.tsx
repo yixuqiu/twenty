@@ -1,83 +1,130 @@
-import { css } from '@emotion/react';
-import styled from '@emotion/styled';
+import { styled } from '@linaria/react';
+
+import { FieldContext } from '@/object-record/record-field/ui/contexts/FieldContext';
+import { useGetSecondaryFieldButton } from '@/object-record/record-field/ui/hooks/useGetSecondaryFieldButton';
+import { useIsFieldEmpty } from '@/object-record/record-field/ui/hooks/useIsFieldEmpty';
+import { useIsFieldInputOnly } from '@/object-record/record-field/ui/hooks/useIsFieldInputOnly';
+import {
+  useRecordInlineCellContext,
+  type RecordInlineCellContextProps,
+} from '@/object-record/record-inline-cell/components/RecordInlineCellContext';
+import { RecordInlineCellButton } from '@/object-record/record-inline-cell/components/RecordInlineCellEditButton';
+import { useLingui } from '@lingui/react/macro';
+import { useContext } from 'react';
+import { themeCssVariables } from 'twenty-ui/theme';
 
 const StyledRecordInlineCellNormalModeOuterContainer = styled.div<
   Pick<
-    RecordInlineCellDisplayModeProps,
-    | 'isDisplayModeContentEmpty'
-    | 'disableHoverEffect'
-    | 'isDisplayModeFixHeight'
-    | 'isHovered'
-  >
+    RecordInlineCellContextProps,
+    'isDisplayModeFixHeight' | 'disableHoverEffect' | 'readonly'
+  > & { isHovered?: boolean }
 >`
   align-items: center;
-  border-radius: ${({ theme }) => theme.border.radius.sm};
+  background-color: ${({ isHovered, readonly, disableHoverEffect }) =>
+    isHovered && !readonly && !disableHoverEffect
+      ? themeCssVariables.background.transparent.light
+      : 'transparent'};
+  border-radius: ${themeCssVariables.border.radius.md};
+  cursor: ${({ isHovered, readonly }) =>
+    isHovered && !readonly ? 'pointer' : 'default'};
   display: flex;
   height: ${({ isDisplayModeFixHeight }) =>
     isDisplayModeFixHeight ? '16px' : 'auto'};
   min-height: 16px;
+  outline: 1px solid
+    ${({ isHovered, readonly }) =>
+      isHovered && readonly
+        ? themeCssVariables.border.color.medium
+        : 'transparent'};
   overflow: hidden;
-  padding: ${({ theme }) => theme.spacing(1)};
-
-  ${(props) => {
-    if (props.isHovered === true) {
-      return css`
-        background-color: ${!props.disableHoverEffect
-          ? props.theme.background.transparent.light
-          : 'transparent'};
-
-        cursor: pointer;
-      `;
-    }
-  }}
+  padding-left: ${themeCssVariables.spacing[1]};
+  padding-right: ${themeCssVariables.spacing[1]};
 `;
 
 const StyledRecordInlineCellNormalModeInnerContainer = styled.div`
+  align-content: center;
   align-items: center;
-  color: ${({ theme }) => theme.font.color.primary};
-  font-size: 'inherit';
-  font-weight: 'inherit';
-
+  color: ${themeCssVariables.font.color.primary};
   height: fit-content;
 
   overflow: hidden;
+  padding-bottom: 2px;
+  padding-top: 2px;
 
   text-overflow: ellipsis;
   white-space: nowrap;
 `;
 
 const StyledEmptyField = styled.div`
-  color: ${({ theme }) => theme.font.color.light};
+  align-items: center;
+  color: ${themeCssVariables.font.color.light};
+  display: flex;
+  height: 20px;
 `;
-
-type RecordInlineCellDisplayModeProps = {
-  isDisplayModeContentEmpty?: boolean;
-  disableHoverEffect?: boolean;
-  isDisplayModeFixHeight?: boolean;
-  isHovered?: boolean;
-  emptyPlaceholder?: string;
-};
 
 export const RecordInlineCellDisplayMode = ({
   children,
-  isDisplayModeContentEmpty,
-  disableHoverEffect,
-  isDisplayModeFixHeight,
-  emptyPlaceholder = 'Empty',
+  onClick,
   isHovered,
-}: React.PropsWithChildren<RecordInlineCellDisplayModeProps>) => (
-  <StyledRecordInlineCellNormalModeOuterContainer
-    isDisplayModeContentEmpty={isDisplayModeContentEmpty}
-    disableHoverEffect={disableHoverEffect}
-    isDisplayModeFixHeight={isDisplayModeFixHeight}
-    isHovered={isHovered}
-  >
-    <StyledRecordInlineCellNormalModeInnerContainer>
-      {isDisplayModeContentEmpty || !children ? (
-        <StyledEmptyField>{emptyPlaceholder}</StyledEmptyField>
-      ) : (
-        children
+}: React.PropsWithChildren<{
+  isHovered: boolean;
+  onClick?: () => void;
+}>) => {
+  const { t } = useLingui();
+
+  const { editModeContentOnly, label, buttonIcon, readonly } =
+    useRecordInlineCellContext();
+
+  const { isForbidden } = useContext(FieldContext);
+
+  const isFieldEmpty = useIsFieldEmpty();
+  const showEditButton =
+    buttonIcon &&
+    isHovered &&
+    !readonly &&
+    !isFieldEmpty &&
+    !editModeContentOnly;
+
+  const secondaryButtons = useGetSecondaryFieldButton();
+
+  const showSecondaryButtons =
+    isHovered && !isFieldEmpty && !editModeContentOnly && !isForbidden;
+
+  const isFieldInputOnly = useIsFieldInputOnly();
+
+  const emptyPlaceHolder = label ?? t`Empty`;
+
+  const shouldShowValue = !isFieldEmpty || isFieldInputOnly || isForbidden;
+
+  const shouldShowEmptyPlaceholder = isFieldEmpty && !isForbidden;
+
+  return (
+    <>
+      <StyledRecordInlineCellNormalModeOuterContainer
+        isHovered={isHovered}
+        readonly={readonly}
+        onClick={onClick}
+      >
+        <StyledRecordInlineCellNormalModeInnerContainer>
+          {shouldShowValue ? (
+            children
+          ) : shouldShowEmptyPlaceholder ? (
+            <StyledEmptyField>{emptyPlaceHolder}</StyledEmptyField>
+          ) : null}
+        </StyledRecordInlineCellNormalModeInnerContainer>
+      </StyledRecordInlineCellNormalModeOuterContainer>
+      {showSecondaryButtons &&
+        secondaryButtons.map((button) => (
+          <RecordInlineCellButton
+            key={button.ariaLabel}
+            Icon={button.Icon}
+            onClick={button.onClick}
+            ariaLabel={button.ariaLabel}
+          />
+        ))}
+      {showEditButton && (
+        <RecordInlineCellButton Icon={buttonIcon} onClick={onClick} />
       )}
-    </StyledRecordInlineCellNormalModeInnerContainer>
-  </StyledRecordInlineCellNormalModeOuterContainer>
-);
+    </>
+  );
+};

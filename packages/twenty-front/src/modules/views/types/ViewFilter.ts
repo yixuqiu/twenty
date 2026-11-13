@@ -1,13 +1,16 @@
-import { ViewFilterOperand } from './ViewFilterOperand';
+import { type ViewFilterOperand } from 'twenty-shared/types';
 
 export type ViewFilter = {
-  __typename: 'ViewFilter';
   id: string;
   fieldMetadataId: string;
   operand: ViewFilterOperand;
   value: string;
-  displayValue: string;
+  displayValue?: string;
   createdAt?: string;
   updatedAt?: string;
   viewId?: string;
+  viewFilterGroupId?: string | null;
+  positionInViewFilterGroup?: number | null;
+  subFieldName?: string | null;
+  relationTargetFieldMetadataId?: string | null;
 };

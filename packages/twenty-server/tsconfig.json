@@ -10,28 +10,33 @@
     "allowSyntheticDefaultImports": true,
     "allowUnreachableCode": false,
     "esModuleInterop": true,
-    "target": "es2017",
+    "target": "es2018",
+    "lib": ["es2020", "dom", "dom.asynciterable"],
     "sourceMap": true,
+    "inlineSources": true,
     "outDir": "./dist",
     "incremental": true,
     "skipLibCheck": true,
     "strictNullChecks": true,
     "alwaysStrict": true,
-    "noImplicitAny": false,
+    "noImplicitAny": true,
     "strictBindCallApply": false,
     "forceConsistentCasingInFileNames": false,
     "noFallthroughCasesInSwitch": false,
     "resolveJsonModule": true,
     "types": ["jest", "node"],
     "paths": {
-      "src/*": ["packages/twenty-server/src/*"],
-      "test/*": ["packages/twenty-server/test/*"],
-      "twenty-emails": ["packages/twenty-emails/src/index.ts"]
+      "src/*": ["./src/*"],
+      "test/*": ["./test/*"]
     }
   },
   "ts-node": {
     "files": true,
     "require": ["tsconfig-paths/register"]
   },
-  "exclude": ["dist"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/engine/metadata-modules/front-component/constants/seed-project"
+  ]
 }

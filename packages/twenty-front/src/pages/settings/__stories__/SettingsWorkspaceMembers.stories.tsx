@@ -1,20 +1,18 @@
-import { Meta, StoryObj } from '@storybook/react';
-import { within } from '@storybook/test';
+import { type Meta, type StoryObj } from '@storybook/react-vite';
 
 import {
   PageDecorator,
-  PageDecoratorArgs,
+  type PageDecoratorArgs,
 } from '~/testing/decorators/PageDecorator';
 import { graphqlMocks } from '~/testing/graphqlMocks';
-import { sleep } from '~/testing/sleep';
 
-import { SettingsWorkspaceMembers } from '../SettingsWorkspaceMembers';
+import { SettingsWorkspaceMembers } from '~/pages/settings/members/SettingsWorkspaceMembers';
 
 const meta: Meta<PageDecoratorArgs> = {
   title: 'Pages/Settings/SettingsWorkspaceMembers',
   component: SettingsWorkspaceMembers,
   decorators: [PageDecorator],
-  args: { routePath: '/settings/workspace-members' },
+  args: { routePath: '/settings/members' },
   parameters: {
     msw: graphqlMocks,
   },
@@ -23,13 +21,3 @@ const meta: Meta<PageDecoratorArgs> = {
 export default meta;
 
 export type Story = StoryObj<typeof SettingsWorkspaceMembers>;
-
-export const Default: Story = {
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-
-    await sleep(1000);
-
-    await canvas.getByRole('button', { name: 'Copy link' });
-  },
-};

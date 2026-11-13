@@ -1,54 +1,58 @@
-import { useNavigate } from 'react-router-dom';
-import styled from '@emotion/styled';
-import { IconGoogle } from 'twenty-ui';
-
-import { ConnectedAccount } from '@/accounts/types/ConnectedAccount';
+import { type ConnectedAccount } from '@/accounts/types/ConnectedAccount';
 import { SettingsAccountsListEmptyStateCard } from '@/settings/accounts/components/SettingsAccountsListEmptyStateCard';
-import { SettingsAccountsRowDropdownMenu } from '@/settings/accounts/components/SettingsAccountsRowDropdownMenu';
-import { getSettingsPagePath } from '@/settings/utils/getSettingsPagePath';
-import { SettingsPath } from '@/types/SettingsPath';
-import { Status } from '@/ui/display/status/components/Status';
+import { SettingsConnectedAccountsTableHeader } from '@/settings/accounts/components/SettingsConnectedAccountsTableHeader';
+import { SettingsConnectedAccountsTableRow } from '@/settings/components/SettingsConnectedAccountsTableRow';
+import { Table } from '@/ui/layout/table/components/Table';
+import { TableFooter } from '@/ui/layout/table/components/TableFooter';
+import { styled } from '@linaria/react';
+import { SettingsPath } from 'twenty-shared/types';
 
-import { SettingsListCard } from '../../components/SettingsListCard';
+import { useLingui } from '@lingui/react/macro';
+import { Section } from 'twenty-ui/components/layout';
+import { IconPlus } from 'twenty-ui/icon';
 
-const StyledRowRightContainer = styled.div`
-  align-items: center;
-  display: flex;
-  gap: ${({ theme }) => theme.spacing(1)};
+import { Button } from 'twenty-ui/primitives/input';
+import { themeCssVariables } from 'twenty-ui/theme';
+import { useNavigateSettings } from '~/hooks/useNavigateSettings';
+
+const StyledTableRows = styled.div`
+  padding-bottom: ${themeCssVariables.spacing[2]};
+  padding-top: ${themeCssVariables.spacing[2]};
 `;
 
 export const SettingsAccountsConnectedAccountsListCard = ({
   accounts,
-  loading,
 }: {
   accounts: ConnectedAccount[];
-  loading?: boolean;
 }) => {
-  const navigate = useNavigate();
+  const { t } = useLingui();
+  const navigateSettings = useNavigateSettings();
 
   if (!accounts.length) {
     return <SettingsAccountsListEmptyStateCard />;
   }
 
   return (
-    <SettingsListCard
-      items={accounts}
-      getItemLabel={(account) => account.handle}
-      isLoading={loading}
-      RowIcon={IconGoogle}
-      RowRightComponent={({ item: account }) => (
-        <StyledRowRightContainer>
-          {account.authFailedAt && (
-            <Status color="red" text="Sync failed" weight="medium" />
-          )}
-          <SettingsAccountsRowDropdownMenu account={account} />
-        </StyledRowRightContainer>
-      )}
-      hasFooter
-      footerButtonLabel="Add account"
-      onFooterButtonClick={() =>
-        navigate(getSettingsPagePath(SettingsPath.NewAccount))
-      }
-    />
+    <Section.Root>
+      <Table>
+        <SettingsConnectedAccountsTableHeader />
+        <StyledTableRows>
+          {accounts.map((account) => (
+            <SettingsConnectedAccountsTableRow
+              key={account.id}
+              account={account}
+            />
+          ))}
+        </StyledTableRows>
+      </Table>
+      <TableFooter>
+        <Button
+          startIcon={<IconPlus />}
+          size="sm"
+          onClick={() => navigateSettings(SettingsPath.NewAccount)}
+          variant="outline"
+        >{t`Add account`}</Button>
+      </TableFooter>
+    </Section.Root>
   );
 };

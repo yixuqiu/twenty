@@ -1,41 +1,42 @@
+import { styled } from '@linaria/react';
 import {
-  ChangeEvent,
-  ClipboardEvent,
   useEffect,
   useRef,
   useState,
+  type ChangeEvent,
+  type ClipboardEvent,
 } from 'react';
-import styled from '@emotion/styled';
 import { Key } from 'ts-key-enum';
+import { type FieldDoubleText } from '@/object-record/record-field/ui/types/FieldDoubleText';
 
-import { FieldDoubleText } from '@/object-record/record-field/types/FieldDoubleText';
-import { useScopedHotkeys } from '@/ui/utilities/hotkey/hooks/useScopedHotkeys';
+import { FieldInputContainer } from '@/ui/field/input/components/FieldInputContainer';
+import { useHotkeysOnFocusedElement } from '@/ui/utilities/hotkey/hooks/useHotkeysOnFocusedElement';
 import { useListenClickOutside } from '@/ui/utilities/pointer-event/hooks/useListenClickOutside';
-import { isDefined } from '~/utils/isDefined';
-
+import { isDefined } from 'twenty-shared/utils';
+import { doNotTranslate } from 'twenty-shared/i18n';
+import { splitFullName } from '~/utils/format/splitFullName';
+import { turnIntoEmptyStringIfWhitespacesOnly } from '~/utils/string/turnIntoEmptyStringIfWhitespacesOnly';
 import { StyledTextInput } from './TextInput';
+import { themeCssVariables } from 'twenty-ui/theme';
 
 const StyledContainer = styled.div`
-  align-items: center;
   display: flex;
   justify-content: space-between;
-
-  input {
-    width: ${({ theme }) => theme.spacing(24)};
-  }
+  width: 100%;
 
   & > input:last-child {
-    border-left: 1px solid ${({ theme }) => theme.border.color.medium};
-    padding-left: ${({ theme }) => theme.spacing(2)};
+    border-left: 1px solid ${themeCssVariables.border.color.strong};
+    padding-left: ${themeCssVariables.spacing[2]};
   }
 `;
 
 type DoubleTextInputProps = {
+  instanceId: string;
   firstValue: string;
   secondValue: string;
   firstValuePlaceholder: string;
   secondValuePlaceholder: string;
-  hotkeyScope: string;
+  selectOnFocus?: boolean;
   onEnter: (newDoubleTextValue: FieldDoubleText) => void;
   onEscape: (newDoubleTextValue: FieldDoubleText) => void;
   onTab?: (newDoubleTextValue: FieldDoubleText) => void;
@@ -49,11 +50,12 @@ type DoubleTextInputProps = {
 };
 
 export const DoubleTextInput = ({
+  instanceId,
   firstValue,
   secondValue,
   firstValuePlaceholder,
   secondValuePlaceholder,
-  hotkeyScope,
+  selectOnFocus = false,
   onClickOutside,
   onEnter,
   onEscape,
@@ -89,33 +91,33 @@ export const DoubleTextInput = ({
 
   const [focusPosition, setFocusPosition] = useState<'left' | 'right'>('left');
 
-  useScopedHotkeys(
-    Key.Enter,
-    () => {
+  useHotkeysOnFocusedElement({
+    keys: [Key.Enter],
+    callback: () => {
       onEnter({
         firstValue: firstInternalValue,
         secondValue: secondInternalValue,
       });
     },
-    hotkeyScope,
-    [onEnter, firstInternalValue, secondInternalValue],
-  );
+    focusId: instanceId,
+    dependencies: [onEnter, firstInternalValue, secondInternalValue],
+  });
 
-  useScopedHotkeys(
-    [Key.Escape],
-    () => {
+  useHotkeysOnFocusedElement({
+    keys: [Key.Escape],
+    callback: () => {
       onEscape({
         firstValue: firstInternalValue,
         secondValue: secondInternalValue,
       });
     },
-    hotkeyScope,
-    [onEscape, firstInternalValue, secondInternalValue],
-  );
+    focusId: instanceId,
+    dependencies: [onEscape, firstInternalValue, secondInternalValue],
+  });
 
-  useScopedHotkeys(
-    'tab',
-    () => {
+  useHotkeysOnFocusedElement({
+    keys: ['tab'],
+    callback: () => {
       if (focusPosition === 'left') {
         setFocusPosition('right');
         secondValueInputRef.current?.focus();
@@ -126,13 +128,18 @@ export const DoubleTextInput = ({
         });
       }
     },
-    hotkeyScope,
-    [onTab, firstInternalValue, secondInternalValue, focusPosition],
-  );
+    focusId: instanceId,
+    dependencies: [
+      onTab,
+      firstInternalValue,
+      secondInternalValue,
+      focusPosition,
+    ],
+  });
 
-  useScopedHotkeys(
-    'shift+tab',
-    () => {
+  useHotkeysOnFocusedElement({
+    keys: ['shift+tab'],
+    callback: () => {
       if (focusPosition === 'right') {
         setFocusPosition('left');
         firstValueInputRef.current?.focus();
@@ -143,9 +150,14 @@ export const DoubleTextInput = ({
         });
       }
     },
-    hotkeyScope,
-    [onShiftTab, firstInternalValue, secondInternalValue, focusPosition],
-  );
+    focusId: instanceId,
+    dependencies: [
+      onShiftTab,
+      firstInternalValue,
+      secondInternalValue,
+      focusPosition,
+    ],
+  });
 
   useListenClickOutside({
     refs: [containerRef],
@@ -156,6 +168,7 @@ export const DoubleTextInput = ({
       });
     },
     enabled: isDefined(onClickOutside),
+    listenerId: 'double-text-input',
   });
 
   const handleOnPaste = (event: ClipboardEvent<HTMLInputElement>) => {
@@ -165,39 +178,78 @@ export const DoubleTextInput = ({
 
     event.preventDefault();
 
-    const name = event.clipboardData.getData('Text');
+    const name = event.clipboardData.getData(doNotTranslate('Text'));
 
-    const splittedName = name.split(' ');
+    const splittedName = splitFullName(name);
 
-    onPaste?.({ firstValue: splittedName[0], secondValue: splittedName[1] });
+    onPaste?.({
+      firstValue: splittedName[0],
+      secondValue: splittedName[1],
+    });
+  };
+
+  const handleClickToPreventParentClickEvents = (
+    event: React.MouseEvent<HTMLInputElement>,
+  ) => {
+    event.stopPropagation();
+    event.preventDefault();
+    if (selectOnFocus) {
+      event.currentTarget.select();
+    }
   };
 
   return (
-    <StyledContainer ref={containerRef}>
-      <StyledTextInput
-        autoComplete="off"
-        autoFocus
-        onFocus={() => setFocusPosition('left')}
-        ref={firstValueInputRef}
-        placeholder={firstValuePlaceholder}
-        value={firstInternalValue}
-        onChange={(event: ChangeEvent<HTMLInputElement>) => {
-          handleChange(event.target.value, secondInternalValue);
-        }}
-        onPaste={(event: ClipboardEvent<HTMLInputElement>) =>
-          handleOnPaste(event)
-        }
-      />
-      <StyledTextInput
-        autoComplete="off"
-        onFocus={() => setFocusPosition('right')}
-        ref={secondValueInputRef}
-        placeholder={secondValuePlaceholder}
-        value={secondInternalValue}
-        onChange={(event: ChangeEvent<HTMLInputElement>) => {
-          handleChange(firstInternalValue, event.target.value);
-        }}
-      />
-    </StyledContainer>
+    <FieldInputContainer>
+      <StyledContainer ref={containerRef}>
+        <StyledTextInput
+          autoComplete="off"
+          autoFocus
+          onFocus={(event) => {
+            setFocusPosition('left');
+            if (selectOnFocus) {
+              event.currentTarget.select();
+            }
+          }}
+          ref={firstValueInputRef}
+          placeholder={firstValuePlaceholder}
+          value={firstInternalValue}
+          onChange={(event: ChangeEvent<HTMLInputElement>) => {
+            handleChange(
+              turnIntoEmptyStringIfWhitespacesOnly(event.target.value),
+              secondInternalValue,
+            );
+          }}
+          onPaste={(event: ClipboardEvent<HTMLInputElement>) =>
+            handleOnPaste(event)
+          }
+          onClick={handleClickToPreventParentClickEvents}
+          onMouseUp={
+            selectOnFocus ? handleClickToPreventParentClickEvents : undefined
+          }
+        />
+        <StyledTextInput
+          autoComplete="off"
+          onFocus={(event) => {
+            setFocusPosition('right');
+            if (selectOnFocus) {
+              event.currentTarget.select();
+            }
+          }}
+          ref={secondValueInputRef}
+          placeholder={secondValuePlaceholder}
+          value={secondInternalValue}
+          onChange={(event: ChangeEvent<HTMLInputElement>) => {
+            handleChange(
+              firstInternalValue,
+              turnIntoEmptyStringIfWhitespacesOnly(event.target.value),
+            );
+          }}
+          onClick={handleClickToPreventParentClickEvents}
+          onMouseUp={
+            selectOnFocus ? handleClickToPreventParentClickEvents : undefined
+          }
+        />
+      </StyledContainer>
+    </FieldInputContainer>
   );
 };

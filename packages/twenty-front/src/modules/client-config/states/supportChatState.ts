@@ -1,11 +1,10 @@
-import { createState } from 'twenty-ui';
+import { createAtomState } from '@/ui/utilities/state/jotai/utils/createAtomState';
+import { type Support, SupportDriver } from '~/generated-metadata/graphql';
 
-import { Support } from '~/generated/graphql';
-
-export const supportChatState = createState<Support>({
+export const supportChatState = createAtomState<Support>({
   key: 'supportChatState',
   defaultValue: {
-    supportDriver: 'none',
+    supportDriver: SupportDriver.NONE,
     supportFrontChatId: null,
   },
 });

@@ -1,44 +1,81 @@
-/* eslint-disable @nx/workspace-no-hardcoded-colors */
-import { ANIMATION } from './Animation';
-import { BLUR } from './Blur';
-import { COLOR } from './Colors';
-import { GRAY_SCALE } from './GrayScale';
-import { ICON } from './Icon';
-import { MODAL } from './Modal';
-import { TEXT } from './Text';
+// Generated from design-tokens by scripts/generateThemeTokens.ts.
+// Do not edit manually. Regenerate with: npx nx generateTokens twenty-ui.
+import { themeSpacing } from '../internal/themeSpacing';
 
 export const THEME_COMMON = {
-  color: COLOR,
-  grayScale: GRAY_SCALE,
-  icon: ICON,
-  modal: MODAL,
-  text: TEXT,
-  blur: BLUR,
-  animation: ANIMATION,
-  snackBar: {
-    success: {
-      background: '#16A26B',
-      color: '#D0F8E9',
+  icon: {
+    size: {
+      sm: 14,
+      md: 16,
+      lg: 20,
+      xl: 24,
     },
-    error: {
-      background: '#B43232',
-      color: '#FED8D8',
+    stroke: {
+      sm: 1.6,
+      md: 2,
+      lg: 2.5,
     },
-    info: {
-      background: COLOR.gray80,
-      color: GRAY_SCALE.gray0,
+  },
+  modal: {
+    size: {
+      sm: {
+        width: '300px',
+      },
+      compact: {
+        width: '360px',
+      },
+      md: {
+        width: '400px',
+      },
+      lg: {
+        width: '53%',
+      },
+      xl: {
+        width: '1200px',
+        height: '800px',
+      },
+      fullscreen: {
+        width: 'calc(100dvw / var(--t-zoom, 1))',
+        height: 'calc(100dvh / var(--t-zoom, 1))',
+      },
+    },
+  },
+  text: {
+    lineHeight: {
+      lg: 1.5,
+      md: 1.1,
+    },
+    iconSizeMedium: 16,
+    iconSizeSmall: 14,
+    iconStrikeLight: 1.6,
+    iconStrikeMedium: 2,
+    iconStrikeBold: 2.5,
+  },
+  tooltip: {
+    background: 'color(display-p3 0 0 0 / 0.72)',
+    color: 'color(display-p3 1 1 1 / 1)',
+    descriptionColor: 'color(display-p3 1 1 1 / 0.64)',
+  },
+  animation: {
+    duration: {
+      instant: 0.075,
+      fast: 0.15,
+      normal: 0.3,
+      slow: 1.5,
     },
   },
   spacingMultiplicator: 4,
-  spacing: (...args: number[]) =>
-    args.map((multiplicator) => `${multiplicator * 4}px`).join(' '),
-  betweenSiblingsGap: `2px`,
+  spacing: themeSpacing,
+  betweenSiblingsGap: '2px',
   table: {
     horizontalCellMargin: '8px',
     checkboxColumnWidth: '32px',
     horizontalCellPadding: '8px',
   },
-  rightDrawerWidth: '500px',
+  sidePanelWidth: '500px',
   clickableElementBackgroundTransition: 'background 0.1s ease',
   lastLayerZIndex: 2147483647,
+  buttons: {
+    secondaryTextColor: 'color(display-p3 0.63 0.69 1)',
+  },
 };

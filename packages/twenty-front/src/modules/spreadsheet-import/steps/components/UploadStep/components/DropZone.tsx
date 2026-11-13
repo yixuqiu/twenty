@@ -1,49 +1,52 @@
+import { useNumberFormat } from '@/localization/hooks/useNumberFormat';
+import { SPREADSHEET_MAX_RECORD_IMPORT_CAPACITY } from '@/spreadsheet-import/constants/SpreadsheetMaxRecordImportCapacity';
+import { useSpreadsheetImportInternal } from '@/spreadsheet-import/hooks/useSpreadsheetImportInternal';
+import { useDownloadFakeRecords } from '@/spreadsheet-import/steps/components/UploadStep/hooks/useDownloadFakeRecords';
+import { readFileAsync } from '@/spreadsheet-import/utils/readFilesAsync';
+import { styled } from '@linaria/react';
+import { Trans, useLingui } from '@lingui/react/macro';
 import { useState } from 'react';
 import { useDropzone } from 'react-dropzone';
-import styled from '@emotion/styled';
-import * as XLSX from 'xlsx-ugnis';
-
-import { useSpreadsheetImportInternal } from '@/spreadsheet-import/hooks/useSpreadsheetImportInternal';
-import { readFileAsync } from '@/spreadsheet-import/utils/readFilesAsync';
-import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
-import { MainButton } from '@/ui/input/button/components/MainButton';
+import { useToast } from 'twenty-ui/components/feedback';
+import { MainButton } from 'twenty-ui/components/input';
+import { themeCssVariables } from 'twenty-ui/theme';
+import { read, type WorkBook } from 'xlsx-ugnis';
 
 const StyledContainer = styled.div`
   align-items: center;
-  background: ${({ theme }) => `
+  background:
     repeating-linear-gradient(
       0deg,
-      ${theme.font.color.primary},
-      ${theme.font.color.primary} 10px,
+      ${themeCssVariables.font.color.primary},
+      ${themeCssVariables.font.color.primary} 10px,
       transparent 10px,
       transparent 20px,
-      ${theme.font.color.primary} 20px
+      ${themeCssVariables.font.color.primary} 20px
     ),
     repeating-linear-gradient(
       90deg,
-      ${theme.font.color.primary},
-      ${theme.font.color.primary} 10px,
+      ${themeCssVariables.font.color.primary},
+      ${themeCssVariables.font.color.primary} 10px,
       transparent 10px,
       transparent 20px,
-      ${theme.font.color.primary} 20px
+      ${themeCssVariables.font.color.primary} 20px
     ),
     repeating-linear-gradient(
       180deg,
-      ${theme.font.color.primary},
-      ${theme.font.color.primary} 10px,
+      ${themeCssVariables.font.color.primary},
+      ${themeCssVariables.font.color.primary} 10px,
       transparent 10px,
       transparent 20px,
-      ${theme.font.color.primary} 20px
+      ${themeCssVariables.font.color.primary} 20px
     ),
     repeating-linear-gradient(
       270deg,
-      ${theme.font.color.primary},
-      ${theme.font.color.primary} 10px,
+      ${themeCssVariables.font.color.primary},
+      ${themeCssVariables.font.color.primary} 10px,
       transparent 10px,
       transparent 20px,
-      ${theme.font.color.primary} 20px
+      ${themeCssVariables.font.color.primary} 20px
     );
-  `};
   background-position:
     0 0,
     0 0,
@@ -55,7 +58,7 @@ const StyledContainer = styled.div`
     100% 2px,
     2px 100%,
     100% 2px;
-  border-radius: ${({ theme }) => theme.border.radius.sm};
+  border-radius: ${themeCssVariables.border.radius.sm};
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -64,8 +67,8 @@ const StyledContainer = styled.div`
 `;
 
 const StyledOverlay = styled.div`
-  background: ${({ theme }) => theme.background.transparent.medium};
-  border-radius: ${({ theme }) => theme.border.radius.sm};
+  background: ${themeCssVariables.background.transparent.medium};
+  border-radius: ${themeCssVariables.border.radius.sm};
   bottom: 0px;
   left: 0px;
   position: absolute;
@@ -74,28 +77,48 @@ const StyledOverlay = styled.div`
 `;
 
 const StyledText = styled.span`
-  color: ${({ theme }) => theme.font.color.primary};
-  font-size: ${({ theme }) => theme.font.size.sm};
-  font-weight: ${({ theme }) => theme.font.weight.medium};
+  color: ${themeCssVariables.font.color.primary};
+  font-size: ${themeCssVariables.font.size.sm};
+  font-weight: ${themeCssVariables.font.weight.medium};
+  padding: 16px;
   text-align: center;
 `;
 
-const StyledButton = styled(MainButton)`
-  margin-top: ${({ theme }) => theme.spacing(2)};
-  width: 200px;
+const StyledFooterText = styled.span`
+  bottom: ${themeCssVariables.spacing[4]};
+  color: ${themeCssVariables.font.color.tertiary};
+  font-size: ${themeCssVariables.font.size.xs};
+  font-weight: ${themeCssVariables.font.weight.regular};
+  left: 50%;
+  position: absolute;
+  text-align: center;
+  transform: translateX(-50%);
+  width: 100%;
+`;
+
+const StyledButtonsContainer = styled.div`
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: ${themeCssVariables.spacing[2]};
+  max-width: 200px;
+  width: 100%;
 `;
 
 type DropZoneProps = {
-  onContinue: (data: XLSX.WorkBook, file: File) => void;
+  onContinue: (data: WorkBook, file: File) => void;
   isLoading: boolean;
 };
 
 export const DropZone = ({ onContinue, isLoading }: DropZoneProps) => {
   const { maxFileSize, dateFormat, parseRaw } = useSpreadsheetImportInternal();
+  const { formatNumber } = useNumberFormat();
 
   const [loading, setLoading] = useState(false);
 
-  const { enqueueSnackBar } = useSnackBar();
+  const { enqueueToast } = useToast();
+
+  const { downloadSample } = useDownloadFakeRecords();
 
   const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
     noClick: true,
@@ -112,17 +135,20 @@ export const DropZone = ({ onContinue, isLoading }: DropZoneProps) => {
     onDropRejected: (fileRejections) => {
       setLoading(false);
       fileRejections.forEach((fileRejection) => {
-        enqueueSnackBar(fileRejection.errors[0].message, {
-          title: `${fileRejection.file.name} upload rejected`,
-          variant: 'error',
+        const fileName = fileRejection.file.name;
+        enqueueToast({
+          status: 'error',
+          children: t`${fileName} upload rejected`,
+          description: fileRejection.errors[0].message,
         });
       });
     },
     onDropAccepted: async ([file]) => {
       setLoading(true);
       const arrayBuffer = await readFileAsync(file);
-      const workbook = XLSX.read(arrayBuffer, {
+      const workbook = read(arrayBuffer, {
         cellDates: true,
+        codepage: 65001, // UTF-8 codepage
         dateNF: dateFormat,
         raw: parseRaw,
         dense: true,
@@ -132,24 +158,46 @@ export const DropZone = ({ onContinue, isLoading }: DropZoneProps) => {
     },
   });
 
+  const { t } = useLingui();
+
+  const formatSpreadsheetMaxRecordImportCapacity = formatNumber(
+    SPREADSHEET_MAX_RECORD_IMPORT_CAPACITY,
+  );
+
   return (
     <StyledContainer
-      // eslint-disable-next-line react/jsx-props-no-spreading
+      // oxlint-disable-next-line react/jsx-props-no-spreading
       {...getRootProps()}
     >
       {isDragActive && <StyledOverlay />}
       <input
-        // eslint-disable-next-line react/jsx-props-no-spreading
+        // oxlint-disable-next-line react/jsx-props-no-spreading
         {...getInputProps()}
       />
       {isDragActive ? (
-        <StyledText>Drop file here...</StyledText>
+        <StyledText>
+          <Trans>Drop file here...</Trans>
+        </StyledText>
       ) : loading || isLoading ? (
-        <StyledText>Processing...</StyledText>
+        <StyledText>
+          <Trans>Processing...</Trans>
+        </StyledText>
       ) : (
         <>
-          <StyledText>Upload .xlsx, .xls or .csv file</StyledText>
-          <StyledButton onClick={open} title="Select file" />
+          <StyledText>
+            <Trans>Upload .xlsx, .xls or .csv file</Trans>
+          </StyledText>
+          <StyledButtonsContainer>
+            <MainButton onClick={open} fullWidth>{t`Select file`}</MainButton>
+            <MainButton
+              onClick={downloadSample}
+              fullWidth
+              variant="outline"
+            >{t`Download sample`}</MainButton>
+          </StyledButtonsContainer>
+          <StyledFooterText>
+            {t`Max import capacity: ${formatSpreadsheetMaxRecordImportCapacity} records. Otherwise, consider splitting your file or using the API.`}
+          </StyledFooterText>
         </>
       )}
     </StyledContainer>

@@ -1,40 +1,64 @@
-import { ChangeEvent } from 'react';
-import { useRecoilValue } from 'recoil';
+import { type ChangeEvent, useCallback, useState } from 'react';
 
-import { useFilterDropdown } from '@/object-record/object-filter-dropdown/hooks/useFilterDropdown';
+import { useApplyObjectFilterDropdownFilterValue } from '@/object-record/object-filter-dropdown/hooks/useApplyObjectFilterDropdownFilterValue';
+import { useObjectFilterDropdownFilterValue } from '@/object-record/object-filter-dropdown/hooks/useObjectFilterDropdownFilterValue';
+import { fieldMetadataItemUsedInDropdownComponentSelector } from '@/object-record/object-filter-dropdown/states/fieldMetadataItemUsedInDropdownComponentSelector';
 import { DropdownMenuInput } from '@/ui/layout/dropdown/components/DropdownMenuInput';
+import { DropdownMenuItemsContainer } from '@/ui/layout/dropdown/components/DropdownMenuItemsContainer';
+import { useCloseDropdown } from '@/ui/layout/dropdown/hooks/useCloseDropdown';
+import { useAtomComponentSelectorValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentSelectorValue';
+import { isDefined } from 'twenty-shared/utils';
 
-export const ObjectFilterDropdownNumberInput = () => {
-  const {
-    selectedOperandInDropdownState,
-    filterDefinitionUsedInDropdownState,
-    selectFilter,
-  } = useFilterDropdown();
+type ObjectFilterDropdownNumberInputProps = {
+  filterDropdownId: string;
+};
 
-  const filterDefinitionUsedInDropdown = useRecoilValue(
-    filterDefinitionUsedInDropdownState,
+export const ObjectFilterDropdownNumberInput = ({
+  filterDropdownId,
+}: ObjectFilterDropdownNumberInputProps) => {
+  const fieldMetadataItemUsedInDropdown = useAtomComponentSelectorValue(
+    fieldMetadataItemUsedInDropdownComponentSelector,
   );
-  const selectedOperandInDropdown = useRecoilValue(
-    selectedOperandInDropdownState,
+
+  const { objectFilterDropdownFilterValue } =
+    useObjectFilterDropdownFilterValue();
+
+  const { applyObjectFilterDropdownFilterValue } =
+    useApplyObjectFilterDropdownFilterValue();
+
+  const { closeDropdown } = useCloseDropdown();
+
+  const [hasFocused, setHasFocused] = useState(false);
+
+  const handleInputRef = useCallback(
+    (node: HTMLInputElement | null) => {
+      if (isDefined(node) && !hasFocused) {
+        node.focus();
+        node.select();
+        setHasFocused(true);
+      }
+    },
+    [hasFocused],
   );
+
+  const handleInputChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const newValue = event.target.value;
+
+    applyObjectFilterDropdownFilterValue(newValue);
+  };
 
   return (
-    filterDefinitionUsedInDropdown &&
-    selectedOperandInDropdown && (
+    <DropdownMenuItemsContainer>
       <DropdownMenuInput
+        instanceId={filterDropdownId}
+        ref={handleInputRef}
+        value={objectFilterDropdownFilterValue}
         autoFocus
         type="number"
-        placeholder={filterDefinitionUsedInDropdown.label}
-        onChange={(event: ChangeEvent<HTMLInputElement>) => {
-          selectFilter?.({
-            fieldMetadataId: filterDefinitionUsedInDropdown.fieldMetadataId,
-            value: event.target.value,
-            operand: selectedOperandInDropdown,
-            displayValue: event.target.value,
-            definition: filterDefinitionUsedInDropdown,
-          });
-        }}
+        placeholder={fieldMetadataItemUsedInDropdown?.label}
+        onChange={handleInputChange}
+        onEnter={() => closeDropdown(filterDropdownId)}
       />
-    )
+    </DropdownMenuItemsContainer>
   );
 };

@@ -4,17 +4,24 @@ export const SIGN_UP = gql`
   mutation SignUp(
     $email: String!
     $password: String!
-    $workspaceInviteHash: String
     $captchaToken: String
+    $locale: String
+    $verifyEmailRedirectPath: String
+    $affiliatePartnerName: String
   ) {
     signUp(
       email: $email
       password: $password
-      workspaceInviteHash: $workspaceInviteHash
       captchaToken: $captchaToken
+      locale: $locale
+      verifyEmailRedirectPath: $verifyEmailRedirectPath
+      affiliatePartnerName: $affiliatePartnerName
     ) {
-      loginToken {
-        ...AuthTokenFragment
+      availableWorkspaces {
+        ...AvailableWorkspacesFragment
+      }
+      tokens {
+        ...AuthTokenPairFragment
       }
     }
   }

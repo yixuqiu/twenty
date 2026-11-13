@@ -1,8 +1,11 @@
+import { MemoryRouterAppNavigatorProvider } from '~/testing/components/MemoryRouterAppNavigatorProvider';
+import { type Decorator } from '@storybook/react-vite';
 import { MemoryRouter } from 'react-router-dom';
-import { Decorator } from '@storybook/react';
 
 export const MemoryRouterDecorator: Decorator = (Story) => (
   <MemoryRouter>
-    <Story />
+    <MemoryRouterAppNavigatorProvider>
+      <Story />
+    </MemoryRouterAppNavigatorProvider>
   </MemoryRouter>
 );

@@ -1,82 +1,105 @@
-import { isNonEmptyString } from '@sniptt/guards';
-import { useRecoilCallback } from 'recoil';
+import { useCallback } from 'react';
+import { useStore } from 'jotai';
 
-import { findActivitiesOperationSignatureFactory } from '@/activities/graphql/operation-signatures/factories/findActivitiesOperationSignatureFactory';
 import { useActivityTargetsForTargetableObjects } from '@/activities/hooks/useActivityTargetsForTargetableObjects';
-import { Activity } from '@/activities/types/Activity';
-import { ActivityTargetableObject } from '@/activities/types/ActivityTargetableEntity';
-import { useObjectMetadataItems } from '@/object-metadata/hooks/useObjectMetadataItems';
-import { RecordGqlOperationFilter } from '@/object-record/graphql/types/RecordGqlOperationFilter';
-import { RecordGqlOperationOrderBy } from '@/object-record/graphql/types/RecordGqlOperationOrderBy';
-import { useFindManyRecords } from '@/object-record/hooks/useFindManyRecords';
+import { type ActivityTargetableObject } from '@/activities/types/ActivityTargetableEntity';
+import { type ActivityTarget } from '@/activities/types/ActivityTarget';
+import { getRelatedRecordFromJunction } from '@/object-record/record-field/ui/utils/junction/getRelatedRecordFromJunction';
+import {
+  type StandardObjectNameSingular,
+  type RecordGqlOperationOrderBy,
+} from 'twenty-shared/types';
+import { getRecordsFromRecordConnection } from '@/object-record/cache/utils/getRecordsFromRecordConnection';
 import { recordStoreFamilyState } from '@/object-record/record-store/states/recordStoreFamilyState';
-import { sortByAscString } from '~/utils/array/sortByAscString';
+import { isDefined } from 'twenty-shared/utils';
 
 export const useActivities = ({
+  objectNameSingular,
   targetableObjects,
-  activitiesFilters,
-  activitiesOrderByVariables,
+  activityTargetsOrderByVariables,
   skip,
+  limit,
 }: {
+  objectNameSingular:
+    | StandardObjectNameSingular.Note
+    | StandardObjectNameSingular.Task;
   targetableObjects: ActivityTargetableObject[];
-  activitiesFilters: RecordGqlOperationFilter;
-  activitiesOrderByVariables: RecordGqlOperationOrderBy;
+  activityTargetsOrderByVariables: RecordGqlOperationOrderBy;
   skip?: boolean;
+  limit: number;
 }) => {
-  const { objectMetadataItems } = useObjectMetadataItems();
+  const store = useStore();
+  const updateActivitiesInStore = useCallback(
+    (activityTargets: ActivityTarget[], activityRelationFieldName: string) => {
+      for (const activityTarget of activityTargets) {
+        const activity = getRelatedRecordFromJunction({
+          junctionRecord: activityTarget,
+          relationFieldName: activityRelationFieldName,
+        });
 
-  const { activityTargets, loadingActivityTargets } =
-    useActivityTargetsForTargetableObjects({
-      targetableObjects,
-      skip: skip,
+        if (!isDefined(activity)) {
+          continue;
+        }
+
+        store.set(recordStoreFamilyState.atomFamily(activity.id), activity);
+      }
+    },
+    [store],
+  );
+
+  const {
+    activityTargets,
+    loadingActivityTargets,
+    totalCountActivityTargets,
+    fetchMoreActivityTargets,
+    hasNextPage,
+    activityRelationFieldName,
+  } = useActivityTargetsForTargetableObjects({
+    objectNameSingular,
+    targetableObjects,
+    skip: skip,
+    activityTargetsOrderByVariables,
+    onCompleted: updateActivitiesInStore,
+    limit,
+  });
+
+  const activities = activityTargets
+    .map((activityTarget) => {
+      return getRelatedRecordFromJunction({
+        junctionRecord: activityTarget,
+        relationFieldName: activityRelationFieldName,
+      });
+    })
+    .filter(isDefined);
+
+  const fetchMoreActivities = async () => {
+    const result = await fetchMoreActivityTargets();
+
+    if (!isDefined(result?.data)) {
+      return [];
+    }
+
+    const activityTargets = getRecordsFromRecordConnection<ActivityTarget>({
+      recordConnection: result.data,
     });
 
-  const activityIds = [
-    ...new Set(
-      activityTargets
-        ? [
-            ...activityTargets
-              .map((activityTarget) => activityTarget.activityId)
-              .filter(isNonEmptyString),
-          ].sort(sortByAscString)
-        : [],
-    ),
-  ];
+    updateActivitiesInStore(activityTargets, activityRelationFieldName);
 
-  const filter: RecordGqlOperationFilter = {
-    id:
-      targetableObjects.length > 0
-        ? {
-            in: activityIds,
-          }
-        : undefined,
-    ...activitiesFilters,
+    return activityTargets
+      .map((activityTarget) => {
+        return getRelatedRecordFromJunction({
+          junctionRecord: activityTarget,
+          relationFieldName: activityRelationFieldName,
+        });
+      })
+      .filter(isDefined);
   };
-
-  const FIND_ACTIVITIES_OPERATION_SIGNATURE =
-    findActivitiesOperationSignatureFactory({ objectMetadataItems });
-
-  const { records: activities, loading: loadingActivities } =
-    useFindManyRecords<Activity>({
-      skip: skip || loadingActivityTargets,
-      objectNameSingular:
-        FIND_ACTIVITIES_OPERATION_SIGNATURE.objectNameSingular,
-      recordGqlFields: FIND_ACTIVITIES_OPERATION_SIGNATURE.fields,
-      filter,
-      orderBy: activitiesOrderByVariables,
-      onCompleted: useRecoilCallback(
-        ({ set }) =>
-          (activities) => {
-            for (const activity of activities) {
-              set(recordStoreFamilyState(activity.id), activity);
-            }
-          },
-        [],
-      ),
-    });
 
   return {
     activities,
-    loading: loadingActivities || loadingActivityTargets,
+    loading: loadingActivityTargets,
+    totalCountActivities: totalCountActivityTargets,
+    fetchMoreActivities,
+    hasNextPage,
   };
 };

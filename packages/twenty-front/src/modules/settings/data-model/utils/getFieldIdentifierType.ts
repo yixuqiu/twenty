@@ -1,11 +1,11 @@
-import { FieldMetadataItem } from '@/object-metadata/types/FieldMetadataItem';
-import { ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
+import { type FieldMetadataItem } from '@/object-metadata/types/FieldMetadataItem';
+import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/EnrichedObjectMetadataItem';
 import { isLabelIdentifierField } from '@/object-metadata/utils/isLabelIdentifierField';
-import { FieldIdentifierType } from '@/settings/data-model/types/FieldIdentifierType';
+import { type FieldIdentifierType } from '@/settings/data-model/types/FieldIdentifierType';
 
 export const getFieldIdentifierType = (
   activeFieldMetadatItem: FieldMetadataItem,
-  activeObjectMetadataItem: ObjectMetadataItem,
+  activeObjectMetadataItem: EnrichedObjectMetadataItem,
 ): FieldIdentifierType | undefined => {
   const fieldIsLabelIdentifier = isLabelIdentifierField({
     fieldMetadataItem: activeFieldMetadatItem,

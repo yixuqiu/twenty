@@ -1,72 +1,81 @@
-import { useRecoilValue } from 'recoil';
-import { IconSettings } from 'twenty-ui';
-
-import { ConnectedAccount } from '@/accounts/types/ConnectedAccount';
-import { currentWorkspaceMemberState } from '@/auth/states/currentWorkspaceMemberState';
-import { useObjectMetadataItem } from '@/object-metadata/hooks/useObjectMetadataItem';
-import { CoreObjectNameSingular } from '@/object-metadata/types/CoreObjectNameSingular';
-import { generateDepthOneRecordGqlFields } from '@/object-record/graphql/utils/generateDepthOneRecordGqlFields';
-import { useFindManyRecords } from '@/object-record/hooks/useFindManyRecords';
-import { SettingsAccountLoader } from '@/settings/accounts/components/SettingsAccountLoader';
-import { SettingsAccountsConnectedAccountsListCard } from '@/settings/accounts/components/SettingsAccountsConnectedAccountsListCard';
-import { SettingsAccountsEmailsBlocklistSection } from '@/settings/accounts/components/SettingsAccountsEmailsBlocklistSection';
-import { SettingsAccountsSettingsSection } from '@/settings/accounts/components/SettingsAccountsSettingsSection';
+import { SettingsAccountsLegacySections } from '@/settings/accounts/components/SettingsAccountsLegacySections';
+import { SettingsAccountsMessageChannelsSSEEffect } from '@/settings/accounts/components/SettingsAccountsMessageChannelsSSEEffect';
+import { SettingsAppPreferencesAccountsTab } from '@/settings/app-preferences/components/SettingsAppPreferencesAccountsTab';
+import { SettingsAppPreferencesAppsSection } from '@/settings/app-preferences/components/SettingsAppPreferencesAppsSection';
+import { SETTINGS_APP_PREFERENCES_TAB_IDS } from '@/settings/app-preferences/constants/SettingsAppPreferencesTabIds';
+import { SETTINGS_APP_PREFERENCES_TAB_LIST_COMPONENT_ID } from '@/settings/app-preferences/constants/SettingsAppPreferencesTabListComponentId';
 import { SettingsPageContainer } from '@/settings/components/SettingsPageContainer';
-import { H2Title } from '@/ui/display/typography/components/H2Title';
-import { SubMenuTopBarContainer } from '@/ui/layout/page/SubMenuTopBarContainer';
-import { Section } from '@/ui/layout/section/components/Section';
-import { Breadcrumb } from '@/ui/navigation/bread-crumb/components/Breadcrumb';
 import { useIsFeatureEnabled } from '@/workspace/hooks/useIsFeatureEnabled';
+import { SettingsPageLayout } from '@/settings/components/layout/SettingsPageLayout';
+import { SettingsTabBar } from '@/settings/components/layout/SettingsTabBar';
+import { useSettingsActiveTabId } from '@/settings/components/layout/useSettingsActiveTabId';
+import { useLingui } from '@lingui/react/macro';
+import { SettingsPath } from 'twenty-shared/types';
+import { getSettingsPath } from 'twenty-shared/utils';
+import { IconApps, IconAt } from 'twenty-ui/icon';
+import { FeatureFlagKey } from '~/generated-metadata/graphql';
 
 export const SettingsAccounts = () => {
-  const currentWorkspaceMember = useRecoilValue(currentWorkspaceMemberState);
+  const { t } = useLingui();
 
-  const { objectMetadataItem } = useObjectMetadataItem({
-    objectNameSingular: CoreObjectNameSingular.ConnectedAccount,
-  });
+  const isAppPreferencesEnabled = useIsFeatureEnabled(
+    FeatureFlagKey.IS_APP_PREFERENCES_ENABLED,
+  );
+  const pageTitle = isAppPreferencesEnabled ? t`Apps preferences` : t`Account`;
 
-  const { records: accounts, loading } = useFindManyRecords<ConnectedAccount>({
-    objectNameSingular: 'connectedAccount',
-    filter: {
-      accountOwnerId: {
-        eq: currentWorkspaceMember?.id,
-      },
+  const tabs = [
+    {
+      id: SETTINGS_APP_PREFERENCES_TAB_IDS.APPS,
+      title: t`Apps`,
+      Icon: IconApps,
     },
-    recordGqlFields: generateDepthOneRecordGqlFields({ objectMetadataItem }),
-  });
+    {
+      id: SETTINGS_APP_PREFERENCES_TAB_IDS.ACCOUNTS,
+      title: t`Accounts`,
+      Icon: IconAt,
+    },
+  ];
 
-  const isBlocklistEnabled = useIsFeatureEnabled('IS_BLOCKLIST_ENABLED');
+  const activeTabId = useSettingsActiveTabId(
+    SETTINGS_APP_PREFERENCES_TAB_LIST_COMPONENT_ID,
+    tabs.map((tab) => tab.id),
+  );
 
   return (
-    <SubMenuTopBarContainer Icon={IconSettings} title="Settings">
-      <SettingsPageContainer
-        style={
-          loading
-            ? { height: '100%', boxSizing: 'border-box', width: '100%' }
-            : {}
-        }
-      >
-        <Breadcrumb links={[{ children: 'Accounts' }]} />
-
-        {loading ? (
-          <SettingsAccountLoader />
-        ) : (
+    <SettingsPageLayout
+      title={pageTitle}
+      links={[
+        {
+          children: t`User`,
+          href: getSettingsPath(SettingsPath.ProfilePage),
+        },
+        { children: pageTitle },
+      ]}
+      secondaryBar={
+        isAppPreferencesEnabled ? (
+          <SettingsTabBar
+            aria-label={pageTitle}
+            tabs={tabs}
+            componentInstanceId={SETTINGS_APP_PREFERENCES_TAB_LIST_COMPONENT_ID}
+          />
+        ) : undefined
+      }
+    >
+      <SettingsAccountsMessageChannelsSSEEffect />
+      <SettingsPageContainer>
+        {isAppPreferencesEnabled ? (
           <>
-            <Section>
-              <H2Title
-                title="Connected accounts"
-                description="Manage your internet accounts."
-              />
-              <SettingsAccountsConnectedAccountsListCard
-                accounts={accounts}
-                loading={loading}
-              />
-            </Section>
-            {isBlocklistEnabled && <SettingsAccountsEmailsBlocklistSection />}
-            <SettingsAccountsSettingsSection />
+            {activeTabId === SETTINGS_APP_PREFERENCES_TAB_IDS.APPS && (
+              <SettingsAppPreferencesAppsSection />
+            )}
+            {activeTabId === SETTINGS_APP_PREFERENCES_TAB_IDS.ACCOUNTS && (
+              <SettingsAppPreferencesAccountsTab />
+            )}
           </>
+        ) : (
+          <SettingsAccountsLegacySections />
         )}
       </SettingsPageContainer>
-    </SubMenuTopBarContainer>
+    </SettingsPageLayout>
   );
 };

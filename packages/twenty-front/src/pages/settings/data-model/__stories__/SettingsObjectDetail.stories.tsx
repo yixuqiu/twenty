@@ -1,22 +1,21 @@
-import { Meta, StoryObj } from '@storybook/react';
-import { userEvent, within } from '@storybook/test';
+import { type Meta, type StoryObj } from '@storybook/react-vite';
+import { expect, userEvent, within } from 'storybook/test';
 
 import {
   PageDecorator,
-  PageDecoratorArgs,
+  type PageDecoratorArgs,
 } from '~/testing/decorators/PageDecorator';
 import { graphqlMocks } from '~/testing/graphqlMocks';
-import { sleep } from '~/testing/sleep';
 
-import { SettingsObjectDetail } from '../SettingsObjectDetail';
+import { SettingsObjectDetailPage } from '~/pages/settings/data-model/SettingsObjectDetailPage';
 
 const meta: Meta<PageDecoratorArgs> = {
   title: 'Pages/Settings/DataModel/SettingsObjectDetail',
-  component: SettingsObjectDetail,
+  component: SettingsObjectDetailPage,
   decorators: [PageDecorator],
   args: {
-    routePath: '/settings/objects/:objectSlug',
-    routeParams: { ':objectSlug': 'companies' },
+    routePath: '/settings/objects/:objectNamePlural',
+    routeParams: { ':objectNamePlural': 'companies' },
   },
   parameters: {
     msw: graphqlMocks,
@@ -25,51 +24,51 @@ const meta: Meta<PageDecoratorArgs> = {
 
 export default meta;
 
-export type Story = StoryObj<typeof SettingsObjectDetail>;
+export type Story = StoryObj<typeof SettingsObjectDetailPage>;
 
 export const StandardObject: Story = {
-  play: async () => {
-    await sleep(100);
+  play: async ({ canvasElement }) => {
+    await expect(
+      await within(canvasElement).findByTestId('tab-fields'),
+    ).toBeVisible();
   },
 };
 
 export const CustomObject: Story = {
   args: {
-    routeParams: { ':objectSlug': 'workspaces' },
+    routeParams: { ':objectNamePlural': 'myCustoms' },
   },
 };
 
-export const ObjectDropdownMenu: Story = {
+export const ObjectTabs: Story = {
   play: async ({ canvasElement }) => {
-    await sleep(100);
-
     const canvas = within(canvasElement);
-    const objectSummaryVerticalDotsIconButton = await canvas.findByRole(
-      'button',
-      {
-        name: 'Object Options',
-      },
+
+    const fieldsTab = await canvas.findByTestId('tab-fields');
+    const settingsTab = await canvas.findByTestId('tab-settings');
+
+    await expect(fieldsTab).toBeVisible();
+    await expect(settingsTab).toBeVisible();
+  },
+};
+
+export const SettingsTabLinks: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+
+    await userEvent.click(await canvas.findByTestId('tab-settings'));
+
+    expect(
+      await canvas.findByRole('link', { name: 'Configure search' }),
+    ).toHaveAttribute('href', '/settings/objects/companies/object-search');
+    expect(
+      canvas.getByRole('link', { name: 'Manage indexes' }),
+    ).toHaveAttribute('href', '/settings/objects/companies/object-indexes');
+    expect(
+      canvas.getByRole('link', { name: 'Edit translations' }),
+    ).toHaveAttribute(
+      'href',
+      '/settings/objects/companies/object-translations',
     );
-
-    await userEvent.click(objectSummaryVerticalDotsIconButton);
-
-    await canvas.findByText('Edit');
-    await canvas.findByText('Deactivate');
-  },
-};
-
-export const FieldDropdownMenu: Story = {
-  play: async ({ canvasElement }) => {
-    await sleep(100);
-
-    const canvas = within(canvasElement);
-    const [fieldVerticalDotsIconButton] = await canvas.findAllByRole('button', {
-      name: 'Active Field Options',
-    });
-
-    await userEvent.click(fieldVerticalDotsIconButton);
-
-    await canvas.findByText('View');
-    await canvas.findByText('Deactivate');
   },
 };

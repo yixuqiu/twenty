@@ -1,3 +1,3 @@
-import { FeatureFlagKeys } from 'src/engine/core-modules/feature-flag/feature-flag.entity';
+import { type FeatureFlagKey } from 'twenty-shared/types';
 
-export type FeatureFlagMap = Record<`${FeatureFlagKeys}`, boolean>;
+export type FeatureFlagMap = Record<`${FeatureFlagKey}`, boolean>;

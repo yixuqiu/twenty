@@ -1,20 +1,12 @@
-import { ObjectType, Field, registerEnumType } from '@nestjs/graphql';
+import { Field, ObjectType } from '@nestjs/graphql';
 
+import { CalendarChannelVisibility } from 'twenty-shared/types';
 import { UUIDScalarType } from 'src/engine/api/graphql/workspace-schema-builder/graphql-types/scalars';
-import { TimelineCalendarEventParticipant } from 'src/engine/core-modules/calendar/dtos/timeline-calendar-event-participant.dto';
-
-export enum TimelineCalendarEventVisibility {
-  METADATA = 'METADATA',
-  SHARE_EVERYTHING = 'SHARE_EVERYTHING',
-}
-
-registerEnumType(TimelineCalendarEventVisibility, {
-  name: 'TimelineCalendarEventVisibility',
-  description: 'Visibility of the calendar event',
-});
+import { TimelineCalendarEventCallRecordingDTO } from 'src/engine/core-modules/calendar/dtos/timeline-calendar-event-call-recording.dto';
+import { TimelineCalendarEventParticipantDTO } from 'src/engine/core-modules/calendar/dtos/timeline-calendar-event-participant.dto';
 
 @ObjectType('LinkMetadata')
-export class LinkMetadata {
+class LinkMetadataDTO {
   @Field()
   label: string;
 
@@ -22,8 +14,20 @@ export class LinkMetadata {
   url: string;
 }
 
+@ObjectType('LinksMetadata')
+export class LinksMetadataDTO {
+  @Field()
+  primaryLinkLabel: string;
+
+  @Field()
+  primaryLinkUrl: string;
+
+  @Field(() => [LinkMetadataDTO], { nullable: true })
+  secondaryLinks: LinkMetadataDTO[] | null;
+}
+
 @ObjectType('TimelineCalendarEvent')
-export class TimelineCalendarEvent {
+export class TimelineCalendarEventDTO {
   @Field(() => UUIDScalarType)
   id: string;
 
@@ -51,12 +55,15 @@ export class TimelineCalendarEvent {
   @Field()
   conferenceSolution: string;
 
-  @Field(() => LinkMetadata)
-  conferenceLink: LinkMetadata;
+  @Field(() => LinksMetadataDTO)
+  conferenceLink: LinksMetadataDTO;
 
-  @Field(() => [TimelineCalendarEventParticipant])
-  participants: TimelineCalendarEventParticipant[];
+  @Field(() => [TimelineCalendarEventParticipantDTO])
+  participants: TimelineCalendarEventParticipantDTO[];
 
-  @Field(() => TimelineCalendarEventVisibility)
-  visibility: TimelineCalendarEventVisibility;
+  @Field(() => [TimelineCalendarEventCallRecordingDTO])
+  callRecordings: TimelineCalendarEventCallRecordingDTO[];
+
+  @Field(() => CalendarChannelVisibility)
+  visibility: CalendarChannelVisibility;
 }

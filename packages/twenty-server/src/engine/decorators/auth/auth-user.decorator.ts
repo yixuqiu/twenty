@@ -1,5 +1,5 @@
 import {
-  ExecutionContext,
+  type ExecutionContext,
   ForbiddenException,
   createParamDecorator,
 } from '@nestjs/common';
@@ -14,10 +14,12 @@ export const AuthUser = createParamDecorator(
   (options: DecoratorOptions | undefined, ctx: ExecutionContext) => {
     const request = getRequest(ctx);
 
-    if (!options?.allowUndefined && (!request.user || !request.user.user)) {
-      throw new ForbiddenException("You're not authorized to do this");
+    if (!options?.allowUndefined && !request.user) {
+      throw new ForbiddenException(
+        'This endpoint requires a token bound to a user.',
+      );
     }
 
-    return request.user ? request.user.user : undefined;
+    return request.user;
   },
 );

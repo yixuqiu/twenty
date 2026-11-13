@@ -2,31 +2,40 @@ import { isNonEmptyString } from '@sniptt/guards';
 
 import { useGetObjectOrderByField } from '@/object-metadata/hooks/useGetObjectOrderByField';
 import { useMapToObjectRecordIdentifier } from '@/object-metadata/hooks/useMapToObjectRecordIdentifier';
-import { OrderBy } from '@/object-metadata/types/OrderBy';
+
 import { DEFAULT_SEARCH_REQUEST_LIMIT } from '@/object-record/constants/DefaultSearchRequestLimit';
 import { useFindManyRecords } from '@/object-record/hooks/useFindManyRecords';
-import { SelectableRecord } from '@/object-record/select/types/SelectableRecord';
+import { type SelectableItem } from '@/object-record/select/types/SelectableItem';
 import { getObjectFilterFields } from '@/object-record/select/utils/getObjectFilterFields';
 import { makeAndFilterVariables } from '@/object-record/utils/makeAndFilterVariables';
 import { makeOrFilterVariables } from '@/object-record/utils/makeOrFilterVariables';
+import {
+  type OrderBy,
+  type RecordGqlOperationFilter,
+} from 'twenty-shared/types';
 
 export const useRecordsForSelect = ({
   searchFilterText,
   sortOrder = 'AscNullsLast',
   selectedIds,
   limit,
-  excludeEntityIds = [],
+  excludedRecordIds = [],
   objectNameSingular,
+  allowRequestsToTwentyIcons,
+  filter,
 }: {
   searchFilterText: string;
   sortOrder?: OrderBy;
   selectedIds: string[];
   limit?: number;
-  excludeEntityIds?: string[];
+  excludedRecordIds?: string[];
   objectNameSingular: string;
+  allowRequestsToTwentyIcons: boolean;
+  filter?: RecordGqlOperationFilter;
 }) => {
   const { mapToObjectRecordIdentifier } = useMapToObjectRecordIdentifier({
     objectNameSingular,
+    allowRequestsToTwentyIcons,
   });
 
   const filters = [
@@ -45,7 +54,7 @@ export const useRecordsForSelect = ({
 
   const { loading: selectedRecordsLoading, records: selectedRecordsData } =
     useFindManyRecords({
-      filter: selectedIdsFilter,
+      filter: makeAndFilterVariables([selectedIdsFilter, filter]),
       orderBy: orderByField,
       objectNameSingular,
       skip: !selectedIds.length,
@@ -61,7 +70,6 @@ export const useRecordsForSelect = ({
         const [parentFieldName, subFieldName] = fieldName.split('.');
 
         if (isNonEmptyString(subFieldName)) {
-          // Composite field
           return {
             [parentFieldName]: {
               [subFieldName]: {
@@ -84,19 +92,23 @@ export const useRecordsForSelect = ({
     loading: filteredSelectedRecordsLoading,
     records: filteredSelectedRecordsData,
   } = useFindManyRecords({
-    filter: makeAndFilterVariables([...searchFilters, selectedIdsFilter]),
+    filter: makeAndFilterVariables([
+      ...searchFilters,
+      selectedIdsFilter,
+      filter,
+    ]),
     orderBy: orderByField,
     objectNameSingular,
     skip: !selectedIds.length,
   });
 
-  const notFilterIds = [...selectedIds, ...excludeEntityIds];
+  const notFilterIds = [...selectedIds, ...excludedRecordIds];
   const notFilter = notFilterIds.length
     ? { not: { id: { in: notFilterIds } } }
     : undefined;
   const { loading: recordsToSelectLoading, records: recordsToSelectData } =
     useFindManyRecords({
-      filter: makeAndFilterVariables([...searchFilters, notFilter]),
+      filter: makeAndFilterVariables([...searchFilters, notFilter, filter]),
       limit: limit ?? DEFAULT_SEARCH_REQUEST_LIMIT,
       orderBy: orderByField,
       objectNameSingular,
@@ -108,19 +120,19 @@ export const useRecordsForSelect = ({
       .map((record) => ({
         ...record,
         isSelected: true,
-      })) as SelectableRecord[],
+      })) as SelectableItem[],
     filteredSelectedRecords: filteredSelectedRecordsData
       .map(mapToObjectRecordIdentifier)
       .map((record) => ({
         ...record,
         isSelected: true,
-      })) as SelectableRecord[],
+      })) as SelectableItem[],
     recordsToSelect: recordsToSelectData
       .map(mapToObjectRecordIdentifier)
       .map((record) => ({
         ...record,
         isSelected: false,
-      })) as SelectableRecord[],
+      })) as SelectableItem[],
     loading:
       recordsToSelectLoading ||
       filteredSelectedRecordsLoading ||

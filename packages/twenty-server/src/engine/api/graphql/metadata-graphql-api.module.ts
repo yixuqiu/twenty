@@ -1,37 +1,48 @@
 import { Module } from '@nestjs/common';
 import { GraphQLModule } from '@nestjs/graphql';
 
-import { YogaDriverConfig, YogaDriver } from '@graphql-yoga/nestjs';
+import { YogaDriver, type YogaDriverConfig } from '@graphql-yoga/nestjs';
 
-import { WorkspaceMigrationRunnerModule } from 'src/engine/workspace-manager/workspace-migration-runner/workspace-migration-runner.module';
-import { WorkspaceMigrationModule } from 'src/engine/metadata-modules/workspace-migration/workspace-migration.module';
-import { MetadataEngineModule } from 'src/engine/metadata-modules/metadata-engine.module';
 import { GraphQLConfigModule } from 'src/engine/api/graphql/graphql-config/graphql-config.module';
 import { metadataModuleFactory } from 'src/engine/api/graphql/metadata.module-factory';
-import { EnvironmentService } from 'src/engine/integrations/environment/environment.service';
-import { ExceptionHandlerService } from 'src/engine/integrations/exception-handler/exception-handler.service';
+import { CacheStorageNamespace } from 'src/engine/core-modules/cache-storage/types/cache-storage-namespace.enum';
+import { ExceptionHandlerService } from 'src/engine/core-modules/exception-handler/exception-handler.service';
+import { FeatureFlagService } from 'src/engine/core-modules/feature-flag/services/feature-flag.service';
+import { I18nModule } from 'src/engine/core-modules/i18n/i18n.module';
+import { I18nService } from 'src/engine/core-modules/i18n/i18n.service';
+import { MetricsModule } from 'src/engine/core-modules/metrics/metrics.module';
+import { MetricsService } from 'src/engine/core-modules/metrics/metrics.service';
+import { TwentyConfigService } from 'src/engine/core-modules/twenty-config/twenty-config.service';
 import { DataloaderModule } from 'src/engine/dataloaders/dataloader.module';
 import { DataloaderService } from 'src/engine/dataloaders/dataloader.service';
-import { CacheStorageNamespace } from 'src/engine/integrations/cache-storage/types/cache-storage-namespace.enum';
-import { CacheStorageModule } from 'src/engine/integrations/cache-storage/cache-storage.module';
+import { MetadataEngineModule } from 'src/engine/metadata-modules/metadata-engine.module';
+import { WorkspaceCacheService } from 'src/engine/workspace-cache/services/workspace-cache.service';
+import { WorkspaceCacheModule } from 'src/engine/workspace-cache/workspace-cache.module';
 
 @Module({
   imports: [
     GraphQLModule.forRootAsync<YogaDriverConfig>({
       driver: YogaDriver,
       useFactory: metadataModuleFactory,
-      imports: [GraphQLConfigModule, DataloaderModule],
+      imports: [
+        GraphQLConfigModule,
+        DataloaderModule,
+        MetricsModule,
+        I18nModule,
+        WorkspaceCacheModule,
+      ],
       inject: [
-        EnvironmentService,
+        TwentyConfigService,
         ExceptionHandlerService,
         DataloaderService,
-        CacheStorageNamespace.WorkspaceSchema,
+        CacheStorageNamespace.EngineWorkspace,
+        MetricsService,
+        I18nService,
+        FeatureFlagService,
+        WorkspaceCacheService,
       ],
     }),
     MetadataEngineModule,
-    WorkspaceMigrationRunnerModule,
-    WorkspaceMigrationModule,
-    CacheStorageModule,
   ],
 })
 export class MetadataGraphQLApiModule {}

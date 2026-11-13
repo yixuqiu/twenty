@@ -1,75 +1,80 @@
-import { IconArchiveOff, IconDotsVertical, IconTrash } from 'twenty-ui';
+import {
+  IconArchiveOff,
+  IconDotsVertical,
+  IconEye,
+  IconPencil,
+  IconTrash,
+} from 'twenty-ui/icon';
+import { LightIconButton } from 'twenty-ui/components/input';
+import { Dropdown } from 'twenty-ui/components/navigation';
 
-import { LightIconButton } from '@/ui/input/button/components/LightIconButton';
-import { Dropdown } from '@/ui/layout/dropdown/components/Dropdown';
-import { DropdownMenu } from '@/ui/layout/dropdown/components/DropdownMenu';
-import { DropdownMenuItemsContainer } from '@/ui/layout/dropdown/components/DropdownMenuItemsContainer';
-import { useDropdown } from '@/ui/layout/dropdown/hooks/useDropdown';
-import { MenuItem } from '@/ui/navigation/menu-item/components/MenuItem';
-import { FieldMetadataType } from '~/generated-metadata/graphql';
+import { DropdownRoot } from '@/ui/layout/dropdown/components/DropdownRoot';
+import { DropdownContent } from '@/ui/layout/dropdown/components/DropdownContent';
+import { GenericDropdownContentWidth } from '@/ui/layout/dropdown/constants/GenericDropdownContentWidth';
+import { type FieldMetadataType } from '~/generated-metadata/graphql';
+import { useLingui } from '@lingui/react/macro';
 
 type SettingsObjectFieldInactiveActionDropdownProps = {
   isCustomField?: boolean;
+  isSystemField?: boolean;
   fieldType?: FieldMetadataType;
+  fieldMetadataItemId: string;
   onActivate: () => void;
-  onErase: () => void;
-  scopeKey: string;
+  onEdit: () => void;
+  onDelete: () => void;
+  readonly?: boolean;
 };
 
 export const SettingsObjectFieldInactiveActionDropdown = ({
+  fieldMetadataItemId,
   onActivate,
-  scopeKey,
-  onErase,
+  readonly = false,
+  onDelete,
+  onEdit,
   isCustomField,
-  fieldType,
+  isSystemField,
 }: SettingsObjectFieldInactiveActionDropdownProps) => {
-  const dropdownId = `${scopeKey}-settings-field-disabled-action-dropdown`;
-
-  const { closeDropdown } = useDropdown(dropdownId);
-
-  const handleActivate = () => {
-    onActivate();
-    closeDropdown();
-  };
-
-  const handleErase = () => {
-    onErase();
-    closeDropdown();
-  };
-
-  const isErasable =
-    isCustomField &&
-    fieldType !== FieldMetadataType.Relation &&
-    fieldType !== FieldMetadataType.Address;
+  const { t } = useLingui();
+  const isDeletable = isCustomField && !isSystemField;
 
   return (
-    <Dropdown
-      dropdownId={dropdownId}
-      clickableComponent={
-        <LightIconButton Icon={IconDotsVertical} accent="tertiary" />
-      }
-      dropdownComponents={
-        <DropdownMenu width="160px">
-          <DropdownMenuItemsContainer>
-            <MenuItem
-              text="Activate"
-              LeftIcon={IconArchiveOff}
-              onClick={handleActivate}
-            />
-            {isErasable && (
-              <MenuItem
-                text="Erase"
-                accent="danger"
-                LeftIcon={IconTrash}
-                onClick={handleErase}
-              />
-            )}
-          </DropdownMenuItemsContainer>
-        </DropdownMenu>
-      }
-      dropdownHotkeyScope={{
-        scope: dropdownId,
-      }}
-    />
+    <DropdownRoot
+      type="menu"
+      dropdownId={`${fieldMetadataItemId}-settings-field-disabled-action-dropdown`}
+    >
+      <Dropdown.Trigger
+        render={
+          <LightIconButton
+            aria-label={t`Inactive Field Options`}
+            emphasis="subtle"
+          >
+            <IconDotsVertical />
+          </LightIconButton>
+        }
+      />
+      <DropdownContent align="end" width={GenericDropdownContentWidth.Narrow}>
+        <Dropdown.Section>
+          <Dropdown.ActionItem
+            startIcon={isCustomField ? <IconPencil /> : <IconEye />}
+            onClick={onEdit}
+          >
+            {isCustomField && !readonly ? t`Edit` : t`View`}
+          </Dropdown.ActionItem>
+          {!readonly && (
+            <Dropdown.ActionItem
+              startIcon={<IconArchiveOff />}
+              onClick={onActivate}
+            >{t`Activate`}</Dropdown.ActionItem>
+          )}
+          {isDeletable && !readonly && (
+            <Dropdown.ActionItem
+              color="danger"
+              startIcon={<IconTrash />}
+              onClick={onDelete}
+            >{t`Delete`}</Dropdown.ActionItem>
+          )}
+        </Dropdown.Section>
+      </DropdownContent>
+    </DropdownRoot>
   );
 };

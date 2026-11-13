@@ -1,42 +1,54 @@
 name: CI Docs
+
 on:
   push:
     branches:
       - main
-    paths:
-      - 'package.json'
-      - 'packages/twenty-docs/**'
-      - 'packages/twenty-ui/**'
+
   pull_request:
-    paths:
-      - 'package.json'
-      - 'packages/twenty-docs/**'
-      - 'packages/twenty-ui/**'
+
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
-  docs-build:
+  changed-files-check:
+    uses: ./.github/workflows/changed-files.yaml
+    with:
+      files: |
+        package.json
+        yarn.lock
+        packages/twenty-ui/**
+        packages/twenty-shared/**
+        .github/workflows/ci-docs.yaml
+        packages/twenty-docs/**
+        packages/twenty-server/src/engine/metadata-modules/ai/ai-front-component/constants/generated/ui-documentation.json
+
+  docs-lint:
+    needs: changed-files-check
+    if: needs.changed-files-check.outputs.any_changed == 'true'
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Install dependencies
-        uses: ./.github/workflows/actions/yarn-install
-      - name: Docs / Build Documentation
-        run: npx nx build twenty-docs
-  vale:
-    name: runner / vale
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: errata-ai/vale-action@reviewdog
+      - name: Fetch local actions
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
-          files: ${{ steps.directories.outputs.LIST }}
-          fail_on_error: true
-          vale_flags: "--minAlertLevel=error"
-          reporter: github-pr-check
-          token: ${{ github.token }}
-          filter_mode: nofilter
-        env:
-          REVIEWDOG_GITHUB_API_TOKEN: ${{ github.token }}
+          fetch-depth: 10
+
+      - name: Install dependencies
+        uses: ./.github/actions/yarn-install
+
+      - name: Docs / Lint
+        run: npx nx lint twenty-docs
+
+      - name: Docs / Test
+        run: npx nx test twenty-docs
+
+      - name: Docs / Generated UI references
+        run: npx nx check:ui twenty-docs
+
+      - name: Docs / Storybook embeds
+        run: npx nx check:ui-stories twenty-docs

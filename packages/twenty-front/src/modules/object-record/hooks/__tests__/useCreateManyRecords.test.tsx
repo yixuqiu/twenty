@@ -1,23 +1,34 @@
-import { ReactNode } from 'react';
-import { MockedProvider } from '@apollo/client/testing';
-import { mocked } from '@storybook/test';
 import { act, renderHook } from '@testing-library/react';
-import { RecoilRoot } from 'recoil';
 import { v4 } from 'uuid';
 
-import { CoreObjectNameSingular } from '@/object-metadata/types/CoreObjectNameSingular';
+import { StandardObjectNameSingular } from 'twenty-shared/types';
+import { triggerCreateRecordsOptimisticEffect } from '@/apollo/optimistic-effect/utils/triggerCreateRecordsOptimisticEffect';
 import {
   query,
   response,
   variables,
 } from '@/object-record/hooks/__mocks__/useCreateManyRecords';
 import { useCreateManyRecords } from '@/object-record/hooks/useCreateManyRecords';
+import { useRefetchAggregateQueries } from '@/object-record/hooks/useRefetchAggregateQueries';
+import { getJestMetadataAndApolloMocksWrapper } from '~/testing/jest/getJestMetadataAndApolloMocksWrapper';
 
 jest.mock('uuid', () => ({
+  ...jest.requireActual('uuid'),
   v4: jest.fn(),
 }));
 
-mocked(v4)
+jest.mock('@/object-record/hooks/useRefetchAggregateQueries');
+jest.mock(
+  '@/apollo/optimistic-effect/utils/triggerCreateRecordsOptimisticEffect',
+);
+const mockRefetchAggregateQueries = jest.fn();
+jest.mocked(useRefetchAggregateQueries).mockReturnValue({
+  refetchAggregateQueries: mockRefetchAggregateQueries,
+});
+
+jest
+  // uuid v11+ adds a Uint8Array overload to v4; pin the string signature for the mocks.
+  .mocked(v4 as () => string)
   .mockReturnValueOnce(variables.data[0].id)
   .mockReturnValueOnce(variables.data[1].id);
 
@@ -35,22 +46,35 @@ const mocks = [
       },
     })),
   },
+  {
+    request: {
+      query,
+      variables: {
+        data: input,
+        upsert: true,
+      },
+    },
+    result: jest.fn(() => ({
+      data: {
+        createPeople: response,
+      },
+    })),
+  },
 ];
 
-const Wrapper = ({ children }: { children: ReactNode }) => (
-  <RecoilRoot>
-    <MockedProvider mocks={mocks} addTypename={false}>
-      {children}
-    </MockedProvider>
-  </RecoilRoot>
-);
+const Wrapper = getJestMetadataAndApolloMocksWrapper({
+  apolloMocks: mocks,
+});
 
 describe('useCreateManyRecords', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
   it('works as expected', async () => {
     const { result } = renderHook(
       () =>
         useCreateManyRecords({
-          objectNameSingular: CoreObjectNameSingular.Person,
+          objectNameSingular: StandardObjectNameSingular.Person,
         }),
       {
         wrapper: Wrapper,
@@ -58,10 +82,46 @@ describe('useCreateManyRecords', () => {
     );
 
     await act(async () => {
-      const res = await result.current.createManyRecords(input);
+      const res = await result.current.createManyRecords({
+        recordsToCreate: input,
+      });
       expect(res).toEqual(response);
     });
 
     expect(mocks[0].result).toHaveBeenCalled();
+    expect(mockRefetchAggregateQueries).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not indicate id in request variables when upsert is true because we cant know if it will be an insert or an update', async () => {
+    const { result } = renderHook(
+      () =>
+        useCreateManyRecords({
+          objectNameSingular: StandardObjectNameSingular.Person,
+        }),
+      {
+        wrapper: Wrapper,
+      },
+    );
+
+    await act(async () => {
+      const res = await result.current.createManyRecords({
+        recordsToCreate: input,
+        upsert: true,
+      });
+      expect(res).toEqual(response);
+    });
+
+    expect(mocks[1].request.variables.data).toEqual(input);
+    mocks[1].request.variables.data.forEach((record: any) => {
+      expect(record).not.toHaveProperty('id');
+    });
+    expect(triggerCreateRecordsOptimisticEffect).toHaveBeenCalledTimes(1);
+    expect(triggerCreateRecordsOptimisticEffect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        recordsToCreate: response,
+        checkForRecordInCache: false,
+      }),
+    );
+    expect(mockRefetchAggregateQueries).toHaveBeenCalledTimes(1);
   });
 });

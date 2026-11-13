@@ -1,89 +1,59 @@
-import { CoreObjectNameSingular } from '@/object-metadata/types/CoreObjectNameSingular';
-import { ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
-import { getBasePathToShowPage } from '@/object-metadata/utils/getBasePathToShowPage';
+import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/EnrichedObjectMetadataItem';
+import { getImageIdentifierFieldMetadataItem } from '@/object-metadata/utils/getImageIdentifierFieldMetadataItem';
 import { getLabelIdentifierFieldMetadataItem } from '@/object-metadata/utils/getLabelIdentifierFieldMetadataItem';
-import { ObjectRecord } from '@/object-record/types/ObjectRecord';
-import { ObjectRecordIdentifier } from '@/object-record/types/ObjectRecordIdentifier';
-import { WorkspaceMember } from '@/workspace-member/types/WorkspaceMember';
-import { FieldMetadataType } from '~/generated-metadata/graphql';
-import { getLogoUrlFromDomainName } from '~/utils';
+import { type ObjectRecord } from '@/object-record/types/ObjectRecord';
+import { type ObjectRecordIdentifier } from '@/object-record/types/ObjectRecordIdentifier';
+
+import { getAvatarShape } from './getAvatarShape';
+import { getAvatarUrl } from './getAvatarUrl';
+import { getLabelIdentifierFieldValue } from './getLabelIdentifierFieldValue';
+import { getLinkToShowPage } from './getLinkToShowPage';
 
 export const getObjectRecordIdentifier = ({
   objectMetadataItem,
   record,
+  allowRequestsToTwentyIcons,
 }: {
-  objectMetadataItem: ObjectMetadataItem;
+  objectMetadataItem: Pick<
+    EnrichedObjectMetadataItem,
+    | 'fields'
+    | 'labelIdentifierFieldMetadataId'
+    | 'nameSingular'
+    | 'imageIdentifierFieldMetadataId'
+  >;
   record: ObjectRecord;
+  allowRequestsToTwentyIcons: boolean;
 }): ObjectRecordIdentifier => {
-  switch (objectMetadataItem.nameSingular) {
-    case CoreObjectNameSingular.WorkspaceMember: {
-      const workspaceMember = record as Partial<WorkspaceMember> & {
-        id: string;
-      };
-
-      const name = workspaceMember.name
-        ? `${workspaceMember.name?.firstName ?? ''} ${
-            workspaceMember.name?.lastName ?? ''
-          }`
-        : '';
-
-      return {
-        id: workspaceMember.id,
-        name,
-        avatarUrl: workspaceMember.avatarUrl ?? undefined,
-        avatarType: 'rounded',
-      };
-    }
-  }
-
   const labelIdentifierFieldMetadataItem =
     getLabelIdentifierFieldMetadataItem(objectMetadataItem);
 
-  const labelIdentifierFieldValue =
-    labelIdentifierFieldMetadataItem?.type === FieldMetadataType.FullName
-      ? `${record.name?.firstName ?? ''} ${record.name?.lastName ?? ''}`
-      : labelIdentifierFieldMetadataItem?.name
-        ? (record[labelIdentifierFieldMetadataItem.name] as string | number)
-        : '';
-
-  const imageIdentifierFieldMetadata = objectMetadataItem.fields.find(
-    (field) => field.id === objectMetadataItem.imageIdentifierFieldMetadataId,
+  const labelIdentifierFieldValue = getLabelIdentifierFieldValue(
+    record,
+    labelIdentifierFieldMetadataItem,
   );
 
-  const imageIdentifierFieldValue = imageIdentifierFieldMetadata
-    ? (record[imageIdentifierFieldMetadata.name] as string)
-    : null;
+  const imageIdentifierFieldMetadata =
+    getImageIdentifierFieldMetadataItem(objectMetadataItem);
 
-  const avatarType =
-    objectMetadataItem.nameSingular === CoreObjectNameSingular.Company
-      ? 'squared'
-      : 'rounded';
+  const avatarShape = getAvatarShape(objectMetadataItem);
 
-  // TODO: This is a temporary solution before we seed imageIdentifierFieldMetadataId in the database
-  const avatarUrl =
-    (objectMetadataItem.nameSingular === CoreObjectNameSingular.Company
-      ? getLogoUrlFromDomainName(record.domainName ?? '')
-      : objectMetadataItem.nameSingular === CoreObjectNameSingular.Person
-        ? record.avatarUrl ?? ''
-        : imageIdentifierFieldValue) ?? '';
+  const avatarUrl = getAvatarUrl(
+    objectMetadataItem.nameSingular,
+    record,
+    imageIdentifierFieldMetadata,
+    allowRequestsToTwentyIcons,
+  );
 
-  const basePathToShowPage = getBasePathToShowPage({
-    objectNameSingular: objectMetadataItem.nameSingular,
-  });
-
-  const isWorkspaceMemberObjectMetadata =
-    objectMetadataItem.nameSingular === CoreObjectNameSingular.WorkspaceMember;
-
-  const linkToShowPage =
-    isWorkspaceMemberObjectMetadata || !record.id
-      ? ''
-      : `${basePathToShowPage}${record.id}`;
+  const linkToShowPage = getLinkToShowPage(
+    objectMetadataItem.nameSingular,
+    record,
+  );
 
   return {
     id: record.id,
     name: `${labelIdentifierFieldValue}`,
     avatarUrl,
-    avatarType,
+    avatarShape,
     linkToShowPage,
   };
 };

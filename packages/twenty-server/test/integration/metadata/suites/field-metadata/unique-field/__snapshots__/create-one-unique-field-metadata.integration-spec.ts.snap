@@ -1,0 +1,73 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`failing createOne unique field metadata should fail for composite type without unique subfields (FULL_NAME) 1`] = `
+{
+  "extensions": {
+    "code": "METADATA_VALIDATION_FAILED",
+    "errors": {
+      "index": [
+        {
+          "errors": [
+            {
+              "code": "INDEX_FIELD_INVALID_TYPE_FOR_UNIQUE",
+              "message": "Unique index cannot be created for field uniqueFullName of type FULL_NAME",
+              "userFriendlyMessage": "FULL_NAME fields cannot be unique.",
+            },
+          ],
+          "flatEntityMinimalInformation": {
+            "name": "IDX_UNIQUE_bc547a6d21781de850d61c9e279",
+            "universalIdentifier": Any<String>,
+          },
+          "metadataName": "index",
+          "status": "fail",
+          "type": "create",
+        },
+      ],
+    },
+    "message": "Validation failed for 1 index",
+    "summary": {
+      "index": 1,
+      "totalErrors": 1,
+    },
+    "userFriendlyMessage": "FULL_NAME fields cannot be unique.",
+  },
+  "message": "Multiple validation errors occurred while creating fields",
+  "name": "GraphQLError",
+}
+`;
+
+exports[`failing createOne unique field metadata should fail when field has custom default value 1`] = `
+{
+  "extensions": {
+    "code": "METADATA_VALIDATION_FAILED",
+    "errors": {
+      "index": [
+        {
+          "errors": [
+            {
+              "code": "INDEX_FIELD_INVALID_DEFAULT_VALUE",
+              "message": "Unique index cannot be created for field uniqueFieldWithDefault of type TEXT",
+              "userFriendlyMessage": "TEXT fields cannot have a default value.",
+            },
+          ],
+          "flatEntityMinimalInformation": {
+            "name": "IDX_UNIQUE_6aa900db1d7e4d9886689a0bedc",
+            "universalIdentifier": Any<String>,
+          },
+          "metadataName": "index",
+          "status": "fail",
+          "type": "create",
+        },
+      ],
+    },
+    "message": "Validation failed for 1 index",
+    "summary": {
+      "index": 1,
+      "totalErrors": 1,
+    },
+    "userFriendlyMessage": "TEXT fields cannot have a default value.",
+  },
+  "message": "Multiple validation errors occurred while creating fields",
+  "name": "GraphQLError",
+}
+`;

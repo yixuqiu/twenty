@@ -5,7 +5,6 @@ function getMdSection(category: string, message: string) {
   return `# ${category} <br>${message}`;
 }
 
-// Check if package.json was changed, but not yarn.lock
 const packageChanged = danger.git.modified_files.find((x) =>
   x.includes('package.json'),
 );
@@ -18,20 +17,16 @@ if (packageChanged && !lockfileChanged) {
   warn(`${message} - <i>${idea}</i>`);
 }
 
-// Check if .env.example was changed, but not environment variable documentation
-const envChanged =
-  danger.git.modified_files.find((x) => x.includes('.env.example')) ||
-  danger.git.modified_files.find((x) => x.includes('environment.service.ts'));
-const envDocsChanged = danger.git.modified_files.includes('self-hosting.mdx');
-if (envChanged && !envDocsChanged) {
-  const message =
-    'Changes were made to the environment variables, but not to the documentation';
-  const idea =
-    'Please review your changes and check if a change needs to be documented!';
+const envExampleChanged = danger.git.modified_files.find((x) => 
+  x.includes('.env.example')
+);
+
+if (envExampleChanged) {
+  const message = 'Changes were made to .env.example';
+  const idea = 'Please make sure any new environment variables are properly documented with metadata in config-variables.ts';
   warn(`${message} - <i>${idea}</i>`);
 }
 
-// CLA alert if first time contributor
 if (
   danger.github &&
   danger.github.pr &&
@@ -48,5 +43,4 @@ By submitting your Pull Request, you acknowledge that you agree with the terms o
   );
 }
 
-// TODOS / Fixme
 schedule(todos());

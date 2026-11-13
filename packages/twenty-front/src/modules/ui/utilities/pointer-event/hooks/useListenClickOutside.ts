@@ -1,195 +1,169 @@
-import React, { useEffect, useState } from 'react';
+import { useCallback, useEffect, type RefObject } from 'react';
 
-export enum ClickOutsideMode {
-  comparePixels = 'comparePixels',
-  compareHTMLRef = 'compareHTMLRef',
-}
+import { clickOutsideListenerIsActivatedComponentState } from '@/ui/utilities/pointer-event/states/clickOutsideListenerIsActivatedComponentState';
+import { clickOutsideListenerIsMouseDownInsideComponentState } from '@/ui/utilities/pointer-event/states/clickOutsideListenerIsMouseDownInsideComponentState';
+import { clickOutsideListenerMouseDownHappenedComponentState } from '@/ui/utilities/pointer-event/states/clickOutsideListenerMouseDownHappenedComponentState';
+import { useStore } from 'jotai';
+import { isDefined } from 'twenty-shared/utils';
+
+const CLICK_OUTSIDE_DEBUG_MODE = false;
+
+export type ClickOutsideListenerProps<T extends Element> = {
+  refs: Array<RefObject<T | null>>;
+  excludedClickOutsideIds?: string[];
+  callback: (event: MouseEvent | TouchEvent) => void;
+  listenerId: string;
+  enabled?: boolean;
+};
 
 export const useListenClickOutside = <T extends Element>({
   refs,
+  excludedClickOutsideIds,
   callback,
-  mode = ClickOutsideMode.compareHTMLRef,
+  listenerId,
   enabled = true,
-}: {
-  refs: Array<React.RefObject<T>>;
-  callback: (event: MouseEvent | TouchEvent) => void;
-  mode?: ClickOutsideMode;
-  enabled?: boolean;
-}) => {
-  const [isMouseDownInside, setIsMouseDownInside] = useState(false);
+}: ClickOutsideListenerProps<T>) => {
+  const store = useStore();
 
-  useEffect(() => {
-    const handleMouseDown = (event: MouseEvent | TouchEvent) => {
-      if (mode === ClickOutsideMode.compareHTMLRef) {
-        const clickedOnAtLeastOneRef = refs
-          .filter((ref) => !!ref.current)
-          .some((ref) => ref.current?.contains(event.target as Node));
+  const handleMouseDown = useCallback(
+    (event: MouseEvent | TouchEvent) => {
+      const clickOutsideListenerIsActivated = store.get(
+        clickOutsideListenerIsActivatedComponentState.atomFamily({
+          instanceId: listenerId,
+        }),
+      );
 
-        setIsMouseDownInside(clickedOnAtLeastOneRef);
+      store.set(
+        clickOutsideListenerMouseDownHappenedComponentState.atomFamily({
+          instanceId: listenerId,
+        }),
+        true,
+      );
+
+      const isListening = clickOutsideListenerIsActivated && enabled;
+
+      if (!isListening) {
+        return;
       }
 
-      if (mode === ClickOutsideMode.comparePixels) {
-        const clickedOnAtLeastOneRef = refs
-          .filter((ref) => !!ref.current)
-          .some((ref) => {
-            if (!ref.current) {
-              return false;
-            }
+      const clickedOnAtLeastOneRef = refs
+        .filter((ref) => !!ref.current)
+        .some((ref) => ref.current?.contains(event.target as Node));
 
-            const { x, y, width, height } = ref.current.getBoundingClientRect();
+      store.set(
+        clickOutsideListenerIsMouseDownInsideComponentState.atomFamily({
+          instanceId: listenerId,
+        }),
+        clickedOnAtLeastOneRef,
+      );
+    },
+    [listenerId, enabled, refs, store],
+  );
 
-            const clientX =
-              'clientX' in event
-                ? event.clientX
-                : event.changedTouches[0].clientX;
-            const clientY =
-              'clientY' in event
-                ? event.clientY
-                : event.changedTouches[0].clientY;
+  const handleClickOutside = useCallback(
+    (event: MouseEvent | TouchEvent) => {
+      const clickOutsideListenerIsActivated = store.get(
+        clickOutsideListenerIsActivatedComponentState.atomFamily({
+          instanceId: listenerId,
+        }),
+      );
 
-            if (
-              clientX < x ||
-              clientX > x + width ||
-              clientY < y ||
-              clientY > y + height
-            ) {
-              return false;
-            }
-            return true;
-          });
+      const isListening = clickOutsideListenerIsActivated && enabled;
 
-        setIsMouseDownInside(clickedOnAtLeastOneRef);
-      }
-    };
+      const isMouseDownInside = store.get(
+        clickOutsideListenerIsMouseDownInsideComponentState.atomFamily({
+          instanceId: listenerId,
+        }),
+      );
 
-    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
-      if (mode === ClickOutsideMode.compareHTMLRef) {
-        const clickedOnAtLeastOneRef = refs
-          .filter((ref) => !!ref.current)
-          .some((ref) => ref.current?.contains(event.target as Node));
-
-        if (!clickedOnAtLeastOneRef && !isMouseDownInside) {
-          callback(event);
-        }
-      }
-
-      if (mode === ClickOutsideMode.comparePixels) {
-        const clickedOnAtLeastOneRef = refs
-          .filter((ref) => !!ref.current)
-          .some((ref) => {
-            if (!ref.current) {
-              return false;
-            }
-
-            const { x, y, width, height } = ref.current.getBoundingClientRect();
-
-            const clientX =
-              'clientX' in event
-                ? event.clientX
-                : event.changedTouches[0].clientX;
-            const clientY =
-              'clientY' in event
-                ? event.clientY
-                : event.changedTouches[0].clientY;
-
-            if (
-              clientX < x ||
-              clientX > x + width ||
-              clientY < y ||
-              clientY > y + height
-            ) {
-              return false;
-            }
-            return true;
-          });
-
-        if (!clickedOnAtLeastOneRef && !isMouseDownInside) {
-          callback(event);
-        }
-      }
-    };
-
-    if (enabled) {
-      document.addEventListener('mousedown', handleMouseDown, {
-        capture: true,
-      });
-      document.addEventListener('click', handleClickOutside, { capture: true });
-      document.addEventListener('touchstart', handleMouseDown, {
-        capture: true,
-      });
-      document.addEventListener('touchend', handleClickOutside, {
-        capture: true,
-      });
-
-      return () => {
-        document.removeEventListener('mousedown', handleMouseDown, {
-          capture: true,
-        });
-        document.removeEventListener('click', handleClickOutside, {
-          capture: true,
-        });
-        document.removeEventListener('touchstart', handleMouseDown, {
-          capture: true,
-        });
-        document.removeEventListener('touchend', handleClickOutside, {
-          capture: true,
-        });
-      };
-    }
-  }, [refs, callback, mode, enabled, isMouseDownInside]);
-};
-
-export const useListenClickOutsideByClassName = ({
-  classNames,
-  excludeClassNames,
-  callback,
-}: {
-  classNames: string[];
-  excludeClassNames?: string[];
-  callback: () => void;
-}) => {
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
-      if (!(event.target instanceof Node)) return;
+      const hasMouseDownHappened = store.get(
+        clickOutsideListenerMouseDownHappenedComponentState.atomFamily({
+          instanceId: listenerId,
+        }),
+      );
 
       const clickedElement = event.target as HTMLElement;
-      let isClickedInside = false;
       let isClickedOnExcluded = false;
       let currentElement: HTMLElement | null = clickedElement;
 
       while (currentElement) {
-        const currentClassList = currentElement.classList;
+        const currentDataAttributes = currentElement.dataset;
+        const isGloballyExcluded =
+          currentDataAttributes?.globallyPreventClickOutside === 'true';
 
-        isClickedInside = classNames.some((className) =>
-          currentClassList.contains(className),
-        );
+        const clickOutsideId = currentDataAttributes?.clickOutsideId;
+
         isClickedOnExcluded =
-          excludeClassNames?.some((className) =>
-            currentClassList.contains(className),
-          ) ?? false;
+          isGloballyExcluded ||
+          (isDefined(clickOutsideId) &&
+            isDefined(excludedClickOutsideIds) &&
+            excludedClickOutsideIds.includes(clickOutsideId));
 
-        if (isClickedInside || isClickedOnExcluded) {
+        if (isClickedOnExcluded) {
           break;
         }
 
         currentElement = currentElement.parentElement;
       }
 
-      if (!isClickedInside && !isClickedOnExcluded) {
-        callback();
-      }
-    };
+      const clickedOnAtLeastOneRef = refs
+        .filter((ref) => !!ref.current)
+        .some((ref) => ref.current?.contains(event.target as Node));
 
-    document.addEventListener('mousedown', handleClickOutside);
+      const shouldTrigger =
+        isListening &&
+        hasMouseDownHappened &&
+        !clickedOnAtLeastOneRef &&
+        !isMouseDownInside &&
+        !isClickedOnExcluded;
+
+      if (CLICK_OUTSIDE_DEBUG_MODE) {
+        // oxlint-disable-next-line no-console
+        console.log('click outside compare ref', {
+          listenerId,
+          shouldTrigger,
+          clickedOnAtLeastOneRef,
+          isMouseDownInside,
+          isListening,
+          hasMouseDownHappened,
+          isClickedOnExcluded,
+          enabled,
+          event,
+        });
+      }
+
+      if (shouldTrigger) {
+        callback(event);
+      }
+    },
+    [listenerId, enabled, refs, excludedClickOutsideIds, callback, store],
+  );
+
+  useEffect(() => {
+    document.addEventListener('mousedown', handleMouseDown, {
+      capture: true,
+    });
+    document.addEventListener('click', handleClickOutside, { capture: true });
+    document.addEventListener('touchstart', handleMouseDown, {
+      capture: true,
+    });
     document.addEventListener('touchend', handleClickOutside, {
       capture: true,
     });
 
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('mousedown', handleMouseDown, {
+        capture: true,
+      });
+      document.removeEventListener('click', handleClickOutside, {
+        capture: true,
+      });
+      document.removeEventListener('touchstart', handleMouseDown, {
+        capture: true,
+      });
       document.removeEventListener('touchend', handleClickOutside, {
         capture: true,
       });
     };
-  }, [callback, classNames, excludeClassNames]);
+  }, [refs, callback, handleClickOutside, handleMouseDown]);
 };

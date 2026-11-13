@@ -1,58 +1,25 @@
-import { useCallback, useContext, useRef } from 'react';
-import styled from '@emotion/styled';
+import { useRecordGroupActions } from '@/object-record/record-group/hooks/useRecordGroupActions';
+import { SelectOptionIcon } from '@/ui/input/components/SelectOptionIcon';
+import { ViewType } from '@/views/types/ViewType';
+import { Dropdown } from 'twenty-ui/components/navigation';
 
-import { RecordBoardColumnContext } from '@/object-record/record-board/record-board-column/contexts/RecordBoardColumnContext';
-import { DropdownMenu } from '@/ui/layout/dropdown/components/DropdownMenu';
-import { DropdownMenuItemsContainer } from '@/ui/layout/dropdown/components/DropdownMenuItemsContainer';
-import { MenuItem } from '@/ui/navigation/menu-item/components/MenuItem';
-import { useListenClickOutside } from '@/ui/utilities/pointer-event/hooks/useListenClickOutside';
-
-const StyledMenuContainer = styled.div`
-  position: absolute;
-  top: ${({ theme }) => theme.spacing(10)};
-  width: 200px;
-  z-index: 1;
-`;
-
-type RecordBoardColumnDropdownMenuProps = {
-  onClose: () => void;
-  onDelete?: (id: string) => void;
-  stageId: string;
-};
-
-export const RecordBoardColumnDropdownMenu = ({
-  onClose,
-}: RecordBoardColumnDropdownMenuProps) => {
-  const boardColumnMenuRef = useRef<HTMLDivElement>(null);
-
-  const closeMenu = useCallback(() => {
-    onClose();
-  }, [onClose]);
-
-  useListenClickOutside({
-    refs: [boardColumnMenuRef],
-    callback: closeMenu,
+export const RecordBoardColumnDropdownMenu = () => {
+  const recordGroupActions = useRecordGroupActions({
+    viewType: ViewType.KANBAN,
   });
 
-  const { columnDefinition } = useContext(RecordBoardColumnContext);
-
   return (
-    <StyledMenuContainer ref={boardColumnMenuRef}>
-      <DropdownMenu data-select-disable>
-        <DropdownMenuItemsContainer>
-          {columnDefinition.actions.map((action) => (
-            <MenuItem
-              key={action.id}
-              onClick={() => {
-                action.callback();
-                closeMenu();
-              }}
-              LeftIcon={action.icon}
-              text={action.label}
-            />
-          ))}
-        </DropdownMenuItemsContainer>
-      </DropdownMenu>
-    </StyledMenuContainer>
+    <Dropdown.Section>
+      {recordGroupActions.map((action) => (
+        <Dropdown.ActionItem
+          key={action.id}
+          onClick={action.callback}
+          closeOnClick={action.closeOnClick}
+          startIcon={<SelectOptionIcon Icon={action.icon} />}
+        >
+          {action.label}
+        </Dropdown.ActionItem>
+      ))}
+    </Dropdown.Section>
   );
 };

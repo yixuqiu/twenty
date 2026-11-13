@@ -1,33 +1,134 @@
-import { ReactNode } from 'react';
-import { MockedProvider } from '@apollo/client/testing';
-import { act, renderHook } from '@testing-library/react';
-import { RecoilRoot } from 'recoil';
+import { renderHook } from '@testing-library/react';
+import { act } from 'react';
 
 import { useFieldMetadataItem } from '@/object-metadata/hooks/useFieldMetadataItem';
-import { FieldMetadataItem } from '@/object-metadata/types/FieldMetadataItem';
-import { FieldMetadataType } from '~/generated/graphql';
+import { type FieldMetadataItem } from '@/object-metadata/types/FieldMetadataItem';
+import { FieldMetadataType, RelationType } from '~/generated-metadata/graphql';
 
 import {
+  FIELD_METADATA_ID,
+  FIELD_RELATION_METADATA_ID,
   objectMetadataId,
   queries,
   responseData,
   variables,
-} from '../__mocks__/useFieldMetadataItem';
+} from '@/object-metadata/hooks/__mocks__/useFieldMetadataItem';
+import { getJestMetadataAndApolloMocksWrapper } from '~/testing/jest/getJestMetadataAndApolloMocksWrapper';
+
+import {
+  query as findManyObjectMetadataItemsQuery,
+  responseData as findManyObjectMetadataItemsResponseData,
+} from '@/object-metadata/hooks/__mocks__/useFindManyObjectMetadataItems';
+import { jestExpectSuccessfulMetadataRequestResult } from '@/object-metadata/hooks/__tests__/utils/jest-expect-metadata-request-status.util';
+import { GET_CURRENT_USER } from '@/users/graphql/queries/getCurrentUser';
+import { mockedUserData } from '~/testing/mock-data/users';
+
+jest.mock('@/object-metadata/hooks/useUpdateOneFieldMetadataItem', () => ({
+  useUpdateOneFieldMetadataItem: () => ({
+    updateOneFieldMetadataItem: jest.fn().mockResolvedValue({
+      status: 'successful',
+      response: {
+        data: {
+          updateOneField: responseData.default,
+        },
+      },
+    }),
+  }),
+}));
+
+jest.mock('@/object-metadata/hooks/useCreateOneFieldMetadataItem', () => ({
+  useCreateOneFieldMetadataItem: () => ({
+    createOneFieldMetadataItem: jest.fn().mockResolvedValue({
+      status: 'successful',
+      response: {
+        data: {
+          createOneField: responseData.createMetadataField,
+        },
+      },
+    }),
+  }),
+}));
+
+jest.mock('@/object-metadata/hooks/useDeleteOneFieldMetadataItem', () => ({
+  useDeleteOneFieldMetadataItem: () => ({
+    deleteOneFieldMetadataItem: jest
+      .fn()
+      .mockImplementation(({ idToDelete }) => {
+        const data =
+          idToDelete === FIELD_RELATION_METADATA_ID
+            ? responseData.fieldRelation
+            : responseData.default;
+        return Promise.resolve({
+          status: 'successful',
+          response: {
+            data: {
+              deleteOneField: data,
+            },
+          },
+        });
+      }),
+  }),
+}));
 
 const fieldMetadataItem: FieldMetadataItem = {
-  id: '2c43466a-fe9e-4005-8d08-c5836067aa6c',
+  id: FIELD_METADATA_ID,
+  universalIdentifier: FIELD_METADATA_ID,
   createdAt: '',
   label: 'label',
   name: 'name',
-  type: FieldMetadataType.Text,
+  type: FieldMetadataType.TEXT,
   updatedAt: '',
+  isLabelSyncedWithName: true,
+};
+
+const fieldRelationMetadataItem: FieldMetadataItem = {
+  id: FIELD_RELATION_METADATA_ID,
+  universalIdentifier: FIELD_RELATION_METADATA_ID,
+  createdAt: '',
+  label: 'label',
+  name: 'name',
+  type: FieldMetadataType.RELATION,
+  updatedAt: '',
+  isLabelSyncedWithName: true,
+  relation: {
+    type: RelationType.ONE_TO_MANY,
+    sourceFieldMetadata: {
+      id: 'e5903d91-9b10-4f3e-b761-35c36e93b7c1',
+      name: 'sourceField',
+    },
+    targetFieldMetadata: {
+      id: 'd23d82d4-690b-489f-a8e3-fc5ed01a91f6',
+      name: 'targetField',
+    },
+    sourceObjectMetadata: {
+      id: 'bf46be8a-7c47-45a7-b2f1-30f49e14fbd9',
+      nameSingular: 'sourceObject',
+      namePlural: 'sourceObjects',
+    },
+    targetObjectMetadata: {
+      id: '987c0489-2855-4a63-bb81-93692e51b2a9',
+      nameSingular: 'targetObject',
+      namePlural: 'targetObjects',
+    },
+  },
 };
 
 const mocks = [
   {
     request: {
-      query: queries.eraseMetadataField,
-      variables: variables.eraseMetadataField,
+      query: GET_CURRENT_USER,
+      variables: {},
+    },
+    result: jest.fn(() => ({
+      data: {
+        currentUser: mockedUserData,
+      },
+    })),
+  },
+  {
+    request: {
+      query: queries.deleteMetadataField,
+      variables: variables.deleteMetadataField,
     },
     result: jest.fn(() => ({
       data: {
@@ -37,12 +138,12 @@ const mocks = [
   },
   {
     request: {
-      query: queries.activateMetadataField,
-      variables: variables.activateMetadataField,
+      query: queries.deleteMetadataField,
+      variables: variables.deleteMetadataFieldRelation,
     },
     result: jest.fn(() => ({
       data: {
-        updateOneField: responseData.default,
+        deleteOneField: responseData.fieldRelation,
       },
     })),
   },
@@ -59,24 +160,18 @@ const mocks = [
   },
   {
     request: {
-      query: queries.activateMetadataField,
-      variables: variables.disableMetadataField,
+      query: findManyObjectMetadataItemsQuery,
+      variables: {},
     },
     result: jest.fn(() => ({
-      data: {
-        updateOneField: responseData.default,
-      },
+      data: findManyObjectMetadataItemsResponseData,
     })),
   },
 ];
 
-const Wrapper = ({ children }: { children: ReactNode }) => (
-  <RecoilRoot>
-    <MockedProvider mocks={mocks} addTypename={false}>
-      {children}
-    </MockedProvider>
-  </RecoilRoot>
-);
+const Wrapper = getJestMetadataAndApolloMocksWrapper({
+  apolloMocks: mocks,
+});
 
 describe('useFieldMetadataItem', () => {
   it('should activateMetadataField', async () => {
@@ -85,10 +180,17 @@ describe('useFieldMetadataItem', () => {
     });
 
     await act(async () => {
-      const res = await result.current.activateMetadataField(fieldMetadataItem);
+      const response = await result.current.activateMetadataField(
+        fieldMetadataItem.id,
+        objectMetadataId,
+      );
 
-      expect(res.data).toEqual({
-        updateOneField: responseData.default,
+      jestExpectSuccessfulMetadataRequestResult(response);
+
+      expect(response.response).toEqual({
+        data: {
+          updateOneField: responseData.default,
+        },
       });
     });
   });
@@ -102,39 +204,72 @@ describe('useFieldMetadataItem', () => {
       const res = await result.current.createMetadataField({
         label: 'fieldLabel',
         objectMetadataId,
-        type: FieldMetadataType.Text,
+        type: FieldMetadataType.TEXT,
+        name: 'fieldName',
+        isLabelSyncedWithName: true,
       });
+      jestExpectSuccessfulMetadataRequestResult(res);
 
-      expect(res.data).toEqual({
-        createOneField: responseData.createMetadataField,
+      expect(res.response).toEqual({
+        data: {
+          createOneField: responseData.createMetadataField,
+        },
       });
     });
   });
 
-  it('should disableMetadataField', async () => {
+  it('should deactivateMetadataField', async () => {
     const { result } = renderHook(() => useFieldMetadataItem(), {
       wrapper: Wrapper,
     });
 
     await act(async () => {
-      const res = await result.current.disableMetadataField(fieldMetadataItem);
+      const response = await result.current.deactivateMetadataField(
+        fieldMetadataItem.id,
+        objectMetadataId,
+      );
 
-      expect(res.data).toEqual({
+      jestExpectSuccessfulMetadataRequestResult(response);
+      expect(response.response.data).toEqual({
         updateOneField: responseData.default,
       });
     });
   });
 
-  it('should eraseMetadataField', async () => {
+  it('should deleteOneFieldMetadataItem when calling deleteMetadataField for a non-relation field', async () => {
     const { result } = renderHook(() => useFieldMetadataItem(), {
       wrapper: Wrapper,
     });
 
     await act(async () => {
-      const res = await result.current.eraseMetadataField(fieldMetadataItem);
+      const res = await result.current.deleteMetadataField({
+        idToDelete: fieldMetadataItem.id,
+      });
+      jestExpectSuccessfulMetadataRequestResult(res);
 
-      expect(res.data).toEqual({
-        deleteOneField: responseData.default,
+      expect(res.response).toEqual({
+        data: {
+          deleteOneField: responseData.default,
+        },
+      });
+    });
+  });
+
+  it('should deleteOneFieldMetadataItem when calling deleteMetadataField for a relation field', async () => {
+    const { result } = renderHook(() => useFieldMetadataItem(), {
+      wrapper: Wrapper,
+    });
+
+    await act(async () => {
+      const res = await result.current.deleteMetadataField({
+        idToDelete: fieldRelationMetadataItem.id,
+      });
+      jestExpectSuccessfulMetadataRequestResult(res);
+
+      expect(res.response).toEqual({
+        data: {
+          deleteOneField: responseData.fieldRelation,
+        },
       });
     });
   });

@@ -1,46 +1,99 @@
-import { useEffect, useState } from 'react';
-import { useRecoilValue } from 'recoil';
-
-import { FieldMetadataItemOption } from '@/object-metadata/types/FieldMetadataItem';
-import { useFilterDropdown } from '@/object-record/object-filter-dropdown/hooks/useFilterDropdown';
+import { ListItemButton } from 'twenty-ui/components/navigation';
+import { fieldMetadataItemByIdSelector } from '@/object-metadata/states/fieldMetadataItemByIdSelector';
+import { type FieldMetadataItemOption } from '@/object-metadata/types/FieldMetadataItem';
+import { useApplyObjectFilterDropdownFilterValue } from '@/object-record/object-filter-dropdown/hooks/useApplyObjectFilterDropdownFilterValue';
 import { useOptionsForSelect } from '@/object-record/object-filter-dropdown/hooks/useOptionsForSelect';
+import { ObjectFilterDropdownComponentInstanceContext } from '@/object-record/object-filter-dropdown/states/contexts/ObjectFilterDropdownComponentInstanceContext';
+import { fieldMetadataItemUsedInDropdownComponentSelector } from '@/object-record/object-filter-dropdown/states/fieldMetadataItemUsedInDropdownComponentSelector';
+import { objectFilterDropdownCurrentRecordFilterComponentState } from '@/object-record/object-filter-dropdown/states/objectFilterDropdownCurrentRecordFilterComponentState';
+import { objectFilterDropdownSearchInputComponentState } from '@/object-record/object-filter-dropdown/states/objectFilterDropdownSearchInputComponentState';
 import { DropdownMenuItemsContainer } from '@/ui/layout/dropdown/components/DropdownMenuItemsContainer';
-import { MenuItem } from '@/ui/navigation/menu-item/components/MenuItem';
-import { MenuItemMultiSelect } from '@/ui/navigation/menu-item/components/MenuItemMultiSelect';
-import { isDefined } from '~/utils/isDefined';
+import { useCloseDropdown } from '@/ui/layout/dropdown/hooks/useCloseDropdown';
+import { SelectableList } from '@/ui/layout/selectable-list/components/SelectableList';
+import { useSelectableList } from '@/ui/layout/selectable-list/hooks/useSelectableList';
+import { selectedItemIdComponentState } from '@/ui/layout/selectable-list/states/selectedItemIdComponentState';
+import { useHotkeysOnFocusedElement } from '@/ui/utilities/hotkey/hooks/useHotkeysOnFocusedElement';
+import { useAvailableComponentInstanceIdOrThrow } from '@/ui/utilities/state/component-state/hooks/useAvailableComponentInstanceIdOrThrow';
+import { useAtomComponentSelectorValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentSelectorValue';
+import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
+import { useAtomFamilySelectorValue } from '@/ui/utilities/state/jotai/hooks/useAtomFamilySelectorValue';
+import { isNonEmptyString } from '@sniptt/guards';
+import { useEffect, useMemo, useState } from 'react';
+import { Key } from 'ts-key-enum';
+import { MAX_OPTIONS_TO_DISPLAY } from 'twenty-shared/constants';
+import { isDefined, parseJson } from 'twenty-shared/utils';
+import { OverflowingTextWithTooltip } from 'twenty-ui/primitives/typography';
+import { Tag } from 'twenty-ui/primitives/data-display';
+import { ListItem } from 'twenty-ui/primitives/navigation';
+import { z } from 'zod';
+import { useLingui } from '@lingui/react/macro';
 
 export const EMPTY_FILTER_VALUE = '';
-export const MAX_OPTIONS_TO_DISPLAY = 3;
 
 type SelectOptionForFilter = FieldMetadataItemOption & {
   isSelected: boolean;
 };
 
-export const ObjectFilterDropdownOptionSelect = () => {
-  const {
-    filterDefinitionUsedInDropdownState,
-    objectFilterDropdownSearchInputState,
-    selectedOperandInDropdownState,
-    objectFilterDropdownSelectedOptionValuesState,
-    selectFilter,
-  } = useFilterDropdown();
-
-  const filterDefinitionUsedInDropdown = useRecoilValue(
-    filterDefinitionUsedInDropdownState,
-  );
-  const selectedOperandInDropdown = useRecoilValue(
-    selectedOperandInDropdownState,
-  );
-  const objectFilterDropdownSearchInput = useRecoilValue(
-    objectFilterDropdownSearchInputState,
-  );
-  const objectFilterDropdownSelectedOptionValues = useRecoilValue(
-    objectFilterDropdownSelectedOptionValuesState,
+export const ObjectFilterDropdownOptionSelect = ({
+  focusId,
+}: {
+  focusId: string;
+}) => {
+  const { t } = useLingui();
+  const fieldMetadataItemUsedInDropdown = useAtomComponentSelectorValue(
+    fieldMetadataItemUsedInDropdownComponentSelector,
   );
 
-  const fieldMetaDataId = filterDefinitionUsedInDropdown?.fieldMetadataId ?? '';
+  const objectFilterDropdownSearchInput = useAtomComponentStateValue(
+    objectFilterDropdownSearchInputComponentState,
+  );
 
-  const { selectOptions } = useOptionsForSelect(fieldMetaDataId);
+  const componentInstanceId = useAvailableComponentInstanceIdOrThrow(
+    ObjectFilterDropdownComponentInstanceContext,
+  );
+
+  const objectFilterDropdownCurrentRecordFilter = useAtomComponentStateValue(
+    objectFilterDropdownCurrentRecordFilterComponentState,
+  );
+
+  const { applyObjectFilterDropdownFilterValue } =
+    useApplyObjectFilterDropdownFilterValue();
+
+  const selectedOptions = useMemo(
+    () =>
+      isNonEmptyString(objectFilterDropdownCurrentRecordFilter?.value)
+        ? (z
+            .array(z.string())
+            .safeParse(parseJson(objectFilterDropdownCurrentRecordFilter.value))
+            .data ?? [])
+        : [],
+    [objectFilterDropdownCurrentRecordFilter?.value],
+  );
+
+  const { closeDropdown } = useCloseDropdown();
+
+  const { resetSelectedItem } = useSelectableList(componentInstanceId);
+
+  const selectedItemId = useAtomComponentStateValue(
+    selectedItemIdComponentState,
+    componentInstanceId,
+  );
+
+  const { foundFieldMetadataItem: relationTargetFieldMetadataItem } =
+    useAtomFamilySelectorValue(fieldMetadataItemByIdSelector, {
+      fieldMetadataItemId:
+        objectFilterDropdownCurrentRecordFilter?.relationTargetFieldMetadataId ??
+        '',
+    });
+
+  const fieldMetaDataId = fieldMetadataItemUsedInDropdown?.id ?? '';
+
+  const { selectOptions: sourceFieldSelectOptions } =
+    useOptionsForSelect(fieldMetaDataId);
+
+  const selectOptions = isDefined(relationTargetFieldMetadataItem)
+    ? relationTargetFieldMetadataItem.options
+    : sourceFieldSelectOptions;
 
   const [selectableOptions, setSelectableOptions] = useState<
     SelectOptionForFilter[]
@@ -49,9 +102,7 @@ export const ObjectFilterDropdownOptionSelect = () => {
   useEffect(() => {
     if (isDefined(selectOptions)) {
       const options = selectOptions.map((option) => {
-        const isSelected =
-          objectFilterDropdownSelectedOptionValues?.includes(option.value) ??
-          false;
+        const isSelected = selectedOptions?.includes(option.value) ?? false;
 
         return {
           ...option,
@@ -61,7 +112,17 @@ export const ObjectFilterDropdownOptionSelect = () => {
 
       setSelectableOptions(options);
     }
-  }, [objectFilterDropdownSelectedOptionValues, selectOptions]);
+  }, [selectedOptions, selectOptions]);
+
+  useHotkeysOnFocusedElement({
+    keys: [Key.Escape],
+    callback: () => {
+      closeDropdown();
+      resetSelectedItem();
+    },
+    focusId,
+    dependencies: [closeDropdown, resetSelectedItem],
+  });
 
   const handleMultipleOptionSelectChange = (
     optionChanged: SelectOptionForFilter,
@@ -86,23 +147,14 @@ export const ObjectFilterDropdownOptionSelect = () => {
         ? `${selectedOptions.length} options`
         : selectedOptions.map((option) => option.label).join(', ');
 
-    if (
-      isDefined(filterDefinitionUsedInDropdown) &&
-      isDefined(selectedOperandInDropdown)
-    ) {
-      const newFilterValue =
-        selectedOptions.length > 0
-          ? JSON.stringify(selectedOptions.map((option) => option.value))
-          : EMPTY_FILTER_VALUE;
+    const newFilterValue =
+      selectedOptions.length > 0
+        ? JSON.stringify(selectedOptions.map((option) => option.value))
+        : EMPTY_FILTER_VALUE;
 
-      selectFilter({
-        definition: filterDefinitionUsedInDropdown,
-        operand: selectedOperandInDropdown,
-        displayValue: filterDisplayValue,
-        fieldMetadataId: filterDefinitionUsedInDropdown.fieldMetadataId,
-        value: newFilterValue,
-      });
-    }
+    applyObjectFilterDropdownFilterValue(newFilterValue, filterDisplayValue);
+
+    resetSelectedItem();
   };
 
   const optionsInDropdown = selectableOptions?.filter((option) =>
@@ -113,21 +165,39 @@ export const ObjectFilterDropdownOptionSelect = () => {
 
   const showNoResult = optionsInDropdown?.length === 0;
 
+  const objectRecordsIds = optionsInDropdown.map((option) => option.id);
+
   return (
-    <DropdownMenuItemsContainer hasMaxHeight>
-      {optionsInDropdown?.map((option) => (
-        <MenuItemMultiSelect
-          key={option.id}
-          selected={option.isSelected}
-          onSelectChange={(selected) =>
-            handleMultipleOptionSelectChange(option, selected)
-          }
-          text={option.label}
-          color={option.color}
-          className=""
-        />
-      ))}
-      {showNoResult && <MenuItem text="No result" />}
-    </DropdownMenuItemsContainer>
+    <SelectableList
+      selectableListInstanceId={componentInstanceId}
+      selectableItemIdArray={objectRecordsIds}
+      focusId={focusId}
+    >
+      <DropdownMenuItemsContainer isMultiSelect hasMaxHeight>
+        {showNoResult ? (
+          <ListItem disabled>{t`No results`}</ListItem>
+        ) : (
+          optionsInDropdown?.map((option) => (
+            <ListItemButton
+              key={option.id}
+              focused={option.id === selectedItemId}
+              role="option"
+              aria-selected={option.isSelected}
+              selected={option.isSelected}
+              indicator="checkbox"
+              onClick={() =>
+                handleMultipleOptionSelectChange(option, !option.isSelected)
+              }
+            >
+              {isDefined(option.color) ? (
+                <Tag color={option.color}>{option.label}</Tag>
+              ) : (
+                <OverflowingTextWithTooltip text={option.label} />
+              )}
+            </ListItemButton>
+          ))
+        )}
+      </DropdownMenuItemsContainer>
+    </SelectableList>
   );
 };

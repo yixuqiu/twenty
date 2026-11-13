@@ -1,11 +1,28 @@
-import { CoreObjectNameSingular } from '@/object-metadata/types/CoreObjectNameSingular';
-import { ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
-import { RecordGqlOperationSignatureFactory } from '@/object-record/graphql/types/RecordGqlOperationSignatureFactory';
-import { generateDepthOneRecordGqlFields } from '@/object-record/graphql/utils/generateDepthOneRecordGqlFields';
+import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/EnrichedObjectMetadataItem';
+import { generateDepthRecordGqlFieldsFromObject } from '@/object-record/graphql/record-gql-fields/utils/generateDepthRecordGqlFieldsFromObject';
+import { type RecordGqlOperationSignatureFactory } from '@/object-record/graphql/types/RecordGqlOperationSignatureFactory';
 
-export const findOneRecordForShowPageOperationSignatureFactory: RecordGqlOperationSignatureFactory =
-  ({ objectMetadataItem }: { objectMetadataItem: ObjectMetadataItem }) => ({
-    objectNameSingular: CoreObjectNameSingular.Activity,
-    variables: {},
-    fields: generateDepthOneRecordGqlFields({ objectMetadataItem }),
-  });
+type FindOneRecordForShowPageOperationSignatureFactory = {
+  objectMetadataItem: EnrichedObjectMetadataItem;
+  objectMetadataItems: EnrichedObjectMetadataItem[];
+};
+
+export const buildFindOneRecordForShowPageOperationSignature: RecordGqlOperationSignatureFactory<
+  FindOneRecordForShowPageOperationSignatureFactory
+> = ({
+  objectMetadataItem,
+  objectMetadataItems,
+}: {
+  objectMetadataItem: EnrichedObjectMetadataItem;
+  objectMetadataItems: EnrichedObjectMetadataItem[];
+}) => ({
+  objectNameSingular: objectMetadataItem.nameSingular,
+  variables: {},
+  fields: {
+    ...generateDepthRecordGqlFieldsFromObject({
+      objectMetadataItem,
+      objectMetadataItems,
+      depth: 1,
+    }),
+  },
+});

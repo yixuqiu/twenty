@@ -1,20 +1,21 @@
-import { Font, Head } from '@react-email/components';
+import { type I18n } from '@lingui/core';
+import { Font, Head } from 'react-email';
 
-import { emailTheme } from 'src/common-style';
+import { canvasTheme } from 'src/common-style';
 
-export const BaseHead = () => {
+type BaseHeadProps = {
+  i18n: I18n;
+};
+
+export const BaseHead = ({ i18n }: BaseHeadProps) => {
   return (
     <Head>
-      <title>Twenty email</title>
+      <title>{i18n._('Twenty email')}</title>
       <Font
-        fontFamily="Inter"
+        fontFamily={canvasTheme.font.family}
         fallbackFontFamily="sans-serif"
-        webFont={{
-          url: 'https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap',
-          format: 'woff2',
-        }}
         fontStyle="normal"
-        fontWeight={emailTheme.font.weight.regular}
+        fontWeight={canvasTheme.font.weight.regular}
       />
     </Head>
   );

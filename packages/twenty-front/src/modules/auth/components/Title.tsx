@@ -1,34 +1,35 @@
+import { AnimatedEaseIn } from '@/auth/components/internal/AnimatedEaseIn/AnimatedEaseIn';
+import { styled } from '@linaria/react';
 import React from 'react';
-import styled from '@emotion/styled';
-
-import { AnimatedEaseIn } from '@/ui/utilities/animation/components/AnimatedEaseIn';
+import { themeCssVariables } from 'twenty-ui/theme';
 
 type TitleProps = React.PropsWithChildren & {
   animate?: boolean;
-  withMarginTop?: boolean;
+  noMarginTop?: boolean;
 };
 
-const StyledTitle = styled.div<Pick<TitleProps, 'withMarginTop'>>`
-  color: ${({ theme }) => theme.font.color.primary};
-  font-size: ${({ theme }) => theme.font.size.xl};
-  font-weight: ${({ theme }) => theme.font.weight.semiBold};
-  margin-bottom: ${({ theme }) => theme.spacing(4)};
-  margin-top: ${({ theme, withMarginTop }) =>
-    withMarginTop ? theme.spacing(4) : 0};
+const StyledTitle = styled.div<Pick<TitleProps, 'noMarginTop'>>`
+  color: ${themeCssVariables.font.color.primary};
+  font-size: ${themeCssVariables.font.size.xl};
+  font-weight: ${themeCssVariables.font.weight.semiBold};
+  margin-bottom: ${themeCssVariables.spacing[4]};
+  margin-top: ${({ noMarginTop }) =>
+    !noMarginTop ? themeCssVariables.spacing[4] : '0'};
+  text-align: center;
 `;
 
 export const Title = ({
   children,
   animate = false,
-  withMarginTop = true,
+  noMarginTop = false,
 }: TitleProps) => {
   if (animate) {
     return (
-      <StyledTitle withMarginTop={withMarginTop}>
+      <StyledTitle noMarginTop={noMarginTop}>
         <AnimatedEaseIn>{children}</AnimatedEaseIn>
       </StyledTitle>
     );
   }
 
-  return <StyledTitle withMarginTop={withMarginTop}>{children}</StyledTitle>;
+  return <StyledTitle noMarginTop={noMarginTop}>{children}</StyledTitle>;
 };

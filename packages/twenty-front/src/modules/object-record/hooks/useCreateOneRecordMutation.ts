@@ -1,54 +1,37 @@
-import gql from 'graphql-tag';
-import { useRecoilValue } from 'recoil';
-
 import { useObjectMetadataItem } from '@/object-metadata/hooks/useObjectMetadataItem';
-import { objectMetadataItemsState } from '@/object-metadata/states/objectMetadataItemsState';
-import { mapObjectMetadataToGraphQLQuery } from '@/object-metadata/utils/mapObjectMetadataToGraphQLQuery';
+import { objectMetadataItemsSelector } from '@/object-metadata/states/objectMetadataItemsSelector';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import { generateCreateOneRecordMutation } from '@/object-metadata/utils/generateCreateOneRecordMutation';
 import { EMPTY_MUTATION } from '@/object-record/constants/EmptyMutation';
-import { RecordGqlOperationGqlRecordFields } from '@/object-record/graphql/types/RecordGqlOperationGqlRecordFields';
-import { generateDepthOneRecordGqlFields } from '@/object-record/graphql/utils/generateDepthOneRecordGqlFields';
-import { getCreateOneRecordMutationResponseField } from '@/object-record/utils/getCreateOneRecordMutationResponseField';
-import { isUndefinedOrNull } from '~/utils/isUndefinedOrNull';
-import { capitalize } from '~/utils/string/capitalize';
+import { type RecordGqlFields } from 'twenty-shared/types';
+import { useObjectPermissions } from '@/object-record/hooks/useObjectPermissions';
+import { isDefined } from 'twenty-shared/utils';
 
 export const useCreateOneRecordMutation = ({
   objectNameSingular,
   recordGqlFields,
 }: {
   objectNameSingular: string;
-  recordGqlFields?: RecordGqlOperationGqlRecordFields;
+  recordGqlFields?: RecordGqlFields;
 }) => {
   const { objectMetadataItem } = useObjectMetadataItem({
     objectNameSingular,
   });
 
-  const appliedRecordGqlFields =
-    recordGqlFields ??
-    generateDepthOneRecordGqlFields({
-      objectMetadataItem,
-    });
+  const objectMetadataItems = useAtomStateValue(objectMetadataItemsSelector);
 
-  const objectMetadataItems = useRecoilValue(objectMetadataItemsState);
+  const { objectPermissionsByObjectMetadataId } = useObjectPermissions();
 
-  if (isUndefinedOrNull(objectMetadataItem)) {
+  if (!isDefined(objectMetadataItem)) {
     return { createOneRecordMutation: EMPTY_MUTATION };
   }
 
-  const capitalizedObjectName = capitalize(objectMetadataItem.nameSingular);
-
-  const mutationResponseField = getCreateOneRecordMutationResponseField(
-    objectMetadataItem.nameSingular,
-  );
-
-  const createOneRecordMutation = gql`
-    mutation CreateOne${capitalizedObjectName}($input: ${capitalizedObjectName}CreateInput!)  {
-      ${mutationResponseField}(data: $input) ${mapObjectMetadataToGraphQLQuery({
-        objectMetadataItems,
-        objectMetadataItem,
-        recordGqlFields: appliedRecordGqlFields,
-      })}
-    }
-  `;
+  const createOneRecordMutation = generateCreateOneRecordMutation({
+    objectMetadataItem,
+    objectMetadataItems,
+    recordGqlFields,
+    objectPermissionsByObjectMetadataId,
+  });
 
   return {
     createOneRecordMutation,

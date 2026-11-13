@@ -1,6 +1,33 @@
-import { ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
+import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/EnrichedObjectMetadataItem';
+import { getObjectPermissionsForObject } from '@/object-metadata/utils/getObjectPermissionsForObject';
+import { getRelationIdFieldNames } from '@/object-metadata/utils/getRelationIdFieldNames';
 import { mapFieldMetadataToGraphQLQuery } from '@/object-metadata/utils/mapFieldMetadataToGraphQLQuery';
 import { shouldFieldBeQueried } from '@/object-metadata/utils/shouldFieldBeQueried';
+import {
+  FieldMetadataType,
+  type ObjectRecordsPermissions,
+  type RecordGqlFields,
+  RelationType,
+} from 'twenty-shared/types';
+import { isRecordGqlFieldsNode } from '@/object-record/graphql/utils/isRecordGraphlFieldsNode';
+import {
+  canAccessThroughAllRecordsOrRlsPermission,
+  computeMorphRelationGqlFieldName,
+  isDefined,
+} from 'twenty-shared/utils';
+import { doNotTranslate } from 'twenty-shared/i18n';
+
+type MapObjectMetadataToGraphQLQueryArgs = {
+  objectMetadataItems: EnrichedObjectMetadataItem[];
+  objectMetadataItem: Pick<
+    EnrichedObjectMetadataItem,
+    'nameSingular' | 'fields' | 'id' | 'readableFields'
+  >;
+  recordGqlFields?: RecordGqlFields;
+  computeReferences?: boolean;
+  isRootLevel?: boolean;
+  objectPermissionsByObjectMetadataId: Record<string, ObjectRecordsPermissions>;
+};
 
 export const mapObjectMetadataToGraphQLQuery = ({
   objectMetadataItems,
@@ -8,43 +35,131 @@ export const mapObjectMetadataToGraphQLQuery = ({
   recordGqlFields,
   computeReferences = false,
   isRootLevel = true,
-}: {
-  objectMetadataItems: ObjectMetadataItem[];
-  objectMetadataItem: Pick<ObjectMetadataItem, 'nameSingular' | 'fields'>;
-  recordGqlFields?: Record<string, any>;
-  computeReferences?: boolean;
-  isRootLevel?: boolean;
-}): any => {
-  const fieldsThatShouldBeQueried =
-    objectMetadataItem?.fields
-      .filter((field) => field.isActive)
-      .filter((field) =>
-        shouldFieldBeQueried({
-          field,
-          recordGqlFields,
-        }),
-      ) ?? [];
-
-  if (!isRootLevel && computeReferences) {
-    return `{
-      __ref
-    }`;
+  objectPermissionsByObjectMetadataId,
+}: MapObjectMetadataToGraphQLQueryArgs): string => {
+  if (
+    !isRootLevel &&
+    isDefined(objectPermissionsByObjectMetadataId) &&
+    isDefined(objectMetadataItem.id)
+  ) {
+    const objectPermission = getObjectPermissionsForObject(
+      objectPermissionsByObjectMetadataId,
+      objectMetadataItem.id,
+    );
+    if (
+      !canAccessThroughAllRecordsOrRlsPermission({
+        objectRecordsPermissions: objectPermission,
+        operationType: 'read',
+      })
+    ) {
+      return '';
+    }
   }
 
-  return `{
-__typename
-${fieldsThatShouldBeQueried
-  .map((field) => {
-    return mapFieldMetadataToGraphQLQuery({
-      objectMetadataItems,
-      field,
-      relationrecordFields:
-        typeof recordGqlFields?.[field.name] === 'boolean'
-          ? undefined
-          : recordGqlFields?.[field.name],
-      computeReferences,
+  const manyToOneRelationFields = objectMetadataItem?.readableFields
+    .filter((field) => field.isActive)
+    .filter((field) => {
+      if (field.type === FieldMetadataType.RELATION) {
+        return field.relation?.type === RelationType.MANY_TO_ONE;
+      }
+      if (field.type === FieldMetadataType.MORPH_RELATION) {
+        return field.settings?.relationType === RelationType.MANY_TO_ONE;
+      }
+      return false;
     });
-  })
-  .join('\n')}
-}`;
+
+  const manyToOneRelationGqlFieldWithFieldMetadata =
+    manyToOneRelationFields.flatMap((fieldMetadata) =>
+      getRelationIdFieldNames(fieldMetadata).map((gqlField) => ({
+        gqlField,
+        fieldMetadata,
+      })),
+    );
+
+  const readableFields = objectMetadataItem.readableFields.filter(
+    (fieldMetadata) => fieldMetadata.isActive,
+  );
+
+  const activeReadableFields = readableFields.flatMap((fieldMetadata) => {
+    const isMorphRelation =
+      fieldMetadata.type === FieldMetadataType.MORPH_RELATION;
+    if (!isMorphRelation) {
+      return [
+        {
+          gqlField: fieldMetadata.name,
+          fieldMetadata,
+        },
+      ];
+    }
+
+    if (!isDefined(fieldMetadata.morphRelations)) {
+      return [];
+    }
+
+    return fieldMetadata.morphRelations.map((morphRelation) => ({
+      gqlField: computeMorphRelationGqlFieldName({
+        fieldName: fieldMetadata.name,
+        relationType: morphRelation.type,
+        targetObjectMetadataNameSingular:
+          morphRelation.targetObjectMetadata.nameSingular,
+        targetObjectMetadataNamePlural:
+          morphRelation.targetObjectMetadata.namePlural,
+      }),
+      fieldMetadata,
+    }));
+  });
+
+  const gqlFieldsWithFieldMetadata = [
+    ...activeReadableFields,
+    ...manyToOneRelationGqlFieldWithFieldMetadata,
+  ];
+
+  const gqlFieldWithFieldMetadataThatCouldBeQueried =
+    gqlFieldsWithFieldMetadata.sort(
+      (gqlFieldWithFieldMetadataA, gqlFieldWithFieldMetadataB) =>
+        gqlFieldWithFieldMetadataA.gqlField.localeCompare(
+          gqlFieldWithFieldMetadataB.gqlField,
+        ),
+    );
+
+  const gqlFieldWithFieldMetadataThatSouldBeQueried =
+    gqlFieldWithFieldMetadataThatCouldBeQueried.filter(
+      (gqlFieldWithFieldMetadata) =>
+        shouldFieldBeQueried({
+          gqlField: gqlFieldWithFieldMetadata.gqlField,
+          fieldMetadata: gqlFieldWithFieldMetadata.fieldMetadata,
+          recordGqlFields,
+        }),
+    );
+
+  if (!isRootLevel && computeReferences) {
+    return doNotTranslate(`{
+      __ref
+    }`);
+  }
+  const mappedFields = gqlFieldWithFieldMetadataThatSouldBeQueried
+    .map((gqlFieldWithFieldMetadata) => {
+      const currentRecordGqlFields =
+        recordGqlFields?.[gqlFieldWithFieldMetadata.gqlField];
+      const relationRecordGqlFields = isRecordGqlFieldsNode(
+        currentRecordGqlFields,
+      )
+        ? currentRecordGqlFields
+        : undefined;
+      return mapFieldMetadataToGraphQLQuery({
+        objectMetadataItems,
+        gqlField: gqlFieldWithFieldMetadata.gqlField,
+        fieldMetadata: gqlFieldWithFieldMetadata.fieldMetadata,
+        relationRecordGqlFields,
+        computeReferences,
+        objectPermissionsByObjectMetadataId,
+      });
+    })
+    .filter((field) => field !== '')
+    .join('\n');
+
+  return doNotTranslate(`{
+__typename
+${mappedFields}
+}`);
 };

@@ -1,31 +1,20 @@
-import { useSetRecoilState } from 'recoil';
+import { useSetAtomComponentState } from '@/ui/utilities/state/jotai/hooks/useSetAtomComponentState';
+import { availableFieldDefinitionsComponentState } from '@/views/states/availableFieldDefinitionsComponentState';
+import { viewObjectMetadataIdComponentState } from '@/views/states/viewObjectMetadataIdComponentState';
 
-import { useViewStates } from '@/views/hooks/internal/useViewStates';
-
-export const useInitViewBar = (viewBarComponentId?: string) => {
-  const {
-    availableFieldDefinitionsState,
-    availableSortDefinitionsState,
-    availableFilterDefinitionsState,
-    viewObjectMetadataIdState,
-  } = useViewStates(viewBarComponentId);
-
-  const setAvailableFieldDefinitions = useSetRecoilState(
-    availableFieldDefinitionsState,
-  );
-  const setAvailableSortDefinitions = useSetRecoilState(
-    availableSortDefinitionsState,
-  );
-  const setAvailableFilterDefinitions = useSetRecoilState(
-    availableFilterDefinitionsState,
+export const useInitViewBar = (viewBarInstanceId?: string) => {
+  const setAvailableFieldDefinitions = useSetAtomComponentState(
+    availableFieldDefinitionsComponentState,
+    viewBarInstanceId,
   );
 
-  const setViewObjectMetadataId = useSetRecoilState(viewObjectMetadataIdState);
+  const setViewObjectMetadataId = useSetAtomComponentState(
+    viewObjectMetadataIdComponentState,
+    viewBarInstanceId,
+  );
 
   return {
     setAvailableFieldDefinitions,
-    setAvailableSortDefinitions,
-    setAvailableFilterDefinitions,
     setViewObjectMetadataId,
   };
 };

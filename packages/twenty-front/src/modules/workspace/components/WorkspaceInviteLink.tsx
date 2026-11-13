@@ -1,10 +1,11 @@
-import { useTheme } from '@emotion/react';
-import styled from '@emotion/styled';
-import { IconCopy, IconLink } from 'twenty-ui';
+import { styled } from '@linaria/react';
 
-import { useSnackBar } from '@/ui/feedback/snack-bar-manager/hooks/useSnackBar';
-import { Button } from '@/ui/input/button/components/Button';
-import { TextInput } from '@/ui/input/components/TextInput';
+import { SettingsTextInput } from '@/ui/input/components/SettingsTextInput';
+import { useLingui } from '@lingui/react/macro';
+import { IconLink } from 'twenty-ui/icon';
+import { Button } from 'twenty-ui/primitives/input';
+import { themeCssVariables } from 'twenty-ui/theme';
+import { useCopyToClipboard } from '~/hooks/useCopyToClipboard';
 
 const StyledContainer = styled.div`
   align-items: center;
@@ -14,7 +15,7 @@ const StyledContainer = styled.div`
 
 const StyledLinkContainer = styled.div`
   flex: 1;
-  margin-right: ${({ theme }) => theme.spacing(2)};
+  margin-right: ${themeCssVariables.spacing[2]};
 `;
 
 type WorkspaceInviteLinkProps = {
@@ -24,29 +25,28 @@ type WorkspaceInviteLinkProps = {
 export const WorkspaceInviteLink = ({
   inviteLink,
 }: WorkspaceInviteLinkProps) => {
-  const theme = useTheme();
+  const { t } = useLingui();
 
-  const { enqueueSnackBar } = useSnackBar();
+  const { copyToClipboard } = useCopyToClipboard();
 
   return (
     <StyledContainer data-chromatic="ignore">
       <StyledLinkContainer>
-        <TextInput value={inviteLink} disabled fullWidth />
+        <SettingsTextInput
+          instanceId="workspace-invite-link"
+          value={inviteLink}
+          disabled
+          fullWidth
+        />
       </StyledLinkContainer>
       <Button
-        Icon={IconLink}
-        variant="primary"
-        accent="blue"
-        title="Copy link"
+        startIcon={<IconLink />}
         onClick={() => {
-          enqueueSnackBar('Link copied to clipboard', {
-            variant: 'success',
-            icon: <IconCopy size={theme.icon.size.md} />,
-            duration: 2000,
-          });
-          navigator.clipboard.writeText(inviteLink);
+          copyToClipboard(inviteLink, t`Link copied to clipboard`);
         }}
-      />
+        variant="solid"
+        color="accent"
+      >{t`Copy link`}</Button>
     </StyledContainer>
   );
 };

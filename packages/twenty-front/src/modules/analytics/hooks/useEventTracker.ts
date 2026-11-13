@@ -1,32 +1,56 @@
 import { useCallback } from 'react';
-import { useRecoilValue } from 'recoil';
+import { v4 } from 'uuid';
+import { useMutation } from '@apollo/client/react';
+import {
+  AnalyticsType,
+  type MutationTrackAnalyticsArgs,
+  TrackAnalyticsDocument,
+} from '~/generated-metadata/graphql';
+import { doNotTranslate } from 'twenty-shared/i18n';
 
-import { telemetryState } from '@/client-config/states/telemetryState';
-import { useTrackMutation } from '~/generated/graphql';
+export const ANALYTICS_COOKIE_NAME = 'analyticsCookie';
+export const getSessionId = (): string => {
+  const cookie: { [key: string]: string } = {};
+  document.cookie.split(';').forEach((el) => {
+    const [key, value] = el.split('=');
+    cookie[key.trim()] = value;
+  });
+  return cookie[ANALYTICS_COOKIE_NAME];
+};
 
-interface EventLocation {
-  pathname: string;
-}
+export const setSessionId = (domain?: string): void => {
+  const sessionId = getSessionId() || v4();
+  const baseCookie = doNotTranslate(
+    `${ANALYTICS_COOKIE_NAME}=${sessionId}; Max-Age=1800; path=/; secure`,
+  );
+  const cookie = domain
+    ? baseCookie + doNotTranslate(`; domain=${domain}`)
+    : baseCookie;
 
-export interface EventData {
-  location: EventLocation;
-}
+  document.cookie = cookie;
+};
 
 export const useEventTracker = () => {
-  const telemetry = useRecoilValue(telemetryState);
-  const [createEventMutation] = useTrackMutation();
+  const [createEventMutation] = useMutation(TrackAnalyticsDocument);
 
   return useCallback(
-    (eventType: string, eventData: EventData) => {
-      if (telemetry.enabled) {
-        createEventMutation({
-          variables: {
-            type: eventType,
-            data: eventData,
+    (
+      type: AnalyticsType,
+      payload: Omit<MutationTrackAnalyticsArgs, 'type'>,
+    ) => {
+      createEventMutation({
+        variables: {
+          type,
+          ...payload,
+          properties: {
+            ...payload.properties,
+            ...(type === AnalyticsType['PAGEVIEW']
+              ? { sessionId: getSessionId() }
+              : {}),
           },
-        });
-      }
+        },
+      });
     },
-    [createEventMutation, telemetry],
+    [createEventMutation],
   );
 };

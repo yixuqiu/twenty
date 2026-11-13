@@ -1,6 +1,6 @@
-import { Bundle, HttpRequestOptions, ZObject } from 'zapier-platform-core';
+import type { Bundle, HttpRequestOptions, ZObject } from 'zapier-platform-core';
 
-import { Schema } from '../utils/data.types';
+import { type Schema } from 'src/utils/data.types';
 
 export const requestSchema = async (
   z: ZObject,
@@ -22,6 +22,7 @@ export const requestSchema = async (
                 description
                 isNullable
                 defaultValue
+                options
               }
             }
           }
@@ -29,18 +30,22 @@ export const requestSchema = async (
       }
     }
   }`;
-  const endpoint = 'metadata';
-  return await requestDb(z, bundle, query, endpoint);
+  return await requestDb({ z, bundle, query, endpoint: 'metadata' });
 };
 
-const requestDb = async (
-  z: ZObject,
-  bundle: Bundle,
-  query: string,
+const requestDb = async ({
+  z,
+  bundle,
+  query,
   endpoint = 'graphql',
-) => {
+}: {
+  z: ZObject;
+  bundle: Bundle;
+  query: string;
+  endpoint?: string;
+}) => {
   const options = {
-    url: `${process.env.SERVER_BASE_URL}/${endpoint}`,
+    url: `${bundle.authData.apiUrl || process.env.SERVER_BASE_URL}/${endpoint}`,
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -79,9 +84,11 @@ export const requestDbViaRestApi = (
   z: ZObject,
   bundle: Bundle,
   objectNamePlural: string,
-) => {
+): Promise<Record<string, any>[]> => {
   const options = {
-    url: `${process.env.SERVER_BASE_URL}/rest/${objectNamePlural}?limit:3`,
+    url: `${
+      bundle.authData.apiUrl || process.env.SERVER_BASE_URL
+    }/rest/${objectNamePlural}?limit:3`,
     method: 'GET',
     headers: {
       'Content-Type': 'application/json',

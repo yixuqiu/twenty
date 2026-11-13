@@ -1,12 +1,5 @@
-import { useRecoilState, useRecoilValue } from 'recoil';
+import { isCookieAuthActiveState } from '@/auth/states/isCookieAuthActiveState';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
 
-import { isVerifyPendingState } from '@/auth/states/isVerifyPendingState';
-
-import { tokenPairState } from '../states/tokenPairState';
-
-export const useIsLogged = (): boolean => {
-  const [tokenPair] = useRecoilState(tokenPairState);
-  const isVerifyPending = useRecoilValue(isVerifyPendingState);
-
-  return !!tokenPair && !isVerifyPending;
-};
+export const useIsLogged = (): boolean =>
+  useAtomStateValue(isCookieAuthActiveState);

@@ -1,32 +1,29 @@
-import { useRef } from 'react';
-import styled from '@emotion/styled';
-import { useRecoilCallback } from 'recoil';
-import { Avatar } from 'twenty-ui';
+import { styled } from '@linaria/react';
 
+import { ActivityRow } from '@/activities/components/ActivityRow';
 import { EmailThreadNotShared } from '@/activities/emails/components/EmailThreadNotShared';
-import { useEmailThread } from '@/activities/emails/hooks/useEmailThread';
-import { emailThreadIdWhenEmailThreadWasClosedState } from '@/activities/emails/states/lastViewableEmailThreadIdState';
-import { CardContent } from '@/ui/layout/card/components/CardContent';
-import { useRightDrawer } from '@/ui/layout/right-drawer/hooks/useRightDrawer';
-import { GRAY_SCALE } from '@/ui/theme/constants/GrayScale';
-import { TimelineThread } from '~/generated/graphql';
-import { formatToHumanReadableDate } from '~/utils';
-import { getImageAbsoluteURIOrBase64 } from '~/utils/image/getImageAbsoluteURIOrBase64';
-
-const StyledCardContent = styled(CardContent)<{ visibility: string }>`
-  align-items: center;
-  display: flex;
-  gap: ${({ theme }) => theme.spacing(2)};
-  height: ${({ theme }) => theme.spacing(12)};
-  padding: ${({ theme }) => theme.spacing(0, 4)};
-  cursor: ${({ visibility }) =>
-    visibility === 'share_everything' ? 'pointer' : 'default'};
-`;
+import { MessageChannelLogo } from '@/activities/emails/components/MessageChannelLogo';
+import { getEmailParticipantAvatarColorSeed } from '@/activities/emails/utils/getEmailParticipantAvatarColorSeed';
+import { getTimelineThreadLabel } from '@/activities/emails/utils/getTimelineThreadLabel';
+import { isChatTimelineThreadChannel } from '@/activities/emails/utils/isChatTimelineThreadChannel';
+import { useOpenRecordInSidePanel } from '@/side-panel/hooks/useOpenRecordInSidePanel';
+import { StandardObjectNameSingular } from 'twenty-shared/types';
+import { isDefined } from 'twenty-shared/utils';
+import { Avatar, Tag } from 'twenty-ui/primitives/data-display';
+import { useTheme, themeCssVariables } from 'twenty-ui/theme';
+import {
+  MessageChannelVisibility,
+  type TimelineThread,
+} from '~/generated/graphql';
+import { formatToHumanReadableDate } from '~/utils/date-utils';
+import { getAbsoluteImageUrl } from '~/utils/image/getAbsoluteImageUrl';
+import { useLingui } from '@lingui/react/macro';
 
 const StyledHeading = styled.div<{ unread: boolean }>`
   display: flex;
+  max-width: 20%;
   overflow: hidden;
-  width: 20%;
+  width: fit-content;
 `;
 
 const StyledParticipantsContainer = styled.div`
@@ -34,67 +31,78 @@ const StyledParticipantsContainer = styled.div`
   display: flex;
 `;
 
-const StyledAvatar = styled(Avatar)`
-  margin-left: ${({ theme }) => theme.spacing(-1)};
+const StyledAvatarWrapper = styled.div`
+  margin-left: calc(-1 * ${themeCssVariables.spacing[1]});
 `;
 
 const StyledSenderNames = styled.span`
   display: flex;
-  margin: ${({ theme }) => theme.spacing(0, 1)};
+  margin: ${themeCssVariables.spacing[0]} ${themeCssVariables.spacing[1]};
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 `;
 
 const StyledThreadCount = styled.span`
-  color: ${({ theme }) => theme.font.color.tertiary};
+  color: ${themeCssVariables.font.color.tertiary};
 `;
 
 const StyledSubjectAndBody = styled.div`
   align-items: center;
   display: flex;
   flex: 1;
-  gap: ${({ theme }) => theme.spacing(2)};
+  gap: ${themeCssVariables.spacing[2]};
   overflow: hidden;
 `;
 
 const StyledSubject = styled.span`
-  color: ${({ theme }) => theme.font.color.primary};
-  white-space: nowrap;
+  color: ${themeCssVariables.font.color.primary};
   overflow: hidden;
   text-overflow: ellipsis;
-  flex-shrink: 0;
+  white-space: nowrap;
 `;
 
 const StyledBody = styled.span`
-  color: ${({ theme }) => theme.font.color.tertiary};
+  color: ${themeCssVariables.font.color.tertiary};
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 `;
 
 const StyledReceivedAt = styled.div`
-  font-size: ${({ theme }) => theme.font.size.sm};
-  font-weight: ${({ theme }) => theme.font.weight.regular};
-  padding: ${({ theme }) => theme.spacing(0, 1)};
+  font-size: ${themeCssVariables.font.size.sm};
+  font-weight: ${themeCssVariables.font.weight.regular};
+  padding: ${themeCssVariables.spacing[0]} ${themeCssVariables.spacing[1]};
 `;
 
-export type EmailThreadVisibility = 'metadata' | 'subject' | 'share_everything';
+const StyledChannelLogo = styled.div`
+  display: flex;
+  flex-shrink: 0;
+`;
 
 type EmailThreadPreviewProps = {
-  divider?: boolean;
   thread: TimelineThread;
+  divider?: boolean;
+};
+
+type LastAvatar = {
+  displayedName: string | undefined;
+  avatarUrl: string | undefined;
+  isCountIcon: boolean;
+  placeholderColorSeed: string | undefined;
 };
 
 export const EmailThreadPreview = ({
-  divider,
   thread,
+  divider = false,
 }: EmailThreadPreviewProps) => {
-  const cardRef = useRef<HTMLDivElement>(null);
+  const { t } = useLingui();
+  const theme = useTheme();
+  const { openRecordInSidePanel } = useOpenRecordInSidePanel();
 
-  const { openEmailThread } = useEmailThread();
-
-  const visibility = thread.visibility as EmailThreadVisibility;
+  const visibility = thread.visibility;
+  const isChatThread = isChatTimelineThreadChannel(thread.channel);
 
   const senderNames =
     thread.firstParticipant.displayName +
@@ -105,96 +113,131 @@ export const EmailThreadPreview = ({
       ? `, ${thread.lastTwoParticipants?.[1]?.displayName}`
       : '');
 
-  const [finalDisplayedName, finalAvatarUrl, isCountIcon] =
+  const lastParticipant = thread?.lastTwoParticipants?.[1];
+
+  const {
+    displayedName,
+    avatarUrl,
+    isCountIcon,
+    placeholderColorSeed,
+  }: LastAvatar =
     thread.participantCount > 3
-      ? [`${thread.participantCount}`, '', true]
-      : [
-          thread?.lastTwoParticipants?.[1]?.displayName,
-          thread?.lastTwoParticipants?.[1]?.avatarUrl,
-          false,
-        ];
-
-  const { isSameEventThanRightDrawerClose } = useRightDrawer();
-
-  const handleThreadClick = useRecoilCallback(
-    ({ snapshot }) =>
-      (event: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
-        const clickJustTriggeredEmailDrawerClose =
-          isSameEventThanRightDrawerClose(event.nativeEvent);
-
-        const emailThreadIdWhenEmailThreadWasClosed = snapshot
-          .getLoadable(emailThreadIdWhenEmailThreadWasClosedState)
-          .getValue();
-
-        const canOpen =
-          thread.visibility === 'share_everything' &&
-          (!clickJustTriggeredEmailDrawerClose ||
-            emailThreadIdWhenEmailThreadWasClosed !== thread.id);
-
-        if (canOpen) {
-          openEmailThread(thread.id);
+      ? {
+          displayedName: `${thread.participantCount}`,
+          avatarUrl: '',
+          isCountIcon: true,
+          placeholderColorSeed: undefined,
         }
-      },
-    [
-      isSameEventThanRightDrawerClose,
-      openEmailThread,
-      thread.id,
-      thread.visibility,
-    ],
-  );
+      : {
+          displayedName: lastParticipant?.displayName,
+          avatarUrl: lastParticipant?.avatarUrl,
+          isCountIcon: false,
+          placeholderColorSeed: isDefined(lastParticipant)
+            ? getEmailParticipantAvatarColorSeed(lastParticipant)
+            : undefined,
+        };
+
+  const handleThreadClick = () => {
+    const canOpen =
+      thread.visibility === MessageChannelVisibility.SHARE_EVERYTHING;
+
+    if (canOpen) {
+      openRecordInSidePanel({
+        recordId: thread.id,
+        objectNameSingular: StandardObjectNameSingular.MessageThread,
+      });
+    }
+  };
+
+  const isDisabled = visibility !== MessageChannelVisibility.SHARE_EVERYTHING;
+  const label = getTimelineThreadLabel(thread);
+  const draftTag = thread.lastMessageIsDraft ? (
+    <Tag color="orange">{t`Draft`}</Tag>
+  ) : null;
 
   return (
-    <StyledCardContent
-      ref={cardRef}
-      onClick={(event) => handleThreadClick(event)}
+    <ActivityRow
+      onClick={handleThreadClick}
+      disabled={isDisabled}
       divider={divider}
-      visibility={visibility}
+      label={label}
     >
       <StyledHeading unread={!thread.read}>
         <StyledParticipantsContainer>
           <Avatar
-            avatarUrl={getImageAbsoluteURIOrBase64(
-              thread?.firstParticipant?.avatarUrl,
+            src={getAbsoluteImageUrl(thread?.firstParticipant?.avatarUrl)}
+            name={thread.firstParticipant.displayName}
+            colorSeed={getEmailParticipantAvatarColorSeed(
+              thread.firstParticipant,
             )}
-            placeholder={thread.firstParticipant.displayName}
-            type="rounded"
+            shape="circle"
           />
-          {thread?.lastTwoParticipants?.[0] && (
-            <StyledAvatar
-              avatarUrl={getImageAbsoluteURIOrBase64(
-                thread.lastTwoParticipants[0].avatarUrl,
-              )}
-              placeholder={thread.lastTwoParticipants[0].displayName}
-              type="rounded"
-            />
+          {isDefined(thread?.lastTwoParticipants?.[0]) && (
+            <StyledAvatarWrapper>
+              <Avatar
+                src={getAbsoluteImageUrl(
+                  thread.lastTwoParticipants[0].avatarUrl,
+                )}
+                name={thread.lastTwoParticipants[0].displayName}
+                colorSeed={getEmailParticipantAvatarColorSeed(
+                  thread.lastTwoParticipants[0],
+                )}
+                shape="circle"
+              />
+            </StyledAvatarWrapper>
           )}
-          {finalDisplayedName && (
-            <StyledAvatar
-              avatarUrl={getImageAbsoluteURIOrBase64(finalAvatarUrl)}
-              placeholder={finalDisplayedName}
-              type="rounded"
-              color={isCountIcon ? GRAY_SCALE.gray50 : undefined}
-              backgroundColor={isCountIcon ? GRAY_SCALE.gray10 : undefined}
-            />
+          {displayedName && (
+            <StyledAvatarWrapper>
+              <Avatar
+                src={getAbsoluteImageUrl(avatarUrl)}
+                name={displayedName}
+                colorSeed={placeholderColorSeed}
+                shape="circle"
+                color={isCountIcon ? theme.grayScale.gray11 : undefined}
+                backgroundColor={
+                  isCountIcon ? theme.grayScale.gray2 : undefined
+                }
+              />
+            </StyledAvatarWrapper>
           )}
         </StyledParticipantsContainer>
 
         <StyledSenderNames>{senderNames}</StyledSenderNames>
-        <StyledThreadCount>{thread.numberOfMessagesInThread}</StyledThreadCount>
+        {!isChatThread && (
+          <StyledThreadCount>
+            {thread.numberOfMessagesInThread}
+          </StyledThreadCount>
+        )}
       </StyledHeading>
 
       <StyledSubjectAndBody>
-        {visibility !== 'metadata' && (
-          <StyledSubject>{thread.subject}</StyledSubject>
+        {visibility === MessageChannelVisibility.METADATA && (
+          <>
+            {draftTag}
+            <EmailThreadNotShared visibility={visibility} />
+          </>
         )}
-        {visibility === 'share_everything' && (
-          <StyledBody>{thread.lastMessageBody}</StyledBody>
+        {visibility === MessageChannelVisibility.SUBJECT && (
+          <>
+            {draftTag}
+            {!isChatThread && <StyledSubject>{thread.subject}</StyledSubject>}
+            <EmailThreadNotShared visibility={visibility} />
+          </>
         )}
-        {visibility !== 'share_everything' && <EmailThreadNotShared />}
+        {visibility === MessageChannelVisibility.SHARE_EVERYTHING && (
+          <>
+            {draftTag}
+            {!isChatThread && <StyledSubject>{thread.subject}</StyledSubject>}
+            <StyledBody>{thread.lastMessageBody}</StyledBody>
+          </>
+        )}
       </StyledSubjectAndBody>
       <StyledReceivedAt>
         {formatToHumanReadableDate(thread.lastMessageReceivedAt)}
       </StyledReceivedAt>
-    </StyledCardContent>
+      <StyledChannelLogo>
+        <MessageChannelLogo channel={thread.channel} />
+      </StyledChannelLogo>
+    </ActivityRow>
   );
 };

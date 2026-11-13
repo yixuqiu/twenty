@@ -1,6 +1,6 @@
 import { Field, ArgsType } from '@nestjs/graphql';
 
-import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 
 @ArgsType()
 export class AuthorizeAppInput {
@@ -11,10 +11,36 @@ export class AuthorizeAppInput {
 
   @Field(() => String, { nullable: true })
   @IsString()
+  @MaxLength(256)
   @IsOptional()
   codeChallenge?: string;
 
   @Field(() => String)
   @IsString()
+  @MaxLength(2048)
   redirectUrl: string;
+
+  @Field(() => String, { nullable: true })
+  @IsString()
+  @MaxLength(4096)
+  @IsOptional()
+  state?: string;
+
+  @Field(() => String, { nullable: true })
+  @IsString()
+  @MaxLength(1024)
+  @IsOptional()
+  scope?: string;
+
+  @Field(() => String, { nullable: true })
+  @IsString()
+  @MaxLength(2048)
+  @IsOptional()
+  issuer?: string;
+
+  @Field(() => String, { nullable: true })
+  @IsString()
+  @MaxLength(2048)
+  @IsOptional()
+  resource?: string;
 }

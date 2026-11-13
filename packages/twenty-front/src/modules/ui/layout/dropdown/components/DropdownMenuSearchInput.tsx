@@ -1,25 +1,42 @@
-import { forwardRef, InputHTMLAttributes } from 'react';
-import styled from '@emotion/styled';
-
-import { TEXT_INPUT_STYLE } from '@/ui/theme/constants/TextInputStyle';
+import { msg } from '@lingui/core/macro';
+import { useLingui } from '@lingui/react/macro';
+import { useInputFocusWithoutScrollOnMount } from '@/ui/input/hooks/useInputFocusWithoutScrollOnMount';
+import { styled } from '@linaria/react';
+import { forwardRef, type InputHTMLAttributes } from 'react';
+import { themeCssVariables } from 'twenty-ui/theme';
 
 const StyledDropdownMenuSearchInputContainer = styled.div`
-  --vertical-padding: ${({ theme }) => theme.spacing(1)};
-
+  --vertical-padding: ${themeCssVariables.spacing[2]};
   align-items: center;
-
+  /* min-height below is sized against the content box. */
+  box-sizing: content-box;
   display: flex;
   flex-direction: row;
-  height: calc(36px - 2 * var(--vertical-padding));
+  min-height: calc(36px - 2 * var(--vertical-padding));
   padding: var(--vertical-padding) 0;
 
   width: 100%;
 `;
 
 const StyledInput = styled.input`
-  ${TEXT_INPUT_STYLE}
+  background-color: transparent;
+  background-color: transparent;
+  border: none;
+  color: ${themeCssVariables.font.color.primary};
+  font-family: ${themeCssVariables.font.family};
+  font-size: ${themeCssVariables.font.size.sm};
+  font-size: inherit;
+  font-weight: inherit;
 
-  font-size: ${({ theme }) => theme.font.size.sm};
+  &::placeholder,
+  &::-webkit-input-placeholder {
+    color: ${themeCssVariables.font.color.light};
+    font-family: ${themeCssVariables.font.family};
+    font-weight: ${themeCssVariables.font.weight.medium};
+  }
+
+  outline: none;
+  padding: ${themeCssVariables.spacing[0]} ${themeCssVariables.spacing[2]};
   width: 100%;
 
   &[type='number']::-webkit-outer-spin-button,
@@ -33,15 +50,23 @@ const StyledInput = styled.input`
   }
 `;
 
+const defaultSearchPlaceholder = msg`Search`;
+
 export const DropdownMenuSearchInput = forwardRef<
   HTMLInputElement,
   InputHTMLAttributes<HTMLInputElement>
->(({ value, onChange, autoFocus, placeholder = 'Search', type }, ref) => (
-  <StyledDropdownMenuSearchInputContainer>
-    <StyledInput
-      autoComplete="off"
-      {...{ autoFocus, onChange, placeholder, type, value }}
-      ref={ref}
-    />
-  </StyledDropdownMenuSearchInputContainer>
-));
+>(({ value, onChange, placeholder, type }, forwardedRef) => {
+  const { i18n } = useLingui();
+  const { inputRef } = useInputFocusWithoutScrollOnMount();
+  const ref = forwardedRef ?? inputRef;
+  const translatedPlaceholder = placeholder ?? i18n._(defaultSearchPlaceholder);
+  return (
+    <StyledDropdownMenuSearchInputContainer>
+      <StyledInput
+        autoComplete="off"
+        {...{ onChange, placeholder: translatedPlaceholder, type, value }}
+        ref={ref}
+      />
+    </StyledDropdownMenuSearchInputContainer>
+  );
+});

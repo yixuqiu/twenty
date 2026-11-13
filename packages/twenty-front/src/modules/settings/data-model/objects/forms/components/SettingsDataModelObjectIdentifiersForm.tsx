@@ -1,14 +1,28 @@
-import { useMemo } from 'react';
-import { Controller, useFormContext } from 'react-hook-form';
-import styled from '@emotion/styled';
-import { IconCircleOff, useIcons } from 'twenty-ui';
-import { z } from 'zod';
-
-import { LABEL_IDENTIFIER_FIELD_METADATA_TYPES } from '@/object-metadata/constants/LabelIdentifierFieldMetadataTypes';
-import { ObjectMetadataItem } from '@/object-metadata/types/ObjectMetadataItem';
+import { isDDLLockedState } from '@/client-config/states/isDDLLockedState';
+import { useGetIsMetadataItemCustom } from '@/object-metadata/hooks/useGetIsMetadataItemCustom';
+import { useUpdateOneObjectMetadataItem } from '@/object-metadata/hooks/useUpdateOneObjectMetadataItem';
+import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/EnrichedObjectMetadataItem';
+import { type FieldMetadataItem } from '@/object-metadata/types/FieldMetadataItem';
 import { getActiveFieldMetadataItems } from '@/object-metadata/utils/getActiveFieldMetadataItems';
 import { objectMetadataItemSchema } from '@/object-metadata/validation-schemas/objectMetadataItemSchema';
-import { Select, SelectOption } from '@/ui/input/components/Select';
+import { isObjectMetadataReadOnly } from '@/object-record/read-only/utils/isObjectMetadataReadOnly';
+import { Select } from '@/ui/input/components/Select';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { styled } from '@linaria/react';
+import { Controller, useForm } from 'react-hook-form';
+import { useNavigate } from 'react-router-dom';
+import {
+  isImageIdentifierFieldMetadataType,
+  isLabelIdentifierFieldMetadataTypes,
+  isSearchableFieldType,
+} from 'twenty-shared/utils';
+import { IconCircleOff, IconPlus } from 'twenty-ui/icon';
+import { useIcons } from 'twenty-ui/icon/provider';
+import { type SelectOption } from 'twenty-ui/primitives/input';
+import { themeCssVariables } from 'twenty-ui/theme';
+import { type z } from 'zod';
+import { useLingui } from '@lingui/react/macro';
 
 export const settingsDataModelObjectIdentifiersFormSchema =
   objectMetadataItemSchema.pick({
@@ -19,80 +33,152 @@ export const settingsDataModelObjectIdentifiersFormSchema =
 export type SettingsDataModelObjectIdentifiersFormValues = z.infer<
   typeof settingsDataModelObjectIdentifiersFormSchema
 >;
-
+export type SettingsDataModelObjectIdentifiers =
+  keyof SettingsDataModelObjectIdentifiersFormValues;
 type SettingsDataModelObjectIdentifiersFormProps = {
-  objectMetadataItem: ObjectMetadataItem;
+  objectMetadataItem: EnrichedObjectMetadataItem;
 };
+const LABEL_IDENTIFIER_FIELD_METADATA_ID: SettingsDataModelObjectIdentifiers =
+  'labelIdentifierFieldMetadataId';
+const IMAGE_IDENTIFIER_FIELD_METADATA_ID: SettingsDataModelObjectIdentifiers =
+  'imageIdentifierFieldMetadataId';
 
 const StyledContainer = styled.div`
   display: flex;
-  gap: ${({ theme }) => theme.spacing(4)};
+  gap: ${themeCssVariables.spacing[4]};
 `;
 
 export const SettingsDataModelObjectIdentifiersForm = ({
   objectMetadataItem,
 }: SettingsDataModelObjectIdentifiersFormProps) => {
-  const { control } =
-    useFormContext<SettingsDataModelObjectIdentifiersFormValues>();
+  const { t } = useLingui();
+  const isDDLLocked = useAtomStateValue(isDDLLockedState);
+
+  const getIsMetadataItemCustom = useGetIsMetadataItemCustom();
+  const isCustomObject = getIsMetadataItemCustom(objectMetadataItem);
+
+  const readonly =
+    isObjectMetadataReadOnly({
+      objectMetadataItem,
+    }) || isDDLLocked;
+  const formConfig = useForm<SettingsDataModelObjectIdentifiersFormValues>({
+    mode: 'onTouched',
+    resolver: zodResolver(settingsDataModelObjectIdentifiersFormSchema),
+  });
+  const { updateOneObjectMetadataItem } = useUpdateOneObjectMetadataItem();
+
+  const handleSave = async (
+    formValues: SettingsDataModelObjectIdentifiersFormValues,
+  ) => {
+    const {
+      labelIdentifierFieldMetadataId: _labelIdentifierFieldMetadataId,
+      ...payloadWithoutLabelIdentifier
+    } = formValues;
+
+    const updatePayload = isCustomObject
+      ? formValues
+      : payloadWithoutLabelIdentifier;
+
+    const result = await updateOneObjectMetadataItem({
+      idToUpdate: objectMetadataItem.id,
+      updatePayload,
+    });
+
+    if (result.status === 'successful') {
+      formConfig.reset(undefined, { keepValues: true });
+    }
+  };
+
   const { getIcon } = useIcons();
 
-  const labelIdentifierFieldOptions = useMemo(
-    () =>
-      getActiveFieldMetadataItems(objectMetadataItem)
-        .filter(
-          ({ id, type }) =>
-            LABEL_IDENTIFIER_FIELD_METADATA_TYPES.includes(type) ||
-            objectMetadataItem.labelIdentifierFieldMetadataId === id,
-        )
-        .map<SelectOption<string | null>>((fieldMetadataItem) => ({
-          Icon: getIcon(fieldMetadataItem.icon),
-          label: fieldMetadataItem.label,
-          value: fieldMetadataItem.id,
-        })),
-    [getIcon, objectMetadataItem],
-  );
-  const imageIdentifierFieldOptions: SelectOption<string | null>[] = [];
+  const mapFieldToSelectOption = (
+    fieldMetadataItem: FieldMetadataItem,
+  ): SelectOption<string | null> => ({
+    Icon: getIcon(fieldMetadataItem.icon),
+    label: fieldMetadataItem.label,
+    value: fieldMetadataItem.id,
+  });
+
+  const labelIdentifierFieldOptions = getActiveFieldMetadataItems(
+    objectMetadataItem,
+  )
+    .filter(
+      ({ id, type }) =>
+        (isLabelIdentifierFieldMetadataTypes(type) &&
+          isSearchableFieldType(type)) ||
+        objectMetadataItem.labelIdentifierFieldMetadataId === id,
+    )
+    .map(mapFieldToSelectOption);
 
   const emptyOption: SelectOption<string | null> = {
     Icon: IconCircleOff,
-    label: 'None',
+    label: t`None`,
     value: null,
   };
+
+  const imageIdentifierFieldOptions = [
+    emptyOption,
+    ...getActiveFieldMetadataItems(objectMetadataItem)
+      .filter(
+        ({ id, type }) =>
+          isImageIdentifierFieldMetadataType(type) ||
+          objectMetadataItem.imageIdentifierFieldMetadataId === id,
+      )
+      .map(mapFieldToSelectOption),
+  ];
+
+  const navigate = useNavigate();
 
   return (
     <StyledContainer>
       {[
         {
-          label: 'Record label',
-          fieldName: 'labelIdentifierFieldMetadataId' as const,
+          label: t`Record label`,
+          fieldName: LABEL_IDENTIFIER_FIELD_METADATA_ID,
           options: labelIdentifierFieldOptions,
+          defaultValue: objectMetadataItem.labelIdentifierFieldMetadataId,
+          disabled: !isCustomObject || readonly,
         },
         {
-          label: 'Record image',
-          fieldName: 'imageIdentifierFieldMetadataId' as const,
+          label: t`Record image`,
+          fieldName: IMAGE_IDENTIFIER_FIELD_METADATA_ID,
           options: imageIdentifierFieldOptions,
+          defaultValue: objectMetadataItem.imageIdentifierFieldMetadataId,
+          disabled: readonly,
         },
-      ].map(({ fieldName, label, options }) => (
+      ].map(({ fieldName, label, options, defaultValue, disabled }) => (
         <Controller
           key={fieldName}
           name={fieldName}
-          control={control}
-          defaultValue={objectMetadataItem[fieldName]}
-          render={({ field: { onBlur, onChange, value } }) => {
-            return (
-              <Select
-                label={label}
-                disabled={!objectMetadataItem.isCustom || !options.length}
-                fullWidth
-                dropdownId={`${fieldName}-select`}
-                emptyOption={emptyOption}
-                options={options}
-                value={value}
-                onChange={onChange}
-                onBlur={onBlur}
-              />
-            );
-          }}
+          control={formConfig.control}
+          defaultValue={defaultValue}
+          render={({ field: { onChange, value } }) => (
+            <Select
+              label={label}
+              fullWidth
+              dropdownId={`${fieldName}-select`}
+              emptyOption={emptyOption}
+              options={options}
+              value={value}
+              withSearchInput={label === t`Record label`}
+              disabled={disabled}
+              callToActionButton={
+                label === t`Record label`
+                  ? {
+                      text: t`Create Text Field`,
+                      Icon: IconPlus,
+                      onClick: () => {
+                        navigate('./new-field/select');
+                      },
+                    }
+                  : undefined
+              }
+              onChange={(newValue) => {
+                onChange(newValue);
+                formConfig.handleSubmit(handleSave)();
+              }}
+            />
+          )}
         />
       ))}
     </StyledContainer>

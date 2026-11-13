@@ -1,104 +1,171 @@
-import { ReactElement, useState } from 'react';
-import styled from '@emotion/styled';
+import { FilePreviewDialog } from '@/ui/field/display/components/FilePreviewDialog';
+import { styled } from '@linaria/react';
+import { useState } from 'react';
 
 import { DropZone } from '@/activities/files/components/DropZone';
 import { useUploadAttachmentFile } from '@/activities/files/hooks/useUploadAttachmentFile';
-import { Attachment } from '@/activities/files/types/Attachment';
-import { ActivityTargetableObject } from '@/activities/types/ActivityTargetableEntity';
+import { type Attachment } from '@/activities/files/types/Attachment';
+import { downloadFile } from '@/activities/files/utils/downloadFile';
+import { type ActivityTargetableObject } from '@/activities/types/ActivityTargetableEntity';
+import { isAttachmentPreviewEnabledState } from '@/client-config/states/isAttachmentPreviewEnabledState';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
 
+import { ActivityList } from '@/activities/components/ActivityList';
+import {
+  type AttachmentWithFile,
+  filterAttachmentsWithFile,
+} from '@/activities/files/utils/filterAttachmentsWithFile';
+import { getAttachmentUrl } from '@/activities/utils/getAttachmentUrl';
+import { useHasPermissionFlag } from '@/settings/roles/hooks/useHasPermissionFlag';
+import { useDialog } from '@/ui/layout/dialog/hooks/useDialog';
+import { isDefined } from 'twenty-shared/utils';
+import { themeCssVariables } from 'twenty-ui/theme';
+import { PermissionFlagType } from '~/generated-metadata/graphql';
 import { AttachmentRow } from './AttachmentRow';
+import { useLingui } from '@lingui/react/macro';
 
 type AttachmentListProps = {
   targetableObject: ActivityTargetableObject;
-  title: string;
   attachments: Attachment[];
-  button?: ReactElement | false;
 };
 
 const StyledContainer = styled.div`
   align-items: flex-start;
   align-self: stretch;
   display: flex;
+  flex: 1;
   flex-direction: column;
-  justify-content: center;
-  padding: ${({ theme }) => theme.spacing(2, 6, 6)};
   height: 100%;
-`;
-
-const StyledTitleBar = styled.h3`
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: ${({ theme }) => theme.spacing(4)};
-  margin-top: ${({ theme }) => theme.spacing(4)};
-  place-items: center;
-  width: 100%;
-`;
-
-const StyledTitle = styled.h3`
-  color: ${({ theme }) => theme.font.color.primary};
-  font-weight: ${({ theme }) => theme.font.weight.semiBold};
-`;
-
-const StyledCount = styled.span`
-  color: ${({ theme }) => theme.font.color.light};
-  margin-left: ${({ theme }) => theme.spacing(2)};
-`;
-
-const StyledAttachmentContainer = styled.div`
-  align-items: flex-start;
-  align-self: stretch;
-  background: ${({ theme }) => theme.background.secondary};
-  border: 1px solid ${({ theme }) => theme.border.color.medium};
-  border-radius: ${({ theme }) => theme.border.radius.md};
-  display: flex;
-  flex-flow: column nowrap;
-  justify-content: center;
+  min-height: 0;
   width: 100%;
 `;
 
 const StyledDropZoneContainer = styled.div`
+  flex: 1;
   height: 100%;
+  min-height: 0;
   width: 100%;
 `;
 
+const StyledLoadingContainer = styled.div`
+  align-items: center;
+  background: ${themeCssVariables.background.primary};
+  display: flex;
+  height: calc(80vh / var(--t-zoom, 1));
+  justify-content: center;
+  width: 100%;
+`;
+
+const StyledLoadingText = styled.div`
+  color: ${themeCssVariables.font.color.secondary};
+  font-size: ${themeCssVariables.font.size.lg};
+  font-weight: ${themeCssVariables.font.weight.medium};
+`;
+
+const PREVIEW_MODAL_ID = 'preview-modal';
+
 export const AttachmentList = ({
   targetableObject,
-  title,
   attachments,
-  button,
 }: AttachmentListProps) => {
+  const { t } = useLingui();
   const { uploadAttachmentFile } = useUploadAttachmentFile();
   const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const [previewedAttachment, setPreviewedAttachment] =
+    useState<AttachmentWithFile | null>(null);
+
+  const isAttachmentPreviewEnabled = useAtomStateValue(
+    isAttachmentPreviewEnabledState,
+  );
+
+  const hasDownloadPermission = useHasPermissionFlag(
+    PermissionFlagType.DOWNLOAD_FILE,
+  );
+
+  const hasUploadPermission = useHasPermissionFlag(
+    PermissionFlagType.UPLOAD_FILE,
+  );
+
+  const { openDialog, closeDialog } = useDialog();
+
+  const attachmentsWithFile = filterAttachmentsWithFile(attachments);
 
   const onUploadFile = async (file: File) => {
     await uploadAttachmentFile(file, targetableObject);
   };
 
+  const onUploadFiles = async (files: File[]) => {
+    for (const file of files) {
+      await onUploadFile(file);
+    }
+  };
+
+  const handlePreview = (attachment: AttachmentWithFile) => {
+    if (!isAttachmentPreviewEnabled) {
+      return;
+    }
+    setPreviewedAttachment(attachment);
+    openDialog(PREVIEW_MODAL_ID);
+  };
+
+  const handleClosePreview = () => {
+    closeDialog(PREVIEW_MODAL_ID);
+    setPreviewedAttachment(null);
+  };
+
+  const handleDownload = () => {
+    if (!isDefined(previewedAttachment)) {
+      return;
+    }
+    const attachmentUrl = getAttachmentUrl({ attachment: previewedAttachment });
+    downloadFile(attachmentUrl, previewedAttachment.name);
+  };
+
   return (
     <>
-      {attachments && attachments.length > 0 && (
+      {attachmentsWithFile.length > 0 && (
         <StyledContainer>
-          <StyledTitleBar>
-            <StyledTitle>
-              {title} <StyledCount>{attachments.length}</StyledCount>
-            </StyledTitle>
-            {button}
-          </StyledTitleBar>
-          <StyledDropZoneContainer onDragEnter={() => setIsDraggingFile(true)}>
-            {isDraggingFile ? (
+          <StyledDropZoneContainer
+            onDragEnter={() => hasUploadPermission && setIsDraggingFile(true)}
+          >
+            {isDraggingFile && hasUploadPermission ? (
               <DropZone
                 setIsDraggingFile={setIsDraggingFile}
-                onUploadFile={onUploadFile}
+                onUploadFiles={onUploadFiles}
               />
             ) : (
-              <StyledAttachmentContainer>
-                {attachments.map((attachment) => (
-                  <AttachmentRow key={attachment.id} attachment={attachment} />
+              <ActivityList>
+                {attachmentsWithFile.map((attachment, index) => (
+                  <AttachmentRow
+                    key={attachment.id}
+                    attachment={attachment}
+                    divider={index < attachmentsWithFile.length - 1}
+                    onPreview={
+                      isAttachmentPreviewEnabled ? handlePreview : undefined
+                    }
+                  />
                 ))}
-              </StyledAttachmentContainer>
+              </ActivityList>
             )}
           </StyledDropZoneContainer>
         </StyledContainer>
+      )}
+      {previewedAttachment && isAttachmentPreviewEnabled && (
+        <FilePreviewDialog
+          dialogId={PREVIEW_MODAL_ID}
+          scrollWrapperId={`preview-modal-${previewedAttachment.id}`}
+          title={previewedAttachment.name}
+          documentName={previewedAttachment.name}
+          documentUrl={getAttachmentUrl({ attachment: previewedAttachment })}
+          onClose={handleClosePreview}
+          onDownload={hasDownloadPermission ? handleDownload : undefined}
+          downloadLabel={t`Download attachment`}
+          loadingFallback={
+            <StyledLoadingContainer>
+              <StyledLoadingText>{t`Loading document viewer...`}</StyledLoadingText>
+            </StyledLoadingContainer>
+          }
+        />
       )}
     </>
   );

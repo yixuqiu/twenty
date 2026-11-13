@@ -3,117 +3,187 @@ import { GraphQLISODateTime } from '@nestjs/graphql';
 
 import {
   GraphQLBoolean,
-  GraphQLEnumType,
-  GraphQLFloat,
+  type GraphQLEnumType,
   GraphQLID,
-  GraphQLInputObjectType,
-  GraphQLInputType,
-  GraphQLInt,
+  type GraphQLInputObjectType,
+  type GraphQLInputType,
   GraphQLList,
-  GraphQLNonNull,
-  GraphQLScalarType,
+  type GraphQLOutputType,
+  type GraphQLScalarType,
   GraphQLString,
-  GraphQLType,
 } from 'graphql';
-
-import { FieldMetadataSettings } from 'src/engine/metadata-modules/field-metadata/interfaces/field-metadata-settings.interface';
-
-import { FieldMetadataType } from 'src/engine/metadata-modules/field-metadata/field-metadata.entity';
+import GraphQLJSON from 'graphql-type-json';
 import {
-  StringFilterType,
-  DateFilterType,
-  FloatFilterType,
-  BooleanFilterType,
-  BigFloatFilterType,
-  RawJsonFilterType,
-  IntFilterType,
-} from 'src/engine/api/graphql/workspace-schema-builder/graphql-types/input';
+  AggregateOperations,
+  type FieldMetadataDefaultValue,
+  type FieldMetadataSettings,
+  FieldMetadataType,
+  NumberDataType,
+} from 'twenty-shared/types';
+
 import { OrderByDirectionType } from 'src/engine/api/graphql/workspace-schema-builder/graphql-types/enum';
 import {
+  ArrayFilterType,
+  BigFloatFilterType,
+  BooleanFilterType,
+  DateFilterType,
+  DateTimeFilterType,
+  FloatFilterType,
+  RawJsonFilterType,
+  StringFilterType,
+} from 'src/engine/api/graphql/workspace-schema-builder/graphql-types/input';
+import { FilesInputType } from 'src/engine/api/graphql/workspace-schema-builder/graphql-types/input/files.input-type';
+import { MultiSelectFilterType } from 'src/engine/api/graphql/workspace-schema-builder/graphql-types/input/multi-select-filter.input-type';
+import { RichTextFilterType } from 'src/engine/api/graphql/workspace-schema-builder/graphql-types/input/rich-text.input-type';
+import { SelectFilterType } from 'src/engine/api/graphql/workspace-schema-builder/graphql-types/input/select-filter.input-type';
+import { TSVectorFilterType } from 'src/engine/api/graphql/workspace-schema-builder/graphql-types/input/ts-vector-filter.input-type';
+import { UUIDFilterType } from 'src/engine/api/graphql/workspace-schema-builder/graphql-types/input/uuid-filter.input-type';
+import { FilesObjectType } from 'src/engine/api/graphql/workspace-schema-builder/graphql-types/object/files.object-type';
+import {
   BigFloatScalarType,
+  DateScalarType,
+  TSVectorScalarType,
   UUIDScalarType,
 } from 'src/engine/api/graphql/workspace-schema-builder/graphql-types/scalars';
 import { PositionScalarType } from 'src/engine/api/graphql/workspace-schema-builder/graphql-types/scalars/position.scalar';
-import { RawJSONScalar } from 'src/engine/api/graphql/workspace-schema-builder/graphql-types/scalars/raw-json.scalar';
-import { IDFilterType } from 'src/engine/api/graphql/workspace-schema-builder/graphql-types/input/id-filter.input-type';
+import { getNumberFilterType } from 'src/engine/api/graphql/workspace-schema-builder/utils/get-number-filter-type.util';
+import { getNumberScalarType } from 'src/engine/api/graphql/workspace-schema-builder/utils/get-number-scalar-type.util';
 
-export interface TypeOptions<T = any> {
+export interface TypeOptions {
+  settings?: FieldMetadataSettings<FieldMetadataType>;
+  isIdField?: boolean;
   nullable?: boolean;
+  defaultValue?: FieldMetadataDefaultValue<FieldMetadataType>;
   isArray?: boolean;
   arrayDepth?: number;
-  defaultValue?: T;
-  settings?: FieldMetadataSettings<FieldMetadataType | 'default'>;
-  isIdField?: boolean;
 }
+
+const StringArrayScalarType = new GraphQLList(GraphQLString);
 
 @Injectable()
 export class TypeMapperService {
-  mapToScalarType(
-    fieldMetadataType: FieldMetadataType,
-    settings?: FieldMetadataSettings<FieldMetadataType | 'default'>,
-    isIdField?: boolean,
-  ): GraphQLScalarType | undefined {
-    if (isIdField || settings?.isForeignKey) {
+  private readonly baseTypeScalarMapping = new Map<
+    FieldMetadataType,
+    GraphQLScalarType | GraphQLList<GraphQLScalarType>
+  >([
+    [FieldMetadataType.UUID, UUIDScalarType],
+    [FieldMetadataType.TEXT, GraphQLString],
+    [FieldMetadataType.DATE_TIME, GraphQLISODateTime],
+    [FieldMetadataType.DATE, DateScalarType],
+    [FieldMetadataType.BOOLEAN, GraphQLBoolean],
+    [FieldMetadataType.NUMERIC, BigFloatScalarType],
+    [FieldMetadataType.POSITION, PositionScalarType],
+    [FieldMetadataType.RAW_JSON, GraphQLJSON],
+    [FieldMetadataType.ARRAY, StringArrayScalarType],
+    [FieldMetadataType.TS_VECTOR, TSVectorScalarType],
+  ]);
+
+  mapToPreBuiltGraphQLOutputType({
+    fieldMetadataType,
+    typeOptions,
+  }: {
+    fieldMetadataType: FieldMetadataType;
+    typeOptions?: TypeOptions;
+  }): GraphQLScalarType | GraphQLList<GraphQLOutputType> | undefined {
+    if (this.isIdOrRelationType(fieldMetadataType, typeOptions)) {
       return GraphQLID;
     }
 
-    const numberScalar =
-      fieldMetadataType === FieldMetadataType.NUMBER &&
-      (settings as FieldMetadataSettings<FieldMetadataType.NUMBER>)
-        ?.precision === 0
-        ? GraphQLInt
-        : GraphQLFloat;
+    if (fieldMetadataType === FieldMetadataType.NUMBER) {
+      return this.getNumberScalarTypeFromOptions(typeOptions);
+    }
 
-    const typeScalarMapping = new Map<FieldMetadataType, GraphQLScalarType>([
-      [FieldMetadataType.UUID, UUIDScalarType],
-      [FieldMetadataType.TEXT, GraphQLString],
-      [FieldMetadataType.PHONE, GraphQLString],
-      [FieldMetadataType.EMAIL, GraphQLString],
-      [FieldMetadataType.DATE_TIME, GraphQLISODateTime],
-      [FieldMetadataType.DATE, GraphQLISODateTime],
-      [FieldMetadataType.BOOLEAN, GraphQLBoolean],
-      [FieldMetadataType.NUMBER, numberScalar],
-      [FieldMetadataType.NUMERIC, BigFloatScalarType],
-      [FieldMetadataType.PROBABILITY, GraphQLFloat],
-      [FieldMetadataType.POSITION, PositionScalarType],
-      [FieldMetadataType.RAW_JSON, RawJSONScalar],
-    ]);
+    if (fieldMetadataType === FieldMetadataType.FILES) {
+      return FilesObjectType;
+    }
 
-    return typeScalarMapping.get(fieldMetadataType);
+    return this.baseTypeScalarMapping.get(fieldMetadataType);
+  }
+
+  mapToPreBuiltGraphQLInputType({
+    fieldMetadataType,
+    typeOptions,
+  }: {
+    fieldMetadataType: FieldMetadataType;
+    typeOptions?: TypeOptions;
+  }):
+    | GraphQLScalarType
+    | GraphQLList<GraphQLInputType>
+    | GraphQLInputObjectType
+    | undefined {
+    if (this.isIdOrRelationType(fieldMetadataType, typeOptions)) {
+      return GraphQLID;
+    }
+
+    if (fieldMetadataType === FieldMetadataType.NUMBER) {
+      return this.getNumberScalarTypeFromOptions(typeOptions);
+    }
+
+    if (fieldMetadataType === FieldMetadataType.FILES) {
+      return FilesInputType;
+    }
+
+    return this.baseTypeScalarMapping.get(fieldMetadataType);
+  }
+
+  private isIdOrRelationType(
+    fieldMetadataType: FieldMetadataType,
+    typeOptions?: TypeOptions,
+  ): boolean {
+    return (
+      typeOptions?.isIdField === true ||
+      fieldMetadataType === FieldMetadataType.RELATION ||
+      fieldMetadataType === FieldMetadataType.MORPH_RELATION
+    );
+  }
+
+  private getNumberScalarTypeFromOptions(
+    typeOptions?: TypeOptions,
+  ): GraphQLScalarType {
+    return getNumberScalarType(
+      (typeOptions?.settings as FieldMetadataSettings<FieldMetadataType.NUMBER>)
+        ?.dataType ?? NumberDataType.FLOAT,
+    );
   }
 
   mapToFilterType(
     fieldMetadataType: FieldMetadataType,
-    settings?: FieldMetadataSettings<FieldMetadataType | 'default'>,
-    isIdField?: boolean,
+    typeOptions?: TypeOptions,
   ): GraphQLInputObjectType | GraphQLScalarType | undefined {
-    if (isIdField || settings?.isForeignKey) {
-      return IDFilterType;
+    if (
+      typeOptions?.isIdField ||
+      fieldMetadataType === FieldMetadataType.RELATION ||
+      fieldMetadataType === FieldMetadataType.MORPH_RELATION
+    ) {
+      return UUIDFilterType;
     }
-
-    const numberScalar =
-      fieldMetadataType === FieldMetadataType.NUMBER &&
-      (settings as FieldMetadataSettings<FieldMetadataType.NUMBER>)
-        ?.precision === 0
-        ? IntFilterType
-        : FloatFilterType;
 
     const typeFilterMapping = new Map<
       FieldMetadataType,
       GraphQLInputObjectType | GraphQLScalarType
     >([
-      [FieldMetadataType.UUID, IDFilterType],
+      [FieldMetadataType.UUID, UUIDFilterType],
       [FieldMetadataType.TEXT, StringFilterType],
-      [FieldMetadataType.PHONE, StringFilterType],
-      [FieldMetadataType.EMAIL, StringFilterType],
-      [FieldMetadataType.DATE_TIME, DateFilterType],
+      [FieldMetadataType.DATE_TIME, DateTimeFilterType],
       [FieldMetadataType.DATE, DateFilterType],
       [FieldMetadataType.BOOLEAN, BooleanFilterType],
-      [FieldMetadataType.NUMBER, numberScalar],
+      [
+        FieldMetadataType.NUMBER,
+        getNumberFilterType(
+          (
+            typeOptions?.settings as FieldMetadataSettings<FieldMetadataType.NUMBER>
+          )?.dataType,
+        ),
+      ],
       [FieldMetadataType.NUMERIC, BigFloatFilterType],
-      [FieldMetadataType.PROBABILITY, FloatFilterType],
       [FieldMetadataType.POSITION, FloatFilterType],
+      [FieldMetadataType.FILES, RawJsonFilterType],
       [FieldMetadataType.RAW_JSON, RawJsonFilterType],
+      [FieldMetadataType.RICH_TEXT, RichTextFilterType],
+      [FieldMetadataType.ARRAY, ArrayFilterType],
+      [FieldMetadataType.MULTI_SELECT, MultiSelectFilterType],
+      [FieldMetadataType.SELECT, SelectFilterType],
+      [FieldMetadataType.TS_VECTOR, TSVectorFilterType],
     ]);
 
     return typeFilterMapping.get(fieldMetadataType);
@@ -124,63 +194,45 @@ export class TypeMapperService {
   ): GraphQLInputType | undefined {
     const typeOrderByMapping = new Map<FieldMetadataType, GraphQLEnumType>([
       [FieldMetadataType.UUID, OrderByDirectionType],
+      [FieldMetadataType.RELATION, OrderByDirectionType],
+      [FieldMetadataType.MORPH_RELATION, OrderByDirectionType],
       [FieldMetadataType.TEXT, OrderByDirectionType],
-      [FieldMetadataType.PHONE, OrderByDirectionType],
-      [FieldMetadataType.EMAIL, OrderByDirectionType],
       [FieldMetadataType.DATE_TIME, OrderByDirectionType],
       [FieldMetadataType.DATE, OrderByDirectionType],
       [FieldMetadataType.BOOLEAN, OrderByDirectionType],
       [FieldMetadataType.NUMBER, OrderByDirectionType],
       [FieldMetadataType.NUMERIC, OrderByDirectionType],
-      [FieldMetadataType.PROBABILITY, OrderByDirectionType],
       [FieldMetadataType.RATING, OrderByDirectionType],
       [FieldMetadataType.SELECT, OrderByDirectionType],
       [FieldMetadataType.MULTI_SELECT, OrderByDirectionType],
       [FieldMetadataType.POSITION, OrderByDirectionType],
+      [FieldMetadataType.FILES, OrderByDirectionType],
       [FieldMetadataType.RAW_JSON, OrderByDirectionType],
+      [FieldMetadataType.ARRAY, OrderByDirectionType],
+      [FieldMetadataType.TS_VECTOR, OrderByDirectionType], // TODO: Add TSVectorOrderByType
     ]);
 
     return typeOrderByMapping.get(fieldMetadataType);
   }
 
-  mapToGqlType<T extends GraphQLType = GraphQLType>(
-    typeRef: T,
-    options: TypeOptions,
-  ): T {
-    let graphqlType: T | GraphQLList<T> | GraphQLNonNull<T> = typeRef;
+  mapToOrderByWithGroupByType(
+    aggregationType: AggregateOperations,
+  ): GraphQLInputType | undefined {
+    const typeOrderByMapping = new Map<AggregateOperations, GraphQLInputType>([
+      [AggregateOperations.SUM, OrderByDirectionType],
+      [AggregateOperations.COUNT, OrderByDirectionType],
+      [AggregateOperations.COUNT_UNIQUE_VALUES, OrderByDirectionType],
+      [AggregateOperations.COUNT_EMPTY, OrderByDirectionType],
+      [AggregateOperations.COUNT_NOT_EMPTY, OrderByDirectionType],
+      [AggregateOperations.COUNT_TRUE, OrderByDirectionType],
+      [AggregateOperations.COUNT_FALSE, OrderByDirectionType],
+      [AggregateOperations.PERCENTAGE_EMPTY, OrderByDirectionType],
+      [AggregateOperations.PERCENTAGE_NOT_EMPTY, OrderByDirectionType],
+      [AggregateOperations.MIN, OrderByDirectionType],
+      [AggregateOperations.MAX, OrderByDirectionType],
+      [AggregateOperations.AVG, OrderByDirectionType],
+    ]);
 
-    if (options.isArray) {
-      graphqlType = this.mapToGqlList(
-        graphqlType,
-        options.arrayDepth ?? 1,
-        options.nullable ?? false,
-      );
-    }
-
-    if (options.nullable === false && options.defaultValue === null) {
-      graphqlType = new GraphQLNonNull(graphqlType) as unknown as T;
-    }
-
-    return graphqlType as T;
-  }
-
-  private mapToGqlList<T extends GraphQLType = GraphQLType>(
-    targetType: T,
-    depth: number,
-    nullable: boolean,
-  ): GraphQLList<T> {
-    const targetTypeNonNull = nullable
-      ? targetType
-      : new GraphQLNonNull(targetType);
-
-    if (depth === 0) {
-      return targetType as GraphQLList<T>;
-    }
-
-    return this.mapToGqlList<T>(
-      new GraphQLList(targetTypeNonNull) as unknown as T,
-      depth - 1,
-      nullable,
-    );
+    return typeOrderByMapping.get(aggregationType);
   }
 }
